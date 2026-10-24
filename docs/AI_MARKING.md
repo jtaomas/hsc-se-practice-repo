@@ -77,6 +77,7 @@ Unscored marks are disclosed in results and attempt history and are excluded fro
 | Daily new jobs | 120 per account, 600 across the site, reset at UTC midnight |
 | Job lease | 300 seconds; stale leases cannot overwrite replacement results |
 | Individual marking-storage operation | 5 seconds, including streamed reads |
+| One conditional storage update | 10 seconds across reads, writes and retry delays; at most 16 attempts |
 | Text answer | 12,000 characters, rejected if exceeded rather than truncated |
 | Diagram | Up to 500 elements, 90 KB sanitized scene, 1 MB PNG, dimensions at most 2,000 pixels |
 | Provider request / response | 2 MiB / 1 MiB |
@@ -86,6 +87,10 @@ Version 6 increases only the auditor stage deadline from 90 to 105 seconds after
 The token values are ceilings, not a promise that every call consumes the allowance. Three high-effort calls cost more and take longer than the previous single-call marker. Shared-model errors can still correlate across all three passes.
 
 Private Blob records use account-separated paths and ETag conditional writes. A single atomic daily ledger reserves both account and site allowance, including failed paid attempts. Duplicate jobs share a lease or cached result. Cached results remain available when the model key is absent. Individual marking-storage operations have a five-second deadline and propagate abort signals. An accepted remote write cannot be rolled back by cancelling a request; conditional writes and lease checks prevent it from overwriting a newer decision. The model workflow deadline excludes Blob operations and session verification; the platform function limit is the final outer bound.
+
+Private reads bypass the CDN cache and explicitly request `Accept-Encoding: identity` so compression does not weaken the version used by `ifMatch`. Strong ETags are passed through unchanged, including their quotes. A weak `W/` validator fails closed with `marking_storage_version`; it is never stripped or replaced with a later metadata read. Conflicts use bounded exponential backoff with jitter, then re-read and reapply the update to the new snapshot. The ten-second update deadline also constrains in-flight operations, rather than only the delay between retries. Persistent conflicts emit a small `marking_storage` server log with the store/record type, attempt count and count of repeated versions. Weak validators emit their error code and a fixed reason. These logs exclude paths, identifiers, ETag values, raw errors and student content.
+
+The reported three-answer mini-paper failure is reproducible in an offline transport that returns weak validators for compressed downloads. The earlier implementation exhausts its retries for all three jobs; identity reads avoid that failure. This establishes a covered failure mechanism, not confirmation of the production incident's cause: production headers/logs were not available when preparing this change. The new diagnostics distinguish a persistent conflict from an unusable validator if the incident recurs.
 
 The marking API validates both direct cache reads and cached reservation results against the current canonical input, exact criterion evidence, bounded feedback schema, score/loss accounting and shared confirmed-provenance/checksum checks. Fresh model results pass the same boundary before storage. A contradictory or changed cached record returns `invalid_marking_cache` without a numeric grade, provider retry or overwrite. A cached `needs_review` decision must still have a null grade and empty unconfirmed diagnostics. Deterministic blank and unsupported-evidence responses are constructed separately without cache access or paid reservation.
 

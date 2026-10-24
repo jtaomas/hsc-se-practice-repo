@@ -1,13 +1,16 @@
 // Private marking results, distributed leases and daily paid-job reservations.
 // A single daily ledger reserves account and site quotas in the same CAS write.
 const crypto = require('crypto');
+const { performance } = require('node:perf_hooks');
 const { verifySession } = require('../api/auth');
 
 const DEFAULT_LIMITS = Object.freeze({ perUser: 120, site: 600, leaseMs: 300000, resultBytes: 65536 });
 const HASH = /^[a-f0-9]{64}$/;
 const LEASE = /^[a-f0-9]{32}$/;
 const STORAGE_TIMEOUT_MS = 5000;
-const FAILURE_CODES = new Set(['marking_timeout', 'provider_response_too_large', 'provider_response_unreadable', 'provider_cancelled', 'provider_rate_limit', 'provider_auth', 'provider_balance', 'provider_error', 'provider_envelope', 'provider_unavailable', 'marking_request_too_large', 'invalid_result', 'no_key', 'marking_storage_unavailable', 'marking_storage_busy', 'marking_storage_timeout', 'marking_lease_lost', 'marking_unavailable']);
+const CHANGE_TIMEOUT_MS = 10000;
+const CHANGE_ATTEMPTS = 16;
+const FAILURE_CODES = new Set(['marking_timeout', 'provider_response_too_large', 'provider_response_unreadable', 'provider_cancelled', 'provider_rate_limit', 'provider_auth', 'provider_balance', 'provider_error', 'provider_envelope', 'provider_unavailable', 'marking_request_too_large', 'invalid_result', 'no_key', 'marking_storage_unavailable', 'marking_storage_busy', 'marking_storage_timeout', 'marking_storage_version', 'marking_lease_lost', 'marking_unavailable']);
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function error(status, code, message) { const e = new Error(message); e.status = status; e.code = code; return e; }
 const conflict = e => e && (e.name === 'BlobPreconditionFailedError' || /precondition|already exists/i.test(String(e.message)));
@@ -74,7 +77,9 @@ function createStore(options) {
   const provider = options.blob || privateBlob;
   const now = options.now || Date.now;
   const operationMs = options.operationTimeoutMs == null ? STORAGE_TIMEOUT_MS : options.operationTimeoutMs;
+  const changeMs = options.changeTimeoutMs == null ? CHANGE_TIMEOUT_MS : options.changeTimeoutMs;
   if (!Number.isSafeInteger(operationMs) || operationMs < 1 || operationMs > STORAGE_TIMEOUT_MS) throw new Error('Invalid storage deadline.');
+  if (!Number.isSafeInteger(changeMs) || changeMs < 1 || changeMs > CHANGE_TIMEOUT_MS) throw new Error('Invalid storage change deadline.');
   // Overrides are an internal test seam, never browser or request parameters.
   const limits = Object.assign({}, DEFAULT_LIMITS, options.limits || {});
   if (!Number.isSafeInteger(limits.perUser) || limits.perUser < 1 || limits.perUser > 120 || !Number.isSafeInteger(limits.site) || limits.site < 1 || limits.site > 600 || limits.leaseMs !== DEFAULT_LIMITS.leaseMs || limits.resultBytes !== DEFAULT_LIMITS.resultBytes) throw new Error('Invalid marking storage limits.');
@@ -83,50 +88,90 @@ function createStore(options) {
     const owner = sha(sessionId);
     return { owner, path: prefix + 'jobs/' + owner + '/' + digest + '.json' };
   }
-  async function bounded(operation) {
+  function busy() { return error(503, 'marking_storage_busy', 'Marking storage is busy. Try again in a moment.'); }
+  function diagnostic(path, code, details) {
+    // No paths, account identifiers, ETags, provider errors or answer content.
+    console.warn('marking_storage', Object.assign({ code, store: kind, record: path.startsWith(prefix + 'quota/') ? 'quota' : 'job' }, details));
+  }
+  async function bounded(operation, deadline = Infinity) {
     const controller = new AbortController();
+    const end = Math.min(performance.now() + operationMs, deadline);
+    const timeout = () => end === deadline ? busy() : error(503, 'marking_storage_timeout', 'Marking storage exceeded its time limit.');
     let timer;
-    const expired = () => { if (controller.signal.aborted) throw error(503, 'marking_storage_timeout', 'Marking storage exceeded its time limit.'); };
+    const expired = () => { if (controller.signal.aborted || performance.now() >= end) throw timeout(); };
     try {
+      expired();
       return await Promise.race([
         Promise.resolve().then(() => operation(controller.signal, expired)),
-        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(error(503, 'marking_storage_timeout', 'Marking storage exceeded its time limit.')); }, operationMs); })
+        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(timeout()); }, Math.max(0, end - performance.now())); })
       ]);
     } finally { clearTimeout(timer); controller.abort(); }
   }
-  async function read(path) {
+  async function read(path, deadline) {
     try {
       return await bounded(async (signal, expired) => {
         const { get } = await provider(); expired();
-        const r = await get(path, { access: 'private', useCache: false, abortSignal: signal }); expired();
+        // CAS needs the origin's strong validator for these exact bytes.
+        // Content compression can weaken a download ETag, which cannot be
+        // reused for If-Match. Request the identity representation explicitly.
+        const r = await get(path, { access: 'private', useCache: false, headers: { 'Accept-Encoding': 'identity' }, abortSignal: signal }); expired();
         if (!r || r.statusCode === 404) return null;
-        if (r.statusCode !== 200 || !r.stream || !r.blob || !r.blob.etag) throw new Error('Missing versioned record');
+        if (r.statusCode !== 200 || !r.stream || !r.blob || typeof r.blob.etag !== 'string' || !r.blob.etag) throw new Error('Missing versioned record');
+        // Never strip W/ or substitute a later head() version: that could
+        // authorise overwriting data read from a different snapshot.
+        if (r.blob.etag.startsWith('W/')) throw error(503, 'marking_storage_version', 'Marking storage could not verify the saved record. Please try again shortly.');
         const chunks = []; let bytes = 0;
         for await (const chunk of r.stream) { expired(); const b = Buffer.from(chunk); bytes += b.length; if (bytes > 131072) throw new Error('Record too large'); chunks.push(b); }
         expired();
         const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid stored record');
         return { data, etag: r.blob.etag };
-      });
-    } catch (e) { if (e.code === 'marking_storage_timeout') throw e; throw error(503, 'marking_storage_unavailable', 'Marking storage is temporarily unavailable.'); }
+      }, deadline);
+    } catch (e) {
+      if (e.code === 'marking_storage_version') { diagnostic(path, e.code, { reason: 'weak_etag' }); throw e; }
+      if (['marking_storage_timeout', 'marking_storage_busy'].includes(e.code)) throw e;
+      throw error(503, 'marking_storage_unavailable', 'Marking storage is temporarily unavailable.');
+    }
   }
-  async function write(path, data, old) {
+  async function write(path, data, old, deadline) {
     return bounded(async (signal, expired) => {
       const { put } = await provider(); expired();
       const settings = { access: 'private', addRandomSuffix: false, allowOverwrite: !!old, contentType: 'application/json', abortSignal: signal };
       if (old) settings.ifMatch = old.etag;
       const result = await put(path, JSON.stringify(data), settings); expired();
       return result;
-    });
+    }, deadline);
   }
   async function change(path, transform) {
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const old = await read(path), next = transform(old && old.data);
-      if (next.write === null) return next.value;
-      try { await write(path, next.write, old); return next.value; }
-      catch (e) { if (e.code === 'marking_storage_timeout') throw e; if (!conflict(e)) throw error(503, 'marking_storage_unavailable', 'Marking storage is temporarily unavailable.'); }
+    const deadline = performance.now() + changeMs;
+    let attempts = 0, previousVersion, unchangedVersionRetries = 0;
+    try {
+      for (; attempts < CHANGE_ATTEMPTS; ) {
+        if (performance.now() >= deadline) throw busy();
+        attempts++;
+        const old = await read(path, deadline), next = transform(old && old.data);
+        if (next.write === null) return next.value;
+        try { await write(path, next.write, old, deadline); return next.value; }
+        catch (e) {
+          if (['marking_storage_timeout', 'marking_storage_busy'].includes(e.code)) throw e;
+          if (!conflict(e)) throw error(503, 'marking_storage_unavailable', 'Marking storage is temporarily unavailable.');
+        }
+        const version = old ? old.etag : null;
+        if (version === previousVersion) unchangedVersionRetries++;
+        previousVersion = version;
+        if (attempts === CHANGE_ATTEMPTS) break;
+        // Independent instances must not hammer the shared daily ledger in
+        // lockstep. Re-read and reapply the transform after every conflict.
+        const cap = Math.min(500, 50 * Math.pow(2, attempts - 1));
+        const delay = Math.min(Math.floor(cap / 2 + Math.random() * cap / 2), deadline - performance.now());
+        if (delay <= 0) throw busy();
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      throw busy();
+    } catch (e) {
+      if (e.code === 'marking_storage_busy') diagnostic(path, e.code, { attempts, unchangedVersionRetries });
+      throw e;
     }
-    throw error(503, 'marking_storage_busy', 'Marking storage is busy. Try again in a moment.');
   }
   function checkJob(job, digest) {
     if (job && (job.version !== 1 || job.inputDigest !== digest || !states.includes(job.state))) throw error(503, 'marking_storage_invalid', 'The saved marking record cannot be verified.');

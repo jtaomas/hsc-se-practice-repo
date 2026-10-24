@@ -74,10 +74,11 @@ Only the project owner needs these. Contributors do not need them: tests use moc
 
 ## Contributing
 
-1. Fork the repo or create a branch. Do not push to `main`.
-2. Make the change. Run the tests above.
-3. Open a pull request. Vercel builds a preview URL for the PR.
-4. The owner checks the preview and merges. Merging to `main` deploys to production.
+Everyone with access works directly on `main`.
+
+1. `git pull` to get the latest version.
+2. Make the change and run the tests above.
+3. `git commit` and `git push`. Vercel deploys `main` to production within about a minute.
 
 See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
 

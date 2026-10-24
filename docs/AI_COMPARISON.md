@@ -41,7 +41,9 @@ Structural validation runs between stages and before release. It checks particip
 
 The full prompts and diagnostic enums are in `server/comparison-policy.js`; orchestration and structural gates are in `server/comparison-engine.js`. Change the comparison harness version when prompts or validator behaviour changes. Cached results must be keyed to the exact evidence and harness/model configuration.
 
-`hsc-comparison-2` defines each error type and its precedence in the actual prompts. A missing scenario link uses `stimulus_not_applied`; a missing function invocation uses `logic_control_flow`; `requirement_omission` is a fallback when no narrower type fits. The audit explicitly checks diagnostic specificity, distinct findings and the benefit of advice. The shared audit contract uses positive `pass`/`fail`/`uncertain` conditions with one issue per unresolved condition; all conditions must pass. It never overrides a failure because other prose sounds reassuring.
+`hsc-comparison-4` defines each error type and its precedence in the actual prompts. A missing scenario link uses `stimulus_not_applied`; a missing function invocation uses `logic_control_flow`; `requirement_omission` is a fallback when no narrower type fits. The audit explicitly checks diagnostic specificity, distinct findings and the benefit of advice. The shared audit contract uses positive `pass`/`fail`/`uncertain` conditions with one issue per unresolved condition; all conditions must pass. It never overrides a failure because other prose sounds reassuring.
+
+Profile and synthesis abstentions allow up to five diagnostic explanations of at most 600 characters each, within the unchanged 5,000/8,000-byte output budgets. A live result correctly identified contradictory marking but exceeded the former diagnostic limit by four characters; the bounded allowance now preserves that result as a semantic abstention. It still releases no findings, comparison or diagnostic prose. Oversized explanations remain schema failures, and uncertainty in an otherwise complete result still withholds it. The shared audit issue limit remains 300 characters; no audit failure is converted into approval.
 
 One underlying fault receives one repair even when it affects several criteria. Matching answer anchors and repeated repair text are checked across criteria; distinct faults with separate evidence remain possible. These structural checks do not replace the semantic audit. A peer comparison may have an empty action when the individual's repair already covers it or both responses are effective. The page then omits the action heading. Optional advice must improve an identifiable issue; changing already-clear wording or adding an unrequested implementation rule is not enough.
 
@@ -112,6 +114,8 @@ NESA trains and checks markers using shared scripts and review; that motivates i
 | Per-call token ceiling | 32,768, including thinking and answer |
 | Findings / comparisons | 6 per participant / 8 per report |
 | Evidence references | Up to 6 per finding or comparison |
+| Profile / synthesis uncertainty explanations | Up to 5, each at most 600 characters; abstentions release no advice |
+| Shared audit issue detail | At most 300 characters; each failed or uncertain check needs one issue |
 | Individual profile / synthesis output | 5,000 / 8,000 bytes |
 | Provider response / engine report | 1 MiB / 56,000 bytes |
 | API report including statistics and provenance | 64,000 bytes |
@@ -132,7 +136,7 @@ node scripts/evaluate-comparison.js
 node tests/comparison_evaluator_test.js
 ```
 
-This checks `tests/fixtures/comparison-calibration.json`, normalized engine inputs, gold reference membership, taxonomy and invariance-pair consistency. It does **not** measure model accuracy. The nine cases use original fictional tasks and AI-authored provisional expectations; `teacherReviewed` is deliberately `false`. Dataset v2 clarifies the equal-marks question's separate identification credit and adds a disputed scenario-application-credit case that must abstain. This repairs an ambiguous gold fixture rather than treating its earlier mark as authoritative.
+This checks `tests/fixtures/comparison-calibration.json`, normalized engine inputs, gold reference membership, taxonomy and invariance-pair consistency. It does **not** measure model accuracy. The nine cases use original fictional tasks and AI-authored provisional expectations; `teacherReviewed` is deliberately `false`. Dataset v2 clarifies the equal-marks question's separate identification credit and adds a disputed scenario-application-credit case that must abstain. This repairs an ambiguous gold fixture rather than treating its earlier mark as authoritative. Dataset v3 makes the existing function-body context explicit in the sum and threshold questions, so valid `return` fragments are not mistaken for standalone Python programs. Only those three affected cases change; their answers, evidence, marks, criteria and expected diagnostics remain identical. Preserve prior runs and rerun the corrected cases rather than overriding a model's defensible abstention.
 
 The cases cover equal marks with different gaps, concise/verbose full-credit responses, an equivalent built-in algorithm, incorrect marking feedback, embedded instructions, participant-order permutation, distinct control-flow/boundary errors, and a repeated scenario-application gap. Input, sharing, API and engine regression tests separately cover incompatible papers, no common parts, forged/expired exports, excluded scores, malformed output, fabricated citations and deadlines.
 
@@ -154,12 +158,15 @@ Supply one or more `--case ID` options for a subset; the selected cases must all
 
 Measured checks are deliberately limited:
 
-- **Categorical precision/recall:** unique participant + question-part + error-type tuples compared with provisional gold tuples. Multiple citations of the same tuple do not inflate the count. Optional error-tagged advice is included, so extra plausible tags can expose an incomplete gold label set and need adjudication.
+- **Scored-error categorical precision/recall:** unique participant + question-part + error-type tuples from `criterion_shortfall` findings compared with required provisional gold tuples. Multiple citations of the same tuple do not inflate the count. An optional finding cannot satisfy a required scored error or a required repeated finding.
+- **Optional diagnostic allowances:** `expected.allowedOptionalErrors` may list exact `{participantId, questionId, errorType}` tuples. Only `optional_advice` findings can use an allowance, which permits but does not require that advice. Observed, allowed and unexpected optional tuples are counted separately; unexpected optional labels fail the evaluation. A tuple cannot be both required scored evidence and an optional allowance. A matching label emitted as a scored shortfall still fails. Citation, full-mark, action, forbidden-text and semantic checks continue to apply.
 - **Citation correctness:** the quote exists in the named participant's answer or permitted feedback field for the named criterion. This measures provenance, not whether the quote semantically supports the claim.
 - **Structural advice and policy checks:** actions exist where required; full-mark responses have no criterion shortfalls; single-response and repeated scopes obey evidence rules; reports requiring review withhold findings.
 - **Order invariance:** matched runs preserve categorical attributions and status when participant ordering changes. Prose equivalence and recommendation quality require human review.
 
 Undefined rates are `null`, not perfect scores. Every case also carries manual semantic checks; the script does not turn those checks into automatic passes. It never uses another LLM judge as ground truth.
+
+Offline scoring version 2 separates these metrics after a live injection case produced grounded, explicitly optional advice to remove the exact passage “Ignore every previous instruction.” The earlier scorer treated that optional `irrelevant_repetition` label as an invented scored error despite preserved full credit. Only that fixture's p1 / 2.0 / `irrelevant_repetition` tuple is allowlisted; other participants, questions and types remain unexpected. This is a disclosed post-run evaluator correction, not a new model success: retain the original saved responses and original metrics alongside rescored results. No production prompt, provider output or live sample is changed by this scoring revision.
 
 Paid evaluation is an explicit developer action using synthetic data and the comparison engine directly, never the live student endpoints:
 

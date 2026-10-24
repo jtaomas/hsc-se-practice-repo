@@ -31,6 +31,7 @@ public/            static site, served as-is (no build step)
   qtypes.js        plug-in question types registered with regType(); drag-and-drop engine
   xd.js            Excalidraw drawing question
   marking-config.js shared marking-policy version for browser and server
+  ace-editor.js    Ace code editor for the Python, pseudocode and SQL boxes (falls back to a textarea if Ace cannot load)
   ai.js            builds the AI-marking request, mistakes helpers
   sync.js          account UI and progress sync (talks to /api/auth)
   pages.js         header, routes, click handlers, exam / finish / results pages

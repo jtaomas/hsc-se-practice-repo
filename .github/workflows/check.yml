@@ -29,5 +29,6 @@ jobs:
           python -m pip install playwright==1.60.0
           python -m playwright install --with-deps chromium
           npm install --prefix "$RUNNER_TEMP/python-runtime" --no-save --ignore-scripts pyodide@0.26.4
+          npm install --prefix "$RUNNER_TEMP/ace-runtime" --no-save --ignore-scripts ace-builds@1.32.9
       - name: Browser and Python worker tests (local fixtures only)
-        run: PYODIDE_DIR="$RUNNER_TEMP/python-runtime/node_modules/pyodide" python tests/run_ui_test.py
+        run: ACE_DIR="$RUNNER_TEMP/ace-runtime/node_modules/ace-builds" PYODIDE_DIR="$RUNNER_TEMP/python-runtime/node_modules/pyodide" python tests/run_ui_test.py

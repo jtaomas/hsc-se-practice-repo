@@ -32,6 +32,7 @@ with sync_playwright() as p:
     pg.on("pageerror",lambda e: logs.append(f"PAGEERROR: {e}"))
     pg.on("console",lambda m: logs.append(m.text) if m.type=='error' and 'ERR_FAILED' not in m.text else None)
     pg.route("https://fonts.g*/**",lambda r:r.abort())
+    if os.environ.get('ACE_DIR'): pg.add_init_script("window.ACEBASE='/__ace__/';")
     pg.route("**/api/auth",auth)
     pg.route("**/api/mark",lambda r:r.fulfill(status=200,content_type='application/json',body='{"ok":true}'))
     pg.goto(U);pg.wait_for_timeout(300)
@@ -47,6 +48,13 @@ with sync_playwright() as p:
     assert 'Continue practice' in pg.inner_text('.acts'),pg.inner_text('.acts')
     pg.click('text=Continue practice');pg.wait_for_timeout(300)
     assert '/q/' in pg.url
+    if os.environ.get('ACE_DIR'):
+        pg.goto(U+'#/1/q/19');pg.wait_for_selector('.cedit.ace-on',timeout=15000)
+        k=pg.get_attribute('textarea[data-code]','data-k')
+        pg.click('.cedit-ed .ace_content');pg.keyboard.press('Control+A');pg.keyboard.type('print(7)')
+        pg.wait_for_timeout(300)
+        assert 'print(7)' in pg.evaluate("BS('1').ans['"+k+"']"),'Ace typing was not saved'
+        assert pg.input_value('textarea[data-code]')=='print(7)'
     pg.click('.hxb[href="#/1/finish"]');pg.wait_for_timeout(300)
     assert 'Unanswered' in pg.inner_text('.pg')
     pg.click('[data-act=submit]');pg.wait_for_timeout(800)
@@ -54,7 +62,12 @@ with sync_playwright() as p:
     pg.goto(U+'#/1/q/15');pg.wait_for_timeout(200)
     assert pg.get_attribute('.rta','contenteditable')=='false','submitted answer is editable through an old route'
     pg.goto(U+'#/1/q/19');pg.wait_for_timeout(200)
-    before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab')
+    before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab',force=True) if not os.environ.get('ACE_DIR') else None
+    if os.environ.get('ACE_DIR'):
+        pg.wait_for_selector('.cedit.ace-on',timeout=15000)
+        assert pg.evaluate("Object.values(ACE_ED).every(function(e){return e.getReadOnly()})"),'submitted Python editor is not read-only'
+        pg.click('.cedit-ed .ace_content');pg.keyboard.press('Tab');pg.keyboard.type('zzz')
+        assert pg.evaluate("Object.values(ACE_ED).every(function(e){return e.getValue().indexOf('zzz')<0})"),'Ace edited submitted Python'
     assert pg.input_value('textarea[data-code]')==before,'Tab edited submitted Python'
     assert pg.evaluate("passTest('110',{o:'10'})") is False
     assert pg.evaluate("passTest('9990',{o:'0'})") is False

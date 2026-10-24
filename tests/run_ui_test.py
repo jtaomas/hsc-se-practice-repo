@@ -8,6 +8,8 @@ class Handler(SimpleHTTPRequestHandler):
     def translate_path(self,url):
         if url.startswith('/__pyodide__/') and os.environ.get('PYODIDE_DIR'):
             return str(Path(os.environ['PYODIDE_DIR'])/Path(url.split('?',1)[0]).name)
+        if url.startswith('/__ace__/') and os.environ.get('ACE_DIR'):
+            return str(Path(os.environ['ACE_DIR'])/'src-min-noconflict'/Path(url.split('?',1)[0]).name)
         return super().translate_path(url)
     def log_message(self,*args): pass
 server=ThreadingHTTPServer(('127.0.0.1',0),Handler)

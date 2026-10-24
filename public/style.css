@@ -84,10 +84,10 @@ select.hoa-select.bad,.badc{border-color:#b81237;background:#fde8ec}
 .cbar .nb{min-width:6rem;padding:6px 10px;font-size:.9em}
 .split{display:flex;gap:6px;height:430px}
 .split.one .out{display:none}
-.ace{flex:1;min-width:0;display:flex;background:#272822;color:#F8F8F2;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace;font-size:.82em;line-height:1.5;position:relative;overflow:hidden}
+.cedit{flex:1;min-width:0;display:flex;background:#272822;color:#F8F8F2;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace;font-size:.82em;line-height:1.5;position:relative;overflow:hidden}
 .gut{background:#2F3129;color:#8F908A;padding:0 8px 0 10px;text-align:right;white-space:pre;overflow:hidden;min-width:38px;padding-top:2px;user-select:none}
-.ace textarea{flex:1;background:transparent;border:0;outline:0;color:#F8F8F2;resize:none;font:inherit;line-height:1.5;padding:2px 4px;white-space:pre;overflow:auto;tab-size:4;caret-color:#f8f8f0}
-.ace textarea::placeholder{color:#75715E}
+.cedit textarea{flex:1;background:transparent;border:0;outline:0;color:#F8F8F2;resize:none;font:inherit;line-height:1.5;padding:2px 4px;white-space:pre;overflow:auto;tab-size:4;caret-color:#f8f8f0}
+.cedit textarea::placeholder{color:#75715E}
 .out{flex:1;min-width:0;background:#000;color:#F8F8F2;font-family:Monaco,Menlo,Consolas,monospace;font-size:.82em;padding:8px;overflow:auto;white-space:pre-wrap;resize:both}
 .out.ph{color:#8F908A}
 .out table{border-collapse:collapse;color:#F8F8F2;font-family:inherit}
@@ -160,7 +160,7 @@ table.res th{background:rgba(95,204,245,.3)}
  .tools{flex-wrap:wrap;padding-bottom:8px}
  .ex{padding:0 12px 18px}
  .split{flex-direction:column;height:auto}
- .ace{height:300px}.out{min-height:140px}
+ .cedit{height:300px}.out{min-height:140px}
  .kv{grid-template-columns:1fr}
 }
 .hoa-q.st table,.hoa-q.st pre,.hoa-q.st p.ttl b{font-weight:400}
@@ -292,3 +292,7 @@ table.ctbl td{font-weight:600}
 .sla{flex:0 1 10em;text-align:center}
 @media (min-width:861px){.qwrap.two .qleft{position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto;padding-right:8px}}
 @media (max-width:860px){.dz.od{grid-template-columns:1fr}.dmrow .dslot{width:8em}}
+
+.cedit.ace-on>textarea[data-code],.cedit.ace-on>.gut{display:none}
+.cedit .cedit-ed{position:absolute;inset:0;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace}
+.cedit .ace-empty{position:absolute;top:0;left:6px;color:#75715E;pointer-events:none;font-size:13px;line-height:1.5}

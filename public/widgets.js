@@ -115,7 +115,7 @@ function codeBox(it,k,a,ro,label,tog){
   return '<div class="cbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns">'+
     '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
     (it.t==='py'&&!ro?'<label class="pyinput">Program input (one value per line)<textarea data-pyinput="'+k+'" aria-label="Program input" rows="2" placeholder="Enter input() values here before running"></textarea></label>':'')+
-    '<div class="split'+(hasRun?'':' one')+'"><div class="ace"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
+    '<div class="split'+(hasRun?'':' one')+'"><div class="cedit"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
     (hasRun?'<div class="out ph" id="o'+k+'"># Output</div>':'')+'</div></div>';
 }
 function drawBox(it,k,ro,label,tog){

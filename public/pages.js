@@ -10,8 +10,8 @@ function applyTheme(){
 }
 function toolsHTML(full){
   var bs=CUR.b?BS(CUR.b.id):null,fl=bs&&bs.flags[CUR.n];
-  function tb(id,ic,lab,menu,cls){return '<div class="tb"><button class="tbb'+(cls||'')+(MENU===id?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'">'+ic+' '+lab+(menu?'<span class="ch">⌄</span>':'')+'</button>'+(MENU===id?menuHTML(id):'')+'</div>'}
-  return (full?tb('flag','<span style="color:#146cfd">⚑</span>',fl?'FLAGGED':'FLAG',false)+tb('hl','✎','HIGHLIGHT',true):'')+tb('fs','<b>A</b>','FONT SIZE',true)+tb('col','◐','COLOUR',true)+(full?tb('info','🗝','INFO',false,' info'):'');
+  function tb(id,ic,lab,menu,cls){return '<div class="tb"><button class="tbb'+(cls||'')+(MENU===id?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'">'+ic+'<span>'+lab+'</span>'+(menu?IC.down.replace('class="ic chev"','class="ic chev drop"'):'')+'</button>'+(MENU===id?menuHTML(id):'')+'</div>'}
+  return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'FLAGGED':'FLAG',false)+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
 }
 function menuHTML(id){
   if(id==='hl')return '<div class="ddm"><button data-act="hl" data-c="yellow"><i class="sw" style="background:#f7ee94"></i>Yellow</button><button data-act="hl" data-c="blue"><i class="sw" style="background:#b5e2f1"></i>Blue</button><button data-act="hl" data-c="red"><i class="sw" style="background:#f3aec0"></i>Red</button><button data-act="hl" data-c="none">No colour</button><div style="font-size:.8em;margin-top:4px;color:#555">Select text in the question, then pick a colour.</div></div>';
@@ -69,7 +69,7 @@ function navHTML(b,rv){
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
     if(rv){var g=0,m=0,pending=false;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m;if(!s.set)pending=true});c+=pending?'':g===m?' ok':g===0?' bad':' part'}
-    h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">✔</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">⚑</span>':'')+'</button>';
+    h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">'+IC.tick+'</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">'+IC.flag+'</span>':'')+'</button>';
   }
   return h+'</div><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
 }
@@ -79,8 +79,8 @@ function qHTML(b,n,rv){
   var st=(q.st||'')+(q.db?dbTables(q.db):'');
   var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('');
   var last=n===b.qs.length;
-  var acts='<div class="acts">'+(rv?'<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>‹ Previous question</button><button class="nb" data-act="next">'+(last?'Back to results':'Next question ›')+'</button>':
-    '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>‹ Previous question</button><button class="nb" data-act="next">'+(last?'Finish exam':'Next question ›')+'</button>')+'</div>';
+  var acts='<div class="acts">'+(rv?'<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Back to results':'Next question')+(last?'':IC.right)+'</button>':
+    '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Finish exam':'Next question')+(last?'':IC.right)+'</button>')+'</div>';
   if(q.two)return '<div class="qwrap two"><div class="qleft">'+title+st+'</div><div><div class="item">'+items+'</div>'+acts+'</div></div>';
   return '<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
 }
@@ -203,6 +203,7 @@ document.addEventListener('click',function(e){
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen';aceResize()}
+  else if(a==='rdb'){var ro2=document.getElementById('o'+d.k);if(ro2){ro2.className='out ph sqres';ro2.textContent='Run the query to see the results.'}}
   else if(a==='run'){if(CUR.b&&!BS(CUR.b.id).done)doRun(d.k)}
   else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
@@ -251,7 +252,7 @@ document.addEventListener('change',function(e){
 });
 function doRun(k){
   var it=itemOf(k),ta=$('textarea[data-k="'+k+'"]'),out=document.getElementById('o'+k),b=CUR.b,n=+k.split('.')[0];
-  out.className='out';
+  out.className='out'+(it.t==='sq'?' sqres':'');
   if(it.t==='py'){
     out.textContent='Loading Python (the first run takes a few seconds)...';
     var input=$('textarea[data-pyinput="'+k+'"]'),values=input&&input.value?input.value.replace(/\r/g,'').split('\n'):[];

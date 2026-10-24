@@ -112,11 +112,11 @@ function codeBox(it,k,a,ro,label,tog){
   var kind={py:'PYTHON',ps:'PSEUDOCODE',sq:'QUERY (SQL)'}[it.t],hasRun=it.t!=='ps';
   var ph=it.t==='py'?'# Input code':it.t==='sq'?'-- Input query':'// Input pseudocode';
   var val=a!=null?a:(it.start||'');
-  return '<div class="cbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns">'+
-    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
+  return '<div class="cbox" data-k="'+k+'"><div class="cbar"><div class="hoa-q cbl">'+label+'</div><div class="btns">'+
+    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='sq'&&!ro?'<button class="nb" data-act="rdb" data-k="'+k+'">Reset DB</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
     (it.t==='py'&&!ro?'<label class="pyinput">Program input (one value per line)<textarea data-pyinput="'+k+'" aria-label="Program input" rows="2" placeholder="Enter input() values here before running"></textarea></label>':'')+
-    '<div class="split'+(hasRun?'':' one')+'"><div class="cedit"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
-    (hasRun?'<div class="out ph" id="o'+k+'"># Output</div>':'')+'</div></div>';
+    (it.t==='sq'?'<div class="split sqs"><div class="qtab"><span>Query</span></div>':'<div class="split'+(hasRun?'':' one')+'">')+'<div class="cedit"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
+    (hasRun?'<div class="out ph'+(it.t==='sq'?' sqres':'')+'" id="o'+k+'">'+(it.t==='sq'?'Run the query to see the results.':'# Output')+'</div>':'')+'</div></div>';
 }
 function drawBox(it,k,ro,label,tog){
   return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+(tog||'')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
@@ -125,7 +125,7 @@ function itemHTML(b,n,i,rv){
   var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],ro=!!rv,h='<div class="part">';
   var mk=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
   var lab=(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mk;
-  var tog=q.it.length>1?'<button type="button" class="ptog" data-qa="tog" aria-expanded="true">hide ⌃</button>':'';
+  var tog=q.it.length>1?'<button type="button" class="ptog" data-qa="tog" aria-expanded="true"><span>hide</span>'+IC.up+'</button>':'';
   if(it.t==='py'||it.t==='ps'||it.t==='sq'){h+=codeBox(it,k,a,ro,lab,tog)}
   else if(it.t==='dr'){h+=drawBox(it,k,ro,lab,tog)}
   else{

@@ -81,7 +81,7 @@ document.addEventListener('click',function(e){
   var pl=e.target.closest('.pool[data-pk]');
   if(pl&&DZ.sel&&DZ.sel.k===pl.dataset.pk&&DZ.sel.from!=null){var s2=DZ.sel;DZ.sel=null;dzRemove(s2.k,s2.from);return}
   var q=e.target.closest('[data-qa]');if(!q)return;var a=q.dataset.qa;
-  if(a==='tog'){var p=q.closest('.part'),h=p.classList.toggle('hid');q.textContent=h?'show ⌄':'hide ⌃';q.setAttribute('aria-expanded',h?'false':'true')}
+  if(a==='tog'){var p=q.closest('.part'),h=p.classList.toggle('hid');q.innerHTML=h?'<span>show</span>'+IC.down:'<span>hide</span>'+IC.up;q.setAttribute('aria-expanded',h?'false':'true')}
   else if(a==='zoom'){var f=q.closest('.fig'),w=document.createElement('div');
     w.innerHTML='<div class="modal zm" data-qa="zclose"><div class="box" role="dialog" aria-label="Zoomed view"><button class="nb red sm x" data-qa="zclose">Close ✕</button>'+(f.querySelector('figcaption')?'<h2>'+f.querySelector('figcaption').innerHTML+'</h2>':'')+'<div class="zmb">'+f.querySelector('.figb').innerHTML+'</div></div></div>';
     document.body.appendChild(w.firstChild)}

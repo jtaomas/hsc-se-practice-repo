@@ -32,5 +32,21 @@ function Q(tp,st,items,o){o=o||{};var m=0;items.forEach(function(i){m+=i.m});ret
 function tbl(h,rows,cap){return (cap?'<p class="ttl">'+cap+'</p>':'')+'<div class="tw"><table class="hoa"><tr>'+h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
 function cls(list){return '<div class="clsg">'+list.map(function(c){return '<table class="hoa cls"><tr><th>'+c[0]+'</th></tr>'+c[1].map(function(a){return '<tr><td>'+a+'</td></tr>'}).join('')+'</table>'}).join('')+'</div>'}
 function code(s){return '<pre class="pre">'+esc(s)+'</pre>'}
-function dbTables(db){return Object.keys(db).map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)}),'<b>'+n+'</b>')}).join('')}
+function dbTables(db){var ns=Object.keys(db);return ns.map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)}),ns.length>1?'<b>'+n+'</b>':'').replace('<table class="hoa">','<table class="hoa db">')}).join('')}
+/* bulleted list for stimulus and prompt text: bl(['one','two']) */
+function bl(list){return '<ul class="bl">'+list.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>'}
+/* inline SVG icons used by the toolbar, question bar and buttons (they take the text colour) */
+function svg(vb,inner,cls){return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="'+vb+'" aria-hidden="true" focusable="false">'+inner+'</svg>'}
+var IC={
+  up:svg('0 0 12 8','<path d="M1.5 6.5 6 2l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/>','chev'),
+  down:svg('0 0 12 8','<path d="M1.5 1.5 6 6l4.5-4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/>','chev'),
+  left:svg('0 0 8 12','<path d="M6.5 1.5 2 6l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/>','chev'),
+  right:svg('0 0 8 12','<path d="M1.5 1.5 6 6l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/>','chev'),
+  flag:svg('0 0 16 16','<path fill="currentColor" d="M2 1h1.7v14H2z"/><path fill="currentColor" d="M3.7 1.6h9.6l-2.5 3.6 2.5 3.6H3.7z"/>'),
+  pen:svg('0 0 16 16','<path fill="currentColor" d="m10.6 1.2 4.2 4.2-6.6 6.9-3.4.5-1.9-1.9.5-3.4z"/><path fill="currentColor" d="M1 15h7v-1.6H1z"/>'),
+  font:svg('0 0 16 16','<path fill="currentColor" d="M8 1.4 1.8 14.6H4l1.2-2.8h5.6l1.2 2.8h2.2zM6 10l2-4.6L10 10z"/>'),
+  contrast:svg('0 0 16 16','<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path fill="currentColor" d="M8 1.8a6.2 6.2 0 0 0 0 12.4z"/>'),
+  key:svg('0 0 16 16','<path fill="currentColor" d="M10.6 1.3a4 4 0 0 1 1.3 7.8l-.5.2-1 1.1H9.2v1.6H7.6v1.6H5.8L3 16l-2-2 5.8-5.8-.1-.6a4 4 0 0 1 3.9-6.3zm1.3 2.6a1.1 1.1 0 1 0-2.2 0 1.1 1.1 0 0 0 2.2 0z"/>'),
+  tick:svg('0 0 16 16','<circle cx="8" cy="8" r="8" fill="#2ecc71"/><path d="m4.3 8.4 2.5 2.6 5-5.2" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="square"/>','tick')
+};
 function mkTopics(){return ['Software Engineering Project','Programming for the Web','Secure Software Architecture','Software Automation']}

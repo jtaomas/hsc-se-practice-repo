@@ -297,6 +297,79 @@ table.ctbl td{font-weight:600}
 .cedit .cedit-ed{position:absolute;inset:0;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace}
 .cedit .ace-empty{position:absolute;top:0;left:6px;color:#75715E;pointer-events:none;font-size:13px;line-height:1.5}
 
+/* ---------- HSC online exam fidelity: icons, bars, code boxes, tables ---------- */
+.ic{display:inline-block;width:1em;height:1em;flex:none;vertical-align:-.12em;fill:currentColor}
+.ic.chev{width:.62em;height:.62em;vertical-align:baseline}
+/* question bar: a green circular tick sits on the top right corner of the number box */
+.nav-elem .an{top:-9px;right:-9px;width:18px;height:18px;font-size:inherit;background:none;border-radius:0;color:inherit;line-height:0;z-index:2}
+.nav-elem .an .ic{width:18px;height:18px;vertical-align:top}
+.nav-elem .fl{top:-8px;left:-8px;width:16px;height:16px;font-size:inherit;background:#f2f2f2;line-height:0}
+.nav-elem .fl .ic{width:14px;height:14px;vertical-align:top}
+/* toolbar */
+.tools{gap:6px}
+.tbb{position:relative;font-size:.82em;gap:9px;padding:.3em 14px;height:2.5em;font-weight:500;letter-spacing:.01em}
+.tbb .tic{display:inline-flex;align-items:center;font-size:1.3em}
+.tbb .tic .ic{width:1em;height:1em}
+.tbb .tic.flagc{color:#146cfd}
+.tbb[data-m="flag"],.tbb[data-m="hl"],.tbb[data-m="fs"],.tbb[data-m="col"]{border-color:#2e2867}
+.tbb .drop{position:absolute;top:-6px;right:3px;width:14px;height:11px;padding:0 1px;background:#f2f2f2;color:#000;margin:0}
+.tbb[data-m="hl"],.tbb[data-m="fs"],.tbb[data-m="col"]{padding-right:26px}
+.tbb.info .tic{color:#b81237}
+/* question and answer buttons */
+.acts .nb{border-radius:4px;padding:14px 30px;gap:12px;font-size:1em}
+.acts .nb.ol{background:#fff}
+.acts .nb .ic.chev{width:.5em;height:.8em;stroke-width:2.6}
+.cbar .nb{min-width:0;padding:8px 12px;border-radius:4px;font-size:.95em}
+.cbar .btns{align-items:flex-start}
+.cbar .cbl{flex:1;min-width:0;margin:0}
+.ptog{display:inline-flex;align-items:center;gap:6px;border:2px solid #002664;border-radius:3px;padding:7px 14px;font-weight:700;font-size:.95em;line-height:1}
+.ptog .ic.chev{width:.7em;height:.55em}
+.cbar .ptog{align-self:flex-start}
+/* bullets in stimulus and prompts */
+.hoa-q ul:not(.hoa-q-mc),.qleft ul:not(.hoa-q-mc),.st ul:not(.hoa-q-mc),ul.bl{list-style:disc;margin:.5em 0 .8em;padding-left:2.1em}
+.hoa-q ul:not(.hoa-q-mc) li,.qleft ul:not(.hoa-q-mc) li,.st ul:not(.hoa-q-mc) li,ul.bl li{margin:.3em 0;padding-left:.2em;font-weight:inherit}
+/* code boxes: white, grey gutter, thin dark border */
+.cedit{background:#fff;color:#000;border:1px solid #444;font-size:.95em}
+.gut{background:#ebebeb;color:#777;border-right:1px solid #d6d6d6}
+.cedit textarea{color:#000;caret-color:#000}
+.cedit textarea::placeholder{color:#777}
+.cedit .ace-empty{color:#777;font-size:15px}
+.cedit .cedit-ed,.cedit .cedit-ed .ace_content,.cedit .cedit-ed .ace_text-input{font-family:'DejaVu Sans Mono',Menlo,Consolas,'Courier New',monospace}
+.cedit .ace_editor{background:#fff;color:#000}
+.cedit .ace_gutter{background:#ebebeb;color:#777;border-right:1px solid #d6d6d6}
+.cedit .ace_gutter-active-line{background:#ebebeb;color:#000}
+.cedit .ace_marker-layer .ace_active-line{background:#e8f0fe}
+.cedit .ace_marker-layer .ace_selection{background:#b5d5ff}
+.cedit .ace_cursor{color:#000}
+.cedit .ace_keyword,.cedit .ace_storage{color:#0033cc;font-weight:400}
+.cedit .ace_support.ace_function{color:#000}
+.cedit .ace_constant.ace_numeric{color:#098658}
+.cedit .ace_string{color:#a31515}
+.cedit .ace_comment{color:#6a737d;font-style:italic}
+.cedit .ace_identifier{color:#000}
+/* SQL: Query tab, editor on top, results underneath */
+.split.sqs{flex-direction:column;height:auto;gap:0;background:#fff}
+.sqs .qtab{text-align:center;border-bottom:2px solid #1fa2d4;color:#1fa2d4;font-weight:500;padding:10px 0 8px;background:#fff}
+.sqs .qtab span{display:inline-block}
+.sqs .cedit{flex:none;height:150px;border:0;border-bottom:1px solid #d6d6d6;resize:vertical;overflow:hidden}
+.out.sqres{background:#fff;color:#666;font-family:inherit;font-size:1em;padding:6px 14px;min-height:170px;max-height:260px;resize:vertical;white-space:normal}
+.out.sqres.ph{color:#888}
+.out.sqres table{color:#666;width:auto;min-width:320px;border-collapse:collapse}
+.out.sqres th{background:#f2f2f2;color:#666;font-weight:600;border:0;padding:4px 14px 4px 0;text-align:left;line-height:1.35}
+.out.sqres td{border:0;padding:2px 14px 2px 0;color:#666;line-height:1.35}
+.out.sqres tr+tr td{border-top:0}
+.out.sqres .er{color:#b81237}
+.out.sqres div:not(.er){font-size:.85em;margin-top:6px;color:#888}
+.item.full .split.sqs{height:calc(100vh - 150px)}
+.item.full .sqs .cedit{height:40%}
+.item.full .sqs .out.sqres{max-height:none;flex:1}
+/* database tables in questions */
+table.hoa.db{width:100%}
+table.hoa.db th,table.hoa.db td{border:1px solid #000;padding:4px 8px}
+table.hoa.db th{background:#cdeefb;font-weight:700}
+table.hoa.db td{background:#fff;color:#000;vertical-align:top}
+table.hoa.db{margin:12px 0}
+
 /* Explicitly shared comparison evidence and reports. */
 .comparison-page{max-width:1180px;margin:0 auto;width:100%}
 .comparison-steps{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}

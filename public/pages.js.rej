@@ -1,0 +1,11 @@
+--- public/pages.js
++++ public/pages.js
+@@ -69,7 +69,7 @@ function navHTML(b,rv){
+   for(var n=1;n<=b.qs.length;n++){
+     var c='nav-elem'+(n===CUR.n?' cur':'');
+     if(rv){var g=0,m=0;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m});c+=g===m?' ok':g===0?' bad':' part'}
+-    h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">✔</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">⚑</span>':'')+'</button>';
++    h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">'+IC.tick+'</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">'+IC.flag+'</span>':'')+'</button>';
+   }
+   return h+'</div><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
+ }

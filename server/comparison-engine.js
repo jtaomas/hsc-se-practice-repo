@@ -1,6 +1,7 @@
 'use strict';
 
 const { parse } = require('./marking-json');
+const assessmentAudit = require('./assessment-audit');
 const { HARNESS_VERSION, CATEGORIES, ERROR_TYPES, AUDIT_FLAGS, EXTRACTOR_POLICY, SYNTHESIS_POLICY, AUDITOR_POLICY } = require('./comparison-policy');
 // This is the provider's rolling alias, not an immutable dated snapshot.
 const MODEL = 'deepseek-flash';
@@ -19,6 +20,7 @@ function strings(value, count, length) { return Array.isArray(value) && value.le
 function identifier(value) { return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(value); }
 function mentionedParticipants(value) { return (value.match(/\bp\d+\b/gi) || []).map(id => id.toLowerCase()); }
 function byteLength(value) { try { return Buffer.byteLength(JSON.stringify(value), 'utf8'); } catch (_) { return Infinity; } }
+function repairText(value) { return value.trim().replace(/\s+/g, ' '); }
 function invalidInput() { throw failure(400, 'invalid_comparison_input', 'The comparison requires verified responses to the same question parts from two to eight participants.'); }
 
 function canonicalData(input) {
@@ -104,7 +106,7 @@ function profileProblem(value, participant) {
       !['complete', 'needs_review'].includes(value.status) || !Array.isArray(value.findings) || value.findings.length > 6 || !strings(value.uncertainties, 5, 300)) return 'profile_schema';
   if (value.status !== 'complete') return value.findings.length || !value.uncertainties.length ? 'profile_schema' : 'extractor_abstention';
   if (value.uncertainties.length) return 'uncertain_profile';
-  const ids = new Set(), diagnoses = new Set();
+  const ids = new Set(), diagnoses = new Set(), faultAnchors = new Set(), repairs = new Set();
   for (const finding of value.findings) {
     if (!exactKeys(finding, ['id', 'kind', 'category', 'errorType', 'scope', 'statement', 'action', 'evidence']) || !identifier(finding.id) || ids.has(finding.id) ||
         !['strength', 'criterion_shortfall', 'optional_advice'].includes(finding.kind) || !CATEGORIES.includes(finding.category) ||
@@ -132,23 +134,39 @@ function profileProblem(value, participant) {
     // One coded error at one criterion must not be inflated by paraphrases or
     // alternative quotations. This is not a count of all possible mistakes.
     const diagnosis = JSON.stringify([finding.kind, finding.errorType || finding.category,
-      Array.from(new Set(finding.evidence.map(citation => citation.questionId + ':' + citation.criterionId))).sort()]);
+      Array.from(new Set(finding.evidence.map(citation => citation.questionId + ':' + citation.criterionId))).sort(),
+      finding.evidence.filter(citation => citation.source === 'answer').map(citation => citation.quote.trim()).sort()]);
     if (diagnoses.has(diagnosis)) return 'duplicate_finding';
     diagnoses.add(diagnosis);
+    // A second criterion does not create a second fault at the same response
+    // anchor. Do not merge/relabel output: ambiguous duplication withholds it.
+    // Different error types or different precise anchors can be independent.
+    if (finding.kind !== 'strength') {
+      const anchors = new Set(finding.evidence.filter(citation => citation.source === 'answer').map(citation =>
+        JSON.stringify([finding.kind, finding.errorType || finding.category, citation.questionId, citation.quote.trim()])));
+      for (const anchor of anchors) if (faultAnchors.has(anchor)) return 'duplicate_fault_anchor';
+      anchors.forEach(anchor => faultAnchors.add(anchor));
+      const partIds = new Set(finding.evidence.map(citation => citation.questionId));
+      for (const partId of partIds) {
+        const repair = JSON.stringify([finding.kind, partId, repairText(finding.action)]);
+        if (repairs.has(repair)) return 'duplicate_repair';
+        repairs.add(repair);
+      }
+    }
   }
   return null;
 }
 
-function synthesisProblem(value, participants) {
+function synthesisProblem(value, participants, profiles = []) {
   if (byteLength(value) > LIMITS.synthesisBytes) return 'synthesis_too_large';
   if (!exactKeys(value, ['status', 'summary', 'comparisons', 'uncertainties']) || !['complete', 'needs_review'].includes(value.status) ||
       !text(value.summary, 700, false) || !Array.isArray(value.comparisons) || value.comparisons.length > 8 || !strings(value.uncertainties, 5, 300)) return 'synthesis_schema';
   if (value.status !== 'complete') return value.comparisons.length || !value.uncertainties.length ? 'synthesis_schema' : 'synthesis_abstention';
   if (value.uncertainties.length) return 'uncertain_synthesis';
-  const ids = new Set(), contrasts = new Set();
+  const ids = new Set(), contrasts = new Set(), anchors = new Set(), repairs = new Set();
   for (const comparison of value.comparisons) {
     if (!exactKeys(comparison, ['id', 'category', 'statement', 'action', 'evidence']) || !identifier(comparison.id) || ids.has(comparison.id) ||
-        !CATEGORIES.includes(comparison.category) || !text(comparison.statement, 700, false) || !text(comparison.action, 500, false)) return 'comparison_schema';
+        !CATEGORIES.includes(comparison.category) || !text(comparison.statement, 700, false) || !text(comparison.action, 500, true)) return 'comparison_schema';
     ids.add(comparison.id);
     const problem = evidenceProblem(comparison.evidence, participants);
     if (problem) return problem;
@@ -160,14 +178,30 @@ function synthesisProblem(value, participants) {
     const contrast = JSON.stringify([comparison.category, Array.from(basis), Array.from(people).sort()]);
     if (contrasts.has(contrast)) return 'duplicate_comparison';
     contrasts.add(contrast);
+    const answerAnchors = comparison.evidence.filter(citation => citation.source === 'answer').map(citation =>
+      JSON.stringify([citation.participantId, citation.questionId, citation.quote.trim()]));
+    // Identical peer response anchors should not be compared repeatedly merely
+    // by switching criterion IDs. An auditor checks less literal paraphrases.
+    if (answerAnchors.length >= 2) {
+      const anchor = JSON.stringify([comparison.category, Array.from(new Set(answerAnchors)).sort()]);
+      if (anchors.has(anchor)) return 'duplicate_comparison_anchor';
+      anchors.add(anchor);
+    }
+    if (comparison.action.trim()) {
+      const action = repairText(comparison.action);
+      if (repairs.has(action)) return 'duplicate_repair';
+      repairs.add(action);
+      for (const profile of profiles) for (const finding of profile.findings) {
+        if (finding.action.trim() && repairText(finding.action) === action && comparison.evidence.some(citation =>
+          citation.participantId === profile.participantId && finding.evidence.some(ref => ref.questionId === citation.questionId))) return 'duplicate_repair';
+      }
+    }
   }
   return null;
 }
 
 function auditProblem(value) {
-  if (!exactKeys(value, AUDIT_FLAGS.concat(['reason', 'uncertainties'])) || !AUDIT_FLAGS.every(key => typeof value[key] === 'boolean') ||
-      !text(value.reason, 600, false) || !strings(value.uncertainties, 5, 300)) return 'auditor_schema';
-  return AUDIT_FLAGS.every(key => value[key]) && !value.uncertainties.length ? null : 'auditor_veto';
+  return assessmentAudit.problem(value, AUDIT_FLAGS);
 }
 
 async function boundedBody(response, maximum) {
@@ -292,7 +326,7 @@ async function compare(input, options = {}) {
     if (profileError) return review(profileError);
     audit.checks.blindProfiles = true;
     const synthesis = await request('synthesis', SYNTHESIS_POLICY, { originalEvidence: data, independentProfiles: profiles }, now() + limits.synthesisMs);
-    const synthesisIssue = synthesis.problem || (byteLength(synthesis.value) > limits.synthesisBytes ? 'synthesis_too_large' : synthesisProblem(synthesis.value, data.participants));
+    const synthesisIssue = synthesis.problem || (byteLength(synthesis.value) > limits.synthesisBytes ? 'synthesis_too_large' : synthesisProblem(synthesis.value, data.participants, profiles));
     if (synthesisIssue) return review(synthesisIssue);
     audit.checks.outputSchema = true;
     audit.checks.evidenceSupported = true;
@@ -302,8 +336,7 @@ async function compare(input, options = {}) {
     // Never release an auditor's prose or an unapproved proposal through audit
     // metadata; it might itself contain the unsupported comparative advice.
     if (!final.problem && (auditIssue === null || auditIssue === 'auditor_veto')) {
-      audit.auditor = Object.fromEntries(AUDIT_FLAGS.map(flag => [flag, final.value[flag]]));
-      audit.auditor.uncertaintyCount = final.value.uncertainties.length;
+      audit.auditor = assessmentAudit.metadata(final.value, AUDIT_FLAGS);
     }
     if (auditIssue) return review(auditIssue);
     audit.checks.auditorApproved = true;

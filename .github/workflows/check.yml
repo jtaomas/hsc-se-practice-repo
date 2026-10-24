@@ -17,6 +17,7 @@ jobs:
         run: node tests/sync_test.js
       - name: Marking evidence, blind assessment and API regressions (no network)
         run: |
+          node tests/assessment_audit_test.js
           node tests/marking_input_test.js
           node tests/marking_engine_test.js
           node tests/marking_api_test.js

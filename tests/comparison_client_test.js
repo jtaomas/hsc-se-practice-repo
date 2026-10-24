@@ -74,6 +74,14 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c.fetch=async(_,options)=>{payload=JSON.parse(options.body);return reply(report())};await c.comparisonCompare();assert.deepEqual(payload,{action:'compare',exports:[pack(),pack('signature-2')]});assert.equal(c.COMPARISON.report.status,'complete');assert.equal(c.storage.size,0);
     const html=c.comparisonReportHTML(c.COMPARISON.report);assert(html.includes('A local private name'));assert(html.includes('same 4 available marks'));assert(html.includes('75%'));assert(html.includes('Question 1, part 2'));assert(html.includes('Original response'));assert(html.includes('Unsupported claim'));assert(html.includes('not a general judgement of ability'));assert(html.includes('evidenceSupported: passed'));
   }
+  // Valid observations need no invented homework or empty action headings.
+  {
+    const c=client(),r=report();r.profiles[0].findings[0].kind='strength';r.profiles[0].findings[0].action='';
+    r.comparisons=[{category:'technical_accuracy',statement:'Both responses explain the mechanism clearly.',action:'',evidence:[]}];
+    let html=c.comparisonReportHTML(r);assert(!html.includes('Next step:'));assert(!html.includes('Practice together:'));assert(html.includes('Both responses explain'));
+    r.comparisons[0].action='  ';assert(!c.comparisonReportHTML(r).includes('Practice together:'));
+    r.comparisons[0].action='Trace <one> example.';html=c.comparisonReportHTML(r);assert(html.includes('Practice together:'));assert(html.includes('Trace &lt;one&gt; example.'));
+  }
   // Unsafe strings are rendered as text at every report boundary, including quotations and local labels.
   {
     const c=client();await c.comparisonImport([file(pack()),file(pack('signature-2'))]);const r=report(),attack='<img src=x onerror=alert(1)>';c.COMPARISON.files[0].label=attack;r.summary=attack;r.profiles[0].findings[0].statement=attack;r.profiles[0].findings[0].evidence[0].quote=attack;r.audit.requestedModel=attack;

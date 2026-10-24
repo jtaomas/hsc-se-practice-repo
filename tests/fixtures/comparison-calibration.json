@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "id": "comparison-calibration-v1",
+  "id": "comparison-calibration-v2",
   "provenance": {
     "origin": "Original synthetic questions and responses authored for this repository; no copied NESA exam text.",
     "labels": "Provisional AI-authored diagnostic expectations, not teacher-adjudicated truth.",
     "teacherReviewed": false,
     "realStudentData": false,
     "created": "2026-10-24",
-    "intendedUse": "Prompt development and regression checks. Keep future teacher-reviewed heldout evidence separate."
+    "intendedUse": "Prompt development and regression checks. Keep future teacher-reviewed heldout evidence separate.",
+    "revision": "v2 separates catalogue-result identification from causal explanation in Q1. The previous disputed application credit is retained as miscredited_scenario_application with an explicit correct-mechanism requirement and an abstention expectation. Original v1 run evidence is retained externally; no observed failure was erased."
   },
   "cases": [
     {
@@ -35,7 +36,7 @@
                   },
                   {
                     "id": "c2",
-                    "text": "Applies the explanation to repeated requests for popular titles in the library catalogue."
+                    "text": "Identifies an appropriate catalogue result to cache, such as popular-title data (one mark, with the correctness of the reuse mechanism assessed separately under c1)."
                   }
                 ],
                 "sample": "Equivalent correct explanations or implementations are acceptable.",
@@ -45,12 +46,12 @@
                 "status": "marked",
                 "source": "agentic",
                 "feedback": {
-                  "summary": "The mechanism is explained, but the answer does not apply it to the library catalogue.",
+                  "summary": "The reuse mechanism earns c1, but no appropriate catalogue result is identified for c2.",
                   "strengths": [
                     "The response meets the criteria identified below."
                   ],
                   "improve": [
-                    "Link the mechanism to repeated requests for popular book titles."
+                    "Identify the popular book-title results that the catalogue could cache."
                   ],
                   "advice": [],
                   "criteria": [
@@ -66,7 +67,7 @@
                       "id": "c2",
                       "assessment": "not_met",
                       "evidence": [],
-                      "basis": "Link the mechanism to repeated requests for popular book titles."
+                      "basis": "No appropriate catalogue result, such as popular book-title data, is identified."
                     }
                   ]
                 }
@@ -96,7 +97,7 @@
                   },
                   {
                     "id": "c2",
-                    "text": "Applies the explanation to repeated requests for popular titles in the library catalogue."
+                    "text": "Identifies an appropriate catalogue result to cache, such as popular-title data (one mark, with the correctness of the reuse mechanism assessed separately under c1)."
                   }
                 ],
                 "sample": "Equivalent correct explanations or implementations are acceptable.",
@@ -106,7 +107,7 @@
                 "status": "marked",
                 "source": "agentic",
                 "feedback": {
-                  "summary": "The scenario is identified, but caching is incorrectly equated with encryption.",
+                  "summary": "The appropriate catalogue data is identified for c2, but the c1 mechanism incorrectly equates caching with encryption.",
                   "strengths": [
                     "The response meets the criteria identified below."
                   ],
@@ -127,7 +128,7 @@
                       "evidence": [
                         "The library catalogue caches popular book titles. Caching encrypts every title, and this encryption is why access is faster."
                       ],
-                      "basis": "This criterion is demonstrated by the response."
+                      "basis": "Identifies popular book titles as the catalogue data to cache. This earns the separate identification point only, not credit for the incorrect mechanism."
                     }
                   ]
                 }
@@ -162,8 +163,8 @@
         "requiredFindings": [],
         "forbiddenText": [],
         "semanticChecks": [
-          "The report distinguishes application of knowledge from conceptual accuracy despite equal totals.",
-          "Each practice action repairs the named participant's specific gap."
+          "Keep the correct generic mechanism and the identification of appropriate cached catalogue data separate; naming a scenario is not proof of a correct mechanism.",
+          "Each practice action repairs the named participant's specific criterion gap without adding a production caching requirement."
         ]
       }
     },
@@ -785,7 +786,7 @@
                   },
                   {
                     "id": "c2",
-                    "text": "Applies the explanation to repeated requests for popular titles in the library catalogue."
+                    "text": "Identifies an appropriate catalogue result to cache, such as popular-title data (one mark, with the correctness of the reuse mechanism assessed separately under c1)."
                   }
                 ],
                 "sample": "Equivalent correct explanations or implementations are acceptable.",
@@ -795,7 +796,7 @@
                 "status": "marked",
                 "source": "agentic",
                 "feedback": {
-                  "summary": "The scenario is identified, but caching is incorrectly equated with encryption.",
+                  "summary": "The appropriate catalogue data is identified for c2, but the c1 mechanism incorrectly equates caching with encryption.",
                   "strengths": [
                     "The response meets the criteria identified below."
                   ],
@@ -816,7 +817,7 @@
                       "evidence": [
                         "The library catalogue caches popular book titles. Caching encrypts every title, and this encryption is why access is faster."
                       ],
-                      "basis": "This criterion is demonstrated by the response."
+                      "basis": "Identifies popular book titles as the catalogue data to cache. This earns the separate identification point only, not credit for the incorrect mechanism."
                     }
                   ]
                 }
@@ -846,7 +847,7 @@
                   },
                   {
                     "id": "c2",
-                    "text": "Applies the explanation to repeated requests for popular titles in the library catalogue."
+                    "text": "Identifies an appropriate catalogue result to cache, such as popular-title data (one mark, with the correctness of the reuse mechanism assessed separately under c1)."
                   }
                 ],
                 "sample": "Equivalent correct explanations or implementations are acceptable.",
@@ -856,12 +857,12 @@
                 "status": "marked",
                 "source": "agentic",
                 "feedback": {
-                  "summary": "The mechanism is explained, but the answer does not apply it to the library catalogue.",
+                  "summary": "The reuse mechanism earns c1, but no appropriate catalogue result is identified for c2.",
                   "strengths": [
                     "The response meets the criteria identified below."
                   ],
                   "improve": [
-                    "Link the mechanism to repeated requests for popular book titles."
+                    "Identify the popular book-title results that the catalogue could cache."
                   ],
                   "advice": [],
                   "criteria": [
@@ -877,7 +878,7 @@
                       "id": "c2",
                       "assessment": "not_met",
                       "evidence": [],
-                      "basis": "Link the mechanism to repeated requests for popular book titles."
+                      "basis": "No appropriate catalogue result, such as popular book-title data, is identified."
                     }
                   ]
                 }
@@ -912,7 +913,8 @@
         "requiredFindings": [],
         "forbiddenText": [],
         "semanticChecks": [
-          "After matching by participant ID, diagnoses agree with the base case."
+          "Keep the correct generic mechanism and the identification of appropriate cached catalogue data separate; naming a scenario is not proof of a correct mechanism.",
+          "Each practice action repairs the named participant's specific criterion gap without adding a production caching requirement."
         ],
         "equivalentTo": "same_marks_distinct_gaps"
       }
@@ -1440,6 +1442,152 @@
         "forbiddenText": [],
         "semanticChecks": [
           "The report frames the pattern as observed in these two responses, not a permanent ability trait."
+        ]
+      }
+    },
+    {
+      "id": "miscredited_scenario_application",
+      "purpose": "An explicit requirement to apply a correct mechanism cannot be credited merely for naming the scenario while giving a false mechanism.",
+      "input": {
+        "bankId": "calibration",
+        "questionSetVersion": "synthetic-calibration-v1",
+        "participants": [
+          {
+            "id": "p1",
+            "parts": [
+              {
+                "id": "1.0",
+                "questionNumber": 1,
+                "partIndex": 0,
+                "topic": "Original synthetic calibration",
+                "type": "written response",
+                "question": "Explain how caching can reduce response latency for a library catalogue that repeatedly requests popular book titles.",
+                "stimulus": "This is an original fictional practice task for harness calibration.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "Explains that reused cached data avoids repeated slower database access."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "Applies a correct cache-reuse explanation to repeated requests for popular titles in the library catalogue. Naming the catalogue or popular titles without a correct reuse mechanism in the scenario does not meet this criterion."
+                  }
+                ],
+                "sample": "Equivalent correct explanations or implementations are acceptable.",
+                "maxMarks": 2,
+                "answer": "A cache keeps previously fetched data, so repeated requests avoid a database query.",
+                "mark": 1,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "The mechanism is explained, but the answer does not apply it to the library catalogue.",
+                  "strengths": [
+                    "The response meets the criteria identified below."
+                  ],
+                  "improve": [
+                    "Link the mechanism to repeated requests for popular book titles."
+                  ],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "A cache keeps previously fetched data, so repeated requests avoid a database query."
+                      ],
+                      "basis": "This criterion is demonstrated by the response."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "Link the mechanism to repeated requests for popular book titles."
+                    }
+                  ]
+                }
+              }
+            ],
+            "coverage": {
+              "includedParts": 1,
+              "excludedParts": 0,
+              "totalParts": 1
+            }
+          },
+          {
+            "id": "p2",
+            "parts": [
+              {
+                "id": "1.0",
+                "questionNumber": 1,
+                "partIndex": 0,
+                "topic": "Original synthetic calibration",
+                "type": "written response",
+                "question": "Explain how caching can reduce response latency for a library catalogue that repeatedly requests popular book titles.",
+                "stimulus": "This is an original fictional practice task for harness calibration.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "Explains that reused cached data avoids repeated slower database access."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "Applies a correct cache-reuse explanation to repeated requests for popular titles in the library catalogue. Naming the catalogue or popular titles without a correct reuse mechanism in the scenario does not meet this criterion."
+                  }
+                ],
+                "sample": "Equivalent correct explanations or implementations are acceptable.",
+                "maxMarks": 2,
+                "answer": "The library catalogue caches popular book titles. Caching encrypts every title, and this encryption is why access is faster.",
+                "mark": 1,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "The scenario is identified, but caching is incorrectly equated with encryption.",
+                  "strengths": [
+                    "The response meets the criteria identified below."
+                  ],
+                  "improve": [
+                    "Explain reuse of stored results rather than encryption."
+                  ],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "Explain reuse of stored results rather than encryption."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "met",
+                      "evidence": [
+                        "The library catalogue caches popular book titles. Caching encrypts every title, and this encryption is why access is faster."
+                      ],
+                      "basis": "This criterion is demonstrated by the response."
+                    }
+                  ]
+                }
+              }
+            ],
+            "coverage": {
+              "includedParts": 1,
+              "excludedParts": 0,
+              "totalParts": 1
+            }
+          }
+        ],
+        "statistics": {}
+      },
+      "expected": {
+        "status": "needs_review",
+        "errors": [],
+        "forbidCriterionShortfalls": [],
+        "requireActionsForErrors": true,
+        "singleResponseOnly": false,
+        "requiredFindings": [],
+        "forbiddenText": [],
+        "semanticChecks": [
+          "Withhold the comparison because p2 is credited for scenario application despite the rubric explicitly requiring a correct reuse mechanism and the response attributing speed to encryption.",
+          "Do not silently re-mark, treat catalogue naming as the required explanation, or publish a strength based on the inconsistent credit."
         ]
       }
     }

@@ -1,3 +1,4 @@
+process.env.BLOB_READ_WRITE_TOKEN=process.env.BLOB_READ_WRITE_TOKEN||'test-token';
 const h=require(process.argv[2]||'./auth.js'),assert=require('node:assert/strict');
 function call(body,tok){return new Promise((resolve,reject)=>{
   const res={setHeader(){},status(c){this.c=c;return this},json(j){resolve({c:this.c,j})}};

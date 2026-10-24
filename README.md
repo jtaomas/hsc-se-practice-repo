@@ -9,7 +9,8 @@ Live site: https://hsc-se-practice-repo.vercel.app
 - Exam mode (2 h 20 min countdown for full papers; 30 min for Mini Paper 1) and practice mode (no timer). Exit or submit at any question.
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
-- Papers page, My mistakes page, and opt-in **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
+- **Class page** (`#/class`): everyone who joins with the class code sees classmates' submitted written answers by name, and can run an AI analysis that pulls the best syllabus-aligned points into one combined answer. See `docs/HANDOFF.md`.
+- Papers page, My mistakes page, and the older file-based **Compare responses** (now unlinked). Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
 - Evidence-linked feedback separates rubric shortfalls from 11 response-quality ratings. Lost marks are categorised where the rubric supports exact attribution; holistic shortfalls remain clearly labelled.
 - After submission, **Create my improvement plan** on the results page reviews verified feedback across the paper, identifies supported knowledge/writing patterns and gives prioritised exercises and success checks. A separate AI audit checks the plan; it never changes marks.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
@@ -28,7 +29,7 @@ public/            static site, served as-is (no build step)
   marking/marking.js shared registry and criterion formatter
   marking/pem2026.js PEM trial marking entries (loaded before banks)
   marking/doe2026.js DoE trial marking entries (loaded before banks)
-  bank1..10.js     seven full original papers, two converted trials and a mini paper (push into BANKS)
+  bank1..10.js     papers 1 to 7 are archived (hidden in the app, content in archive/); 8 and 9 are the converted trials, 10 the mini paper (push into BANKS)
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)
@@ -48,7 +49,7 @@ api/
   compare.js       signed evidence exports and bounded cohort comparison
   mark.js          authenticated POST: canonical input, cache, quota and marking orchestration
   improve.js       authenticated post-exam coaching using verified marking evidence
-  auth.js          POST: signup, login, load, save (needs BLOB_READ_WRITE_TOKEN)
+  auth.js          POST: signup, login, load, save (needs the three Cloudflare D1 settings below)
 server/
   comparison-*.js  verified snapshots, blind profiles, matched comparison and audit
   marking-input.js loads authoritative question banks and validates text / diagram evidence
@@ -59,7 +60,7 @@ server/
   improvement-input.js canonical whole-paper evidence and deterministic aggregates
   improvement-engine.js bounded coach plus independent evidence audit
 tests/
-  run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
+  run_auth_test.sh API test against an in-memory stand-in for the D1 storage module
   check_banks.js   checks every paper: question count, declared mini-paper or 80-mark totals, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
@@ -68,7 +69,7 @@ Mini Paper 1 (`#/10`) contains exactly three original questions worth 5 marks ea
 
 The inventory also has nine 80-mark papers: the seven originals have 27 questions each, the PEM trial has 33, and the DoE trial has 27. Trial source documents, attribution and marking notes are described in [`marking/README.md`](marking/README.md). The marking evaluation corpus remains 105 synthetic cases from the original seven papers; adding the trial papers does not establish their AI marking accuracy.
 
-Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/account`.
+Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/class`, `#/account`.
 
 ## Run and test locally
 
@@ -94,7 +95,7 @@ node scripts/evaluate-marking.js --validate --split all # offline reference-set 
 sh tests/run_marking_store_test.sh                   # mocked storage, leases, quotas and caching
 node tests/marking_storage_transport_test.js          # version conflicts, compression and retry deadlines
 npm ci --ignore-scripts --no-audit --no-fund           # install the locked server SDK for the next test
-node tests/marking_blob_sdk_test.js                   # actual Blob SDK with all HTTP mocked; network disabled
+node tests/d1_adapter_test.js                          # real D1 adapter against a fake Cloudflare endpoint (SQLite); network disabled
 pip install playwright && playwright install chromium
 python3 tests/run_ui_test.py                        # starts its own local server, mocks APIs
 ```
@@ -103,18 +104,21 @@ The static site works with the simple server. `/api/*` does not, so the account 
 
 To include the real Python worker tests, install `pyodide@0.26.4` into a temporary directory and set `PYODIDE_DIR` to its package directory when running `tests/run_ui_test.py`. It serves the runtime locally and checks infinite-loop cancellation, timeout recovery and every supplied Python model case. Set `ACE_DIR` to a local `ace-builds@1.32.9` package to exercise the real code editor. `CHROME` can specify an existing Chrome executable instead of Playwright's bundled Chromium.
 
-Account storage uses the Blob SDK's ETag conditional writes with uncached identity reads. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and a bounded ETag retry for concurrent changes to other papers. The browser bounds account requests, including response-body reads, and preserves pending local work on timeout. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
+Account storage (`server/d1-blob.js`, Cloudflare D1) uses ETag conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and a bounded ETag retry for concurrent changes to other papers. The browser bounds account requests, including response-body reads, and preserves pending local work on timeout or an invalid save acknowledgement. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
 
 ## Environment variables (set in Vercel, never in git)
 
 | Name | Used by | Notes |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
-| `BLOB_READ_WRITE_TOKEN` | accounts, marking and comparison storage | Private Vercel Blob store holding hashed accounts, progress, marking results and quotas. |
+| `CLASS_CODE` | `api/class.js`, `api/auth.js` | The one class code students use to join the class. Set in Vercel, never commit it. |
+| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js`, `api/class.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
+| `CF_ACCOUNT_ID` | accounts, marking and comparison storage | Cloudflare account ID that owns the D1 database. |
+| `D1_DATABASE_ID` | same | ID of the D1 database (the table is created automatically). |
+| `CF_API_TOKEN` | same | Cloudflare API token with **D1 Edit** permission only. Never commit it. |
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
 
-The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job uses three calls. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
+The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort for the two blind markers, low effort for the auditor, and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job normally uses three calls. One connection-establishment failure may use a fourth network attempt within the original deadline; completed responses are not rerolled. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
 
 See [AI marking design and verification](docs/AI_MARKING.md) for prompts, budgets, review states, privacy, limitations and the teacher-calibration checklist. `vercel.json` requests Fluid compute and a 300-second function limit; the deployment must support that limit. No live API calls are part of the test suite.
 
@@ -122,11 +126,11 @@ See [the improvement coach](docs/AI_IMPROVEMENT.md) for its evidence requirement
 
 ## Comparing submitted work
 
-Open **Papers → Compare responses**. Each participant signs in, submits and syncs a paper, completes agentic marking, then explicitly exports their responses and feedback. The organiser imports 2–8 signed files for the same current paper and consents to send that evidence to DeepSeek. Files expire after seven days and identify accounts with opaque signatures, without exporting email addresses or session tokens. Treat the files as private student work. A downloaded copy cannot be recalled.
+Open **Papers → Compare responses**. Each participant signs in, submits and syncs a paper, completes agentic marking, then exports their responses and feedback. The organiser imports 2–8 signed files for the same current paper and consents to send that evidence to DeepSeek. Files expire after seven days and identify accounts with opaque signatures, without exporting email addresses or session tokens. Treat the files as private student work. A downloaded copy cannot be recalled.
 
 The comparison uses `deepseek-flash`, documented by DeepSeek on 24 October 2026 as DeepSeek-V4.1-Flash-1017. It runs independent participant profiles, a matched comparison, and an audit; an unsupported report is withheld for review. Totals are calculated from common verified parts only. Diagrams, self-awarded marks, legacy feedback and unconfirmed results are excluded. Style and concision coaching is separate from rubric shortfalls. Reports do not award marks, rank lasting ability or predict HSC bands.
 
-Comparison jobs have separate durable limits of 12 per account and 40 site-wide per UTC day (up to 10 calls each). Duplicate requests share one job, cached results do not spend again, and failed paid attempts consume their slot. Exporting does not call the model. No extra environment variable is needed: a dedicated signing key is created atomically in private Blob storage. Report caches are private to the requesting account. Source exports/imports remain in browser memory until downloaded; account changes clear them.
+Comparison jobs have separate durable limits of 12 per account and 40 site-wide per UTC day (up to 10 calls each). Duplicate requests share one job, cached results do not spend again, and failed paid attempts consume their slot. Exporting does not call the model. No extra environment variable is needed: a dedicated signing key is created atomically in private D1 storage. Report caches are private to the requesting account. Source exports/imports remain in browser memory until downloaded; account changes clear them.
 
 See [comparison design, research and teacher calibration](docs/AI_COMPARISON.md). Offline tests verify software safeguards; the supplied synthetic calibration labels are provisional and are not evidence of live-model accuracy. Run the documented opt-in evaluation against teacher-reviewed held-out responses before treating the feature as validated educational advice.
 
@@ -139,3 +143,10 @@ Everyone with access works directly on `main`.
 3. `git commit` and `git push`. Vercel deploys `main` to production within about a minute.
 
 See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
+
+## Backups
+
+- On the first save of each UTC day, `api/auth.js` copies the previous progress to `backup/<id>/<day>.json` in the same D1 database and deletes copies older than 7 days. This is one extra write per active account per day.
+- Signed-in users can list and restore those copies from the Account page. A restore first saves the current state as `before-restore-<time>`, and gives every paper a new revision so other devices see a conflict instead of overwriting it.
+- Anyone can download a backup file and restore from it on the Account page. That copy lives with the user, outside Vercel.
+- The backups live in the same store as the data, so they protect against bugs and bad overwrites, not against losing the store or hitting Hobby plan limits. Hobby includes 1 GB of storage and 2,000 write operations a month; going over blocks the store for 30 days.

@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import expect, sync_playwright
 
 SITE = os.environ.get('SITE', 'http://127.0.0.1:8767').rstrip('/')
-URL = SITE + '/index.html'
+URL = SITE + '/index.html?archive=1'
 EMAIL = 'marking@student.det.nsw.edu.au'
 TOKEN = 'mock-marking-session'
 storage = {'data': {'u': {}, 'hist': []}, 'revisions': {}}

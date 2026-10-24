@@ -3408,7 +3408,7 @@
         "answer": "SELECT m.Suburb, COUNT(*) AS FinedLoans\nFROM Loans l INNER JOIN Members m ON l.MemberID = m.MemberID\nWHERE l.Fine > 0\nGROUP BY m.Suburb\nORDER BY FinedLoans DESC"
       },
       "source": {
-        "questionVersion": "b7477b15d3405bbdfdb0357c02209a93bfd61fb0c654b681bd73694aba38b4a0",
+        "questionVersion": "0e60a39b5018e10550ca68c6bea8bfb4b7c884e4fca7444dcedd061bcb69ef2f",
         "rubricVersion": "d39c96d3ff13d9f3ec6fb0375382fb46c4a5c93a266a3d83e21b4b4baa3e6114",
         "type": "sq",
         "maxMarks": 4
@@ -3457,7 +3457,7 @@
         "answer": "SELECT m.Suburb, COUNT(*) AS FinedLoans\nFROM Loans l INNER JOIN Members m ON l.MemberID = m.MemberID\nGROUP BY m.Suburb\nORDER BY FinedLoans DESC"
       },
       "source": {
-        "questionVersion": "b7477b15d3405bbdfdb0357c02209a93bfd61fb0c654b681bd73694aba38b4a0",
+        "questionVersion": "0e60a39b5018e10550ca68c6bea8bfb4b7c884e4fca7444dcedd061bcb69ef2f",
         "rubricVersion": "d39c96d3ff13d9f3ec6fb0375382fb46c4a5c93a266a3d83e21b4b4baa3e6114",
         "type": "sq",
         "maxMarks": 4
@@ -3497,7 +3497,7 @@
         "answer": "SELECT c.Name, SUM(h.Fee) AS TotalFee\nFROM Hires h, Customers c\nWHERE h.CustomerID = c.CustomerID AND h.Status = 'Returned'\nGROUP BY c.Name\nORDER BY TotalFee DESC"
       },
       "source": {
-        "questionVersion": "98b571c36495699dd46a77114cad79c5ded6e5631162fe472c803d20709feca5",
+        "questionVersion": "c980237aa1cd406005326d5e6afb0b176542def01a79e4dcaa6c3263560537fb",
         "rubricVersion": "2b935a6edf618ce9a9e98754503a94ebed8860e09f5dffa6eed08d414b764872",
         "type": "sq",
         "maxMarks": 4
@@ -3546,7 +3546,7 @@
         "answer": "SELECT c.Name, SUM(h.Fee) AS TotalFee\nFROM Hires h JOIN Customers c ON h.CustomerID = c.CustomerID\nWHERE h.Status = 'Returned'\nGROUP BY c.Name\nORDER BY TotalFee ASC"
       },
       "source": {
-        "questionVersion": "98b571c36495699dd46a77114cad79c5ded6e5631162fe472c803d20709feca5",
+        "questionVersion": "c980237aa1cd406005326d5e6afb0b176542def01a79e4dcaa6c3263560537fb",
         "rubricVersion": "2b935a6edf618ce9a9e98754503a94ebed8860e09f5dffa6eed08d414b764872",
         "type": "sq",
         "maxMarks": 4

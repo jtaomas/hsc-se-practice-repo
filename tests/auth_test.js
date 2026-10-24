@@ -1,4 +1,4 @@
-process.env.BLOB_READ_WRITE_TOKEN=process.env.BLOB_READ_WRITE_TOKEN||'test-token';
+process.env.CF_API_TOKEN=process.env.CF_API_TOKEN||'test-token';
 const h=require(process.argv[2]||'./auth.js'),assert=require('node:assert/strict');
 function call(body,tok){return new Promise((resolve,reject)=>{
   const res={setHeader(){},status(c){this.c=c;return this},json(j){resolve({c:this.c,j})}};
@@ -60,6 +60,47 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal(JSON.stringify((await call({action:'load'},tok)).j),beforeInvalid,'invalid keys modified progress');
   assert.equal((await call({action:'save',data:{u:{}}},tok)).c,409);
   assert.equal((await save(tok,{big:'x'.repeat(3600000)},[],{})).c,413);
+  // Daily backups: the first save of a day copies the earlier state, later saves the same day do not.
+  const day=new Date().toISOString().slice(0,10);
+  const backupKeys=()=>[...globalThis.__M.keys()].filter(k=>k.startsWith('backup/'));
+  const pk='progress/'+JSON.parse(Buffer.from(tok.split('.')[0],'base64url')).id+'.json';
+  const setDay=v=>{const d=JSON.parse(globalThis.__M.get(pk));d._backupDay=v;globalThis.__M.set(pk,JSON.stringify(d))};
+  setDay('2000-01-01'); // pretend the last save was on an earlier day
+  r=await call({action:'load'},tok);
+  const preState=r.j.data.u['10'].ans['1.0'];
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Backup test A'}}}},['10'],r.j.revisions)).c,200);
+  assert.equal(backupKeys().length,1,'first save of the day must write one backup');
+  assert(backupKeys()[0].endsWith('/'+day+'.json'));
+  r=await call({action:'load'},tok);
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Backup test B'}}}},['10'],r.j.revisions)).c,200);
+  assert.equal(backupKeys().length,1,'later saves the same day must not write more backups');
+  assert.equal(JSON.parse(globalThis.__M.get(backupKeys()[0])).u['10'].ans['1.0'],preState,'backup holds the state before the day began');
+  assert(!JSON.stringify((await call({action:'load'},tok)).j).includes('_backupDay'),'internal field leaked to the client');
+  assert.equal((await call({action:'backups'})).c,401);
+  r=await call({action:'backups'},tok);
+  assert.deepEqual(r.j.backups,[day]);
+  assert.equal((await call({action:'restore',name:'../../users/x'},tok)).c,400);
+  assert.equal((await call({action:'restore',name:'2020-01-01'},tok)).c,404);
+  // Another account cannot see or restore this account's backups.
+  const intruder=(await call({action:'signup',email:'intruder@example.test',password:'intruder-test-pass'})).j.token;
+  assert.deepEqual((await call({action:'backups'},intruder)).j.backups,[]);
+  assert.equal((await call({action:'restore',name:day},intruder)).c,404);
+  // Old backups are pruned, and a restore keeps a safety copy and forces other devices to reconcile.
+  globalThis.__M.set('backup/'+JSON.parse(Buffer.from(tok.split('.')[0],'base64url')).id+'/'+new Date(Date.now()-9*864e5).toISOString().slice(0,10)+'.json','{}');
+  r=await call({action:'load'},tok);
+  const beforeRestore=r.j.revisions;
+  r=await call({action:'restore',name:day},tok);
+  assert.equal(r.c,200);assert.equal(r.j.data.u['10'].ans['1.0'],preState,'restore did not bring back the saved state');
+  assert(backupKeys().some(k=>/before-restore-\d{13}\.json$/.test(k)),'restore must keep a safety copy');
+  assert.notEqual(r.j.revisions['10'],beforeRestore['10'],'restore must change revisions so stale devices see a conflict');
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'stale device'}}}},['10'],beforeRestore)).c,409);
+  // A backup failure must never fail the save itself.
+  r=await call({action:'load'},tok);
+  globalThis.__blobBeforePut=async(path)=>{if(path.startsWith('backup/'))throw new Error('backup storage down')};
+  setDay('2000-01-01');
+  const bare=await call({action:'load'},tok);
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'after backup failure'}}}},['10'],bare.j.revisions)).c,200);
+  globalThis.__blobBeforePut=null;
   // Two independent function instances share the storage, not an in-memory lock.
   const entry=require.resolve(process.argv[2]||'./auth.js');delete require.cache[entry];const other=require(entry);
   const login={action:'login',email:'parallel@example.test',password:'wrong-test-password'};
@@ -70,6 +111,37 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal(parallel.filter(x=>x.c===401).length,8);
   assert.equal(parallel.filter(x=>x.c===429).length,8);
   assert.equal((await call({action:'login',email:login.email,password:'correct-test-password'})).c,429);
+  // Sign-up with a name and class code: wrong code stops the sign-up, right code joins the class.
+  process.env.CLASS_CODE='Blue-River-2026';
+  assert.equal((await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'Sam',classCode:'nope'})).c,400);
+  assert.equal((await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'S',classCode:'Blue-River-2026'})).c,400);
+  r=await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'Sam Lee',classCode:'blue-river-2026'});
+  assert.equal(r.c,200);assert.equal(r.j.joined,true);assert.equal(r.j.name,'Sam Lee');
+  assert([...globalThis.__M.keys()].some(k=>k.startsWith('class/members/')),'member record written');
+  r=await call({action:'signup',email:'n2@example.test',password:'correct-test-password'});
+  assert.equal(r.c,200);assert.equal(r.j.joined,false);
+  // Exercise the actual save-cap transaction, not a copy of its condition.
+  process.env.MAX_DAILY_SAVES='2';delete process.env.DISABLE_SAVE_CAPS;
+  r=await call({action:'signup',email:'save-cap@example.test',password:'correct-test-password'});assert.equal(r.c,200);const capToken=r.j.token;
+  const capped=await Promise.all(['8','9','10'].map(id=>save(capToken,{u:{[id]:{ans:{'1.0':'cap test'}}},classCode:'class-one'},[id],{})));
+  assert.deepEqual(capped.map(x=>x.c).sort(),[200,200,429]);
+  const limited=await call({action:'load'},capToken);
+  assert.equal(Object.keys(limited.j.data.u).length,2);assert.equal(limited.j.data.classCode,'CLASS-ONE');
+  assert(!JSON.stringify(limited.j).includes('_saveCount'),'internal cap counters leaked');
+  const rejected=await save(capToken,{u:{'1':{ans:{'1.0':'must not save'}}}},['1'],limited.j.revisions);
+  assert.equal(rejected.c,429);assert.equal(rejected.j.code,'daily_save_cap_reached');
+  assert.deepEqual((await call({action:'load'},capToken)).j,limited.j,'cap refusal changed progress');
+  const capId=JSON.parse(Buffer.from(capToken.split('.')[0],'base64url')).id,capPath='progress/'+capId+'.json';
+  const beforeCapRestore=JSON.parse(globalThis.__M.get(capPath));
+  globalThis.__M.set('backup/'+capId+'/2026-10-25.json',JSON.stringify({u:{'10':{ans:{'1.0':'backup answer'}}},_saveDay:'2000-01-01',_saveCount:0}));
+  const capRestored=await call({action:'restore',name:'2026-10-25'},capToken);assert.equal(capRestored.c,200);
+  const afterCapRestore=JSON.parse(globalThis.__M.get(capPath));
+  assert.equal(afterCapRestore._saveDay,beforeCapRestore._saveDay);assert.equal(afterCapRestore._saveCount,2,'restore reset the daily save cap');
+  assert.equal(capRestored.j.data.u['10'].ans['1.0'],'backup answer');
+  const afterRestoreDenied=await save(capToken,{u:{'1':{ans:{'1.0':'must still not save'}}}},['1'],capRestored.j.revisions);
+  assert.equal(afterRestoreDenied.c,429);assert.equal(afterRestoreDenied.j.code,'daily_save_cap_reached');
+  process.env.DISABLE_SAVE_CAPS='1';assert.equal((await save(capToken,{u:{'1':{ans:{'1.0':'bypass enabled'}}}},['1'],capRestored.j.revisions)).c,200);
+  delete process.env.DISABLE_SAVE_CAPS;delete process.env.MAX_DAILY_SAVES;
   globalThis.__blobFailWrites=true;
   assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'synthetic-test-value'})).c,503,'storage failure must fail closed');
   globalThis.__blobFailWrites=false;

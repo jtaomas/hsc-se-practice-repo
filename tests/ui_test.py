@@ -26,7 +26,7 @@ def auth(r):
         current['hist']=p['data'].get('hist',[])
         return out(200,{'ok':True,'data':current,'revisions':revisions})
 import os
-U=os.environ.get("SITE","http://localhost:8767")+"/index.html"
+U=os.environ.get("SITE","http://localhost:8767")+"/index.html?archive=1"
 with sync_playwright() as p:
     b=p.chromium.launch(**({'executable_path':os.environ['CHROME']} if os.environ.get('CHROME') else {})); ctx=b.new_context(viewport={"width":1440,"height":900}); pg=ctx.new_page()
     pg.on("pageerror",lambda e: logs.append(f"PAGEERROR: {e}"))
@@ -61,6 +61,8 @@ with sync_playwright() as p:
     pg.click('[data-act=submit]');pg.wait_for_timeout(800)
     assert 'results' in pg.url and pg.inner_text('.big').count('/')==1,pg.inner_text('.big')
     pg.goto(U+'#/1/q/15');pg.wait_for_timeout(200)
+    tops=pg.evaluate("(function(){var n=document.querySelector('#nums');var h=n.innerHTML;n.innerHTML='<button class=\"nav-elem cur part\">1</button><button class=\"nav-elem part\">2</button><button class=\"nav-elem ok\">3</button>';var t=[].map.call(n.children,function(e){return Math.round(e.getBoundingClientRect().top)});n.innerHTML=h;return t})()")
+    assert len(set(tops))==1,'question number boxes are not level: %s'%tops
     assert pg.get_attribute('.rta','contenteditable')=='false','submitted answer is editable through an old route'
     pg.goto(U+'#/1/q/19');pg.wait_for_timeout(200)
     before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab') if not os.environ.get('ACE_DIR') else None
@@ -75,6 +77,7 @@ with sync_playwright() as p:
     assert pg.evaluate("passTest('10\\n',{o:'10'})") is True
     pg.goto(U+'#/2');pg.click('[data-mode=exam]');pg.wait_for_timeout(1500)
     tm=pg.inner_text('#tmr');assert re.match(r'2:19:5\d|2:20:00',tm),tm
+    pg.evaluate("BS('2').start=1;save('2')")  # let this exam run out so it does not lock the later steps
     # A mini paper keeps its own length and timer through navigation, submission and review.
     pg.goto(U+'#/');pg.wait_for_selector('.bks a[href="#/10"]')
     assert 'Mini Paper 1' in pg.inner_text('.bks a[href="#/10"]')
@@ -116,7 +119,7 @@ with sync_playwright() as p:
     assert 'education email' in pg.inner_text('.feature')
     pg.click('[data-act=acmode]');pg.fill('#acemail','stu@student.det.nsw.edu.au');pg.fill('#acpw','password123');pg.fill('#acpw2','different1');pg.click('[data-act=acgo]');pg.wait_for_timeout(300)
     assert 'do not match' in pg.inner_text('#accmsg')
-    pg.fill('#acpw2','password123');pg.click('[data-act=acgo]');pg.wait_for_timeout(1500)
+    pg.fill('#acpw2','password123');pg.fill('#acname','Stu Dent');pg.click('[data-act=acgo]');pg.wait_for_timeout(1500)
     assert pg.evaluate('S.tok')=='T:stu@student.det.nsw.edu.au'
     assert 'stu@student' in pg.inner_text('.acct'),pg.inner_text('.acct')
     assert 'password123' not in pg.evaluate("localStorage.getItem('sehsc-nesa-v2')")
@@ -124,7 +127,7 @@ with sync_playwright() as p:
     saved=store['prog'].get('T:stu@student.det.nsw.edu.au');assert saved,'no progress saved'
     assert saved['u']['1']['done'] is True and '2' in saved['u']
     ctx2=b.new_context(viewport={"width":1440,"height":900});p2=ctx2.new_page();p2.route("https://fonts.g*/**",lambda r:r.abort());p2.route("**/api/auth",auth)
-    p2.goto(U+'#/account');p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','xxxxxxxx1');p2.fill('#acpw2','xxxxxxxx1');p2.click('[data-act=acgo]');p2.wait_for_timeout(500)
+    p2.goto(U+'#/account');p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','xxxxxxxx1');p2.fill('#acpw2','xxxxxxxx1');p2.fill('#acname','Other Stu');p2.click('[data-act=acgo]');p2.wait_for_timeout(500)
     assert 'already exists' in p2.inner_text('#accmsg')
     p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','wrongwrong');p2.press('#acpw','Enter');p2.wait_for_timeout(500)
     assert 'not correct' in p2.inner_text('#accmsg'),p2.inner_text('#accmsg')

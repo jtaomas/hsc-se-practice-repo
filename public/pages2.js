@@ -17,7 +17,7 @@ function papersPage(){
   }).join('');
   var hist=S.hist.filter(function(h){return !BANKS.some(function(b){return b.id===h.id&&b.hidden})}).sort(function(a,b){return b.at-a.at});
   var done=visible.filter(function(b){return S.u[b.id]&&S.u[b.id].done}).length;
-  return frame('Papers','<div class="pg"><h1 class="pt">All papers</h1><div class="feature"><p>Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria. '+done+' of '+visible.length+' papers finished.</p><p><a class="nb ol" href="#/compare">Compare shared responses</a></p>'+
+  return frame('Papers','<div class="pg"><h1 class="pt">All papers</h1><div class="feature"><p>Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria. '+done+' of '+visible.length+' papers finished.</p><p><a class="nb ol" href="#/class">Class answers</a></p>'+
     '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Mark</th><th></th></tr>'+rows+'</table></div></div>'+
     (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' · '+h.pending+' marks unscored':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
 }

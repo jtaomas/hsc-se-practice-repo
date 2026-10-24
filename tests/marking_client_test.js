@@ -2,15 +2,15 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const clone=x=>JSON.parse(JSON.stringify(x));
 function client(){
-  const storage=new Map(),timers=[];
+  const storage=new Map(),timers=[],listeners={};
   const c={console,AbortController,window:{addEventListener(){}},location:{hash:'#/1/results'},
-    document:{addEventListener(){},querySelector(){return null},querySelectorAll(){return []},createElement(){return {innerHTML:'',get textContent(){return this.innerHTML.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')}}}},
+    document:{addEventListener(name,fn){(listeners[name]||(listeners[name]=[])).push(fn)},querySelector(){return null},querySelectorAll(){return []},createElement(){return {innerHTML:'',get textContent(){return this.innerHTML.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')}}}},
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
     setTimeout(fn,ms){timers.push({fn,ms});return timers.length},clearTimeout(){},setInterval(){},
     fetch(){throw new Error('Unexpected network request')},acctText(){return 'Account'},SYNC:{epoch:0},AIMARKING_VERSION:'test-v2'};
   vm.createContext(c);
   for(const file of ['helpers.js','kit.js','widgets.js','qtypes.js','xd.js','ai.js','pages.js','pages2.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../public',file),'utf8'),c,{filename:file});
-  c.S.tok='test-session';c.S.owner='student@example.test';c.timers=timers;
+  c.S.tok='test-session';c.S.owner='student@example.test';c.timers=timers;c.listeners=listeners;
   return c;
 }
 function paper(c,items){
@@ -18,6 +18,7 @@ function paper(c,items){
   c.BANKS.push(b);const bs=c.BS('1');bs.done=true;bs.start=10;bs.doneAt=20;c.CUR={b,n:1,rv:true};return {b,bs};
 }
 function written(){return {t:'tx',q:'Explain one thing.',m:3,w:50,model:'Sample answer',crit:['3 marks for explanation.']}}
+function practice(c,items){const p=paper(c,items);p.bs.done=false;p.bs.mode='practice';delete p.bs.doneAt;p.bs.pq={1:1};c.CUR.rv=false;c.location.hash='#/1/q/1';return p}
 function result(mark=2){return {status:'marked',mark,summary:'Evidence supported this mark.',strengths:['One point explained.'],improve:['Explain the second point.'],advice:['Use a clearer example.'],criteria:[{id:'C1',assessment:'partial',evidence:['A point'],basis:'A link is missing.'}],audit:{requestedModel:'deepseek-flash',returnedModels:['deepseek-flash'],harnessVersion:'test-v2',questionVersion:'q1',rubricVersion:'r1',inputDigest:'digest'}}}
 function reply(body,status=200){return {ok:status>=200&&status<300,status,json:async()=>clone(body)}}
 function defer(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
@@ -170,6 +171,88 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0,warnings=0;
     c.console={...console,warn(){warnings++}};c.fetch=async()=>{calls++;return reply(result())};await c.runAI(b,()=>{throw new Error('DOM changed')});
     assert.equal(calls,4);assert.equal(Object.keys(bs.ai).length,4);assert.equal(warnings,4);assert.equal(c.AIRUN[b.id],undefined);
+  }
+  // Practice marks only the requested question, leaves busy responses for explicit retry,
+  // and never starts a timed POST replay that could consume another paid job.
+  {
+    const c=client(),{b,bs}=practice(c,Array.from({length:5},written));b.qs.push({...b.qs[0],it:[written()]});
+    b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.ans['2.0']='Untouched second question';const requests=[];
+    c.fetch=async(_,r)=>{const p=JSON.parse(r.body);requests.push([p.questionNumber,p.partIndex]);return p.partIndex===0?reply({code:'marking_busy',error:'Already being marked'},409):reply(result())};
+    await c.runAIQuestion(b,1);assert.deepEqual(requests,[[1,0],[1,1],[1,2],[1,3],[1,4]]);assert.equal(Object.keys(bs.ai).length,4);assert(bs.aiErr['1.0']);assert.equal(bs.ai['2.0'],undefined);
+    assert(c.timers.every(t=>t.ms===250000),'practice busy scheduled an automatic replay');await c.runAIQuestion(b,1);assert.equal(requests.length,5);
+    c.fetch=async(_,r)=>{requests.push([JSON.parse(r.body).questionNumber,JSON.parse(r.body).partIndex]);return reply(result())};
+    await c.pqMark();assert.equal(requests.length,6);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.aiErr['1.0'],undefined);assert.equal(bs.done,false);
+  }
+  // Practice responses use account/epoch/attempt/answer guards, while edits to a
+  // different question do not discard this question's valid result.
+  for(const mutate of [
+    (c,b,bs)=>{bs.ans['1.0']='Edited while marking'},
+    (c,b)=>{b.qs[0].it[0].crit.push('New rubric')},
+    c=>{c.S.tok='another-session'},c=>{c.S.owner='another@example.test'},c=>{c.SYNC.epoch++},
+    (c,b,bs)=>{bs.start++},(c,b,bs)=>{bs.mode='exam'},c=>{c.S={...c.S,u:{}}}
+  ]){
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Original';const d=defer();let sent=false;
+    c.fetch=()=>{sent=true;return d.promise};const run=c.runAIQuestion(b,1);await until(()=>sent);mutate(c,b,bs);d.resolve(reply(result()));await run;
+    assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.aiErr['1.0'],undefined);
+  }
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='First';bs.ans['2.0']='Before';const d=defer();let sent=false;
+    c.fetch=()=>{sent=true;return d.promise};const run=c.runAIQuestion(b,1);await until(()=>sent);bs.ans['2.0']='Changed elsewhere';d.resolve(reply(result()));await run;assert.equal(c.score(b,1,0).g,2);
+  }
+  // A replacement practice run is not deleted or overwritten by its stale predecessor.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='First';const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};
+    const first=c.runAIQuestion(b,1);await until(()=>pending.length===1);bs.ans['1.0']='Second';const second=c.runAIQuestion(b,1);await until(()=>pending.length===2);const latest=c.AIQ['1/1'];
+    pending[0].resolve(reply(result(1)));await first;assert.equal(c.AIQ['1/1'],latest);assert.equal(bs.ai['1.0'],undefined);
+    pending[1].resolve(reply(result(3)));await second;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIQ['1/1'],undefined);
+  }
+  // The shared three-request ceiling also covers practice on several questions.
+  {
+    const c=client(),{b,bs}=practice(c,[written(),written(),written()]);b.qs.push({...b.qs[0],it:[written(),written(),written()]});
+    b.qs.forEach((q,qi)=>q.it.forEach((_,i)=>bs.ans[(qi+1)+'.'+i]='Answer'));const pending=[];let active=0,peak=0;
+    c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(r=>{active--;return r})};
+    const first=c.runAIQuestion(b,1),second=c.runAIQuestion(b,2);await until(()=>pending.length===3);assert.equal(peak,3);
+    for(let i=0;i<6;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await Promise.all([first,second]);assert.equal(peak,3);assert.equal(Object.keys(bs.ai).length,6);
+  }
+  // Submitting the same attempt reuses an in-flight practice result instead of
+  // racing it with a duplicate POST; a later submitted batch reuses both marks.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='Practice answer';bs.ans['2.0']='Other answer';const pending=[];
+    c.fetch=(_,r)=>{const d=defer();pending.push({question:JSON.parse(r.body).questionNumber,...d});return d.promise};
+    const one=c.runAIQuestion(b,1);await until(()=>pending.length===1);bs.done=true;bs.doneAt=30;const all=c.runAI(b);await until(()=>pending.length===2);
+    assert.deepEqual(pending.map(r=>r.question),[1,2]);pending[0].resolve(reply(result(3)));pending[1].resolve(reply(result(2)));await Promise.all([one,all]);
+    assert.equal(c.score(b,1,0).g,3);assert.equal(c.score(b,2,0).g,2);await c.runAI(b);assert.equal(pending.length,2);
+  }
+  // An active exam blocks practice requests and stale UI refreshes. Guest
+  // practice still reveals the guide, and asynchronous marking never replaces a focused editor.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';const other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
+    await c.runAIQuestion(b,1);assert.equal(c.pqMark(),undefined);bs.done=true;await c.ensureMarked(b);
+    let renders=0;c.$=()=>({set innerHTML(_){renders++}});c.refreshMarking(b,c.aiContext(b));assert.equal(renders,0);
+    c.$=()=>null;c.BS('2').done=true;bs.done=false;c.S.tok='';await c.pqMark();assert.equal(bs.pq[1],1);assert.equal(bs.ai['1.0'],undefined);
+  }
+  {
+    const c=client(),{b,bs}=paper(c,[written()]),other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
+    const app={};c.$=selector=>selector==='#app'?app:null;c.location.hash='#/1/q/1';c.applyTheme=()=>{};c.xdCleanup=()=>{};c.tick=()=>{};c.window.scrollTo=()=>{};
+    c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,null,'submitted q route bypassed the exam lock');
+    bs.done=false;bs.mode='practice';bs.pq={1:1};assert.equal(c.pqShown(b,1),false);assert.equal(c.pqPanelHTML(b,1),'');
+  }
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';let replacements=0;const panel={};
+    c.$=selector=>selector==='#qarea'?{set innerHTML(_){replacements++}}:selector==='#pq'?panel:null;c.document.activeElement={tagName:'DIV',isContentEditable:true};
+    c.fetch=async()=>reply(result());await c.runAIQuestion(b,1);assert.equal(c.score(b,1,0).g,2);assert.equal(replacements,0);assert(panel.outerHTML.includes('Mark this question again'));
+    c.qHTML=()=>'<p>Confirmed feedback</p>';c.afterQDraw=()=>{};c.refreshNav=()=>{};c.xdCleanup=()=>{};c.window.scrollTo=()=>{};
+    c.document.activeElement=null;c.listeners.focusout.forEach(fn=>fn());c.timers.filter(t=>t.ms===0).at(-1).fn();assert.equal(replacements,1,'feedback did not appear after leaving the editor');
+    c.document.activeElement={tagName:'TEXTAREA'};c.refreshMarking(b,c.aiContext(b,1));c.listeners.focusout.forEach(fn=>fn());c.S.owner='changed@example.test';c.document.activeElement=null;
+    c.timers.filter(t=>t.ms===0).at(-1).fn();assert.equal(replacements,1,'deferred redraw survived an account change');
+  }
+  // Practice code checks run independently of model work and do not mark the
+  // rest of the paper as checked; class panels still rebind after question redraw.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';const check=defer();let requested=0,checked=0,classes=0;
+    c.runChecks=(_,n)=>{assert.equal(n,1);checked++;return check.promise};c.fetch=async()=>{requested++;return reply(result())};await c.pqMark();
+    assert.equal(requested,1);assert.equal(checked,1);assert.equal(bs.checked,undefined);assert.equal(c.score(b,1,0).g,2);check.resolve();await until(()=>!c.CHECKRUN['1/1']);
+    c.classEnsure=()=>{classes++};c.aceMount=()=>{};c.afterQDraw();assert.equal(classes,1);
   }
   // Saved diagram geometry and bindings survive the request, together with its rendering.
   {

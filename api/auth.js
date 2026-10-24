@@ -1,6 +1,6 @@
 // Vercel serverless function: accounts and saved progress.
 // Passwords are never stored. Each account keeps a random salt and a scrypt hash.
-// Data lives in a private Vercel Blob store. Sessions are signed tokens that last 30 days.
+// Data lives in a private Cloudflare D1 database (server/d1-blob.js). Sessions are signed tokens that last 30 days.
 const crypto = require('crypto');
 const { performance } = require('node:perf_hooks');
 
@@ -14,7 +14,7 @@ const UPDATE_TIMEOUT_MS = 10000;
 const UPDATE_ATTEMPTS = 16;
 let SECRET = null;
 
-async function blob() { return import('@vercel/blob'); }
+async function blob() { return require('../server/d1-blob'); }
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const b64 = (b) => Buffer.from(b).toString('base64url');
 
@@ -91,11 +91,27 @@ async function updateRecord(path, change) {
   }
   throw storageBusy();
 }
+// Daily backups. The first save of each UTC day first copies the previous state to
+// backup/<id>/<day>.json. This costs one extra write per active account per day, and the
+// day is remembered inside the progress record so normal saves cost nothing extra.
+const BACKUP_DAYS = 7;
+const BACKUP_NAME = /^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/;
+const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+async function writeBackup(id, name, text) {
+  try { await writeJSON('backup/' + id + '/' + name + '.json', JSON.parse(text), false); }
+  catch (e) { if (!exists(e)) throw e; }
+}
+async function pruneBackups(id) {
+  const old = [];
+  for (let n = BACKUP_DAYS + 1; n <= BACKUP_DAYS + 14; n++) old.push('backup/' + id + '/' + dayOf(Date.now() - n * DAY) + '.json');
+  try { await bounded(async (signal, expired) => { const { del } = await blob(); expired(); await del(old, { abortSignal: signal }); expired(); }); }
+  catch (e) { console.error('backup prune error:', e && e.message); }
+}
 function progressView(data) {
   data = data || {};
   const revisions = Object.assign({}, data._revisions || {});
   Object.keys(data.u || {}).forEach(id => { if (!revisions[id]) revisions[id] = sha(JSON.stringify(data.u[id])); });
-  const clean = Object.assign({}, data); delete clean._revisions;
+  const clean = Object.assign({}, data); delete clean._revisions; delete clean._backupDay; delete clean._saveDay; delete clean._saveCount;
   return { data: clean, revisions };
 }
 function mergeHistory(a, b) {
@@ -152,16 +168,27 @@ module.exports = async (req, res) => {
       const id = sha(email);
       const path = 'users/' + id + '.json';
       if (p.action === 'signup') {
+        // Name is shown to classmates. A class code joins the class straight away; a wrong code stops sign-up before anything is created.
+        const classCode = String(p.classCode || '').trim();
+        const classes = classCode || p.name ? require('../server/class-store') : null;
+        const name = p.name != null && String(p.name).trim() ? classes.cleanName(p.name) : '';
+        if (classCode) {
+          if (!name) return fail(400, 'Enter your name to join the class.');
+          await classes.createClassStore().checkCode(classCode);
+        }
         const salt = crypto.randomBytes(16);
         const hash = await hashPw(pw, salt);
         try {
-          await writeJSON(path, { email, salt: salt.toString('hex'), hash: hash.toString('hex'), created: Date.now(), fails: 0, lock: 0 }, false);
+          await writeJSON(path, Object.assign({ email, salt: salt.toString('hex'), hash: hash.toString('hex'), created: Date.now(), fails: 0, lock: 0 }, name ? { name } : {}), false);
         } catch (e) {
           if (exists(e)) return fail(409, 'An account with this email already exists. Sign in instead.');
           throw e;
         }
+        let joined = false, joinError = '';
+        // The account already exists, so a failed join must not look like a failed sign-up: report it and let them join from the Class page.
+        if (classCode) { try { await classes.createClassStore().join(id, name, classCode); joined = true; } catch (e) { joinError = e && e.status ? e.message : 'Could not join the class just now. Join from the Class page.'; } }
         const token = await sign({ id, email, exp: Date.now() + SESSION_MS });
-        return res.status(200).json({ token, email });
+        return res.status(200).json(Object.assign({ token, email, name, joined }, joinError ? { joinError } : {}));
       }
       const ticket = crypto.randomBytes(16).toString('hex');
       // Reserve a slot before hashing, so parallel requests cannot all pass the limit.
@@ -212,7 +239,10 @@ module.exports = async (req, res) => {
       if (!Array.isArray(p.changes) || !p.revisions || p.changes.some(id => typeof id !== 'string' || !/^(?:[1-9]|10)$/.test(id))) {
         return fail(409, 'Reload this page to use the updated progress-saving system.');
       }
+      const today = dayOf(Date.now());
+      let snapshot = null;
       const saved = await updateRecord(ppath, current => {
+        snapshot = current && current._backupDay !== today ? JSON.stringify(current) : null;
         const view = progressView(current), data = view.data, revisions = view.revisions;
         const clashes = p.changes.filter(id => (p.revisions[id] || null) !== (revisions[id] || null));
         if (clashes.length) {
@@ -228,21 +258,70 @@ module.exports = async (req, res) => {
         if ((incoming.ts || 0) >= (data.ts || 0)) {
           ['ts', 'font', 'fg', 'bg'].forEach(k => { data[k] = incoming[k] || 0; });
         }
-        data.v = 2; data._revisions = revisions;
+        data.v = 2; data._revisions = revisions; data._backupDay = today;
+        if (!process.env.DISABLE_SAVE_CAPS) {
+          const maxUserSaves = parseInt(process.env.MAX_DAILY_SAVES || '150', 10);
+          const saveCount = (current && current._saveDay === today ? current._saveCount : 0) || 0;
+          if (saveCount >= maxUserSaves) {
+            const e = new Error('Daily save limit reached for this account. Your answers remain saved in this browser until tomorrow.');
+            e.status = 429; e.details = { code: 'daily_save_cap_reached' }; throw e;
+          }
+          data._saveDay = today;
+          data._saveCount = saveCount + 1;
+        }
+        if (typeof incoming.classCode === 'string') {
+          const cc = incoming.classCode.toUpperCase().trim().slice(0, 20);
+          if (/^[A-Z0-9_-]{2,20}$/.test(cc)) data.classCode = cc; else delete data.classCode;
+        } else if (incoming.classCode === null || incoming.classCode === '') {
+          delete data.classCode;
+        }
         if (Buffer.byteLength(JSON.stringify(data)) > MAX_PROGRESS) {
           const e = new Error('Your saved progress is too large to store.'); e.status = 413; throw e;
         }
         return data;
       });
+      if (snapshot) {
+        try { await writeBackup(sess.id, today, snapshot); await pruneBackups(sess.id); }
+        catch (e) { console.error('backup error:', e && (e.stack || e)); }
+      }
       return res.status(200).json(Object.assign({ ok: true, at: Date.now() }, progressView(saved)));
+    }
+    if (p.action === 'backups') {
+      const found = await bounded(async (signal, expired) => {
+        const { list } = await blob(); expired();
+        const result = await list({ prefix: 'backup/' + sess.id + '/', abortSignal: signal }); expired(); return result;
+      });
+      const names = (found.blobs || []).map(b => String(b.pathname).slice(('backup/' + sess.id + '/').length).replace(/\.json$/, '')).filter(n => BACKUP_NAME.test(n)).sort().reverse();
+      return res.status(200).json({ backups: names });
+    }
+    if (p.action === 'restore') {
+      if (typeof p.name !== 'string' || !BACKUP_NAME.test(p.name)) return fail(400, 'Choose a backup from the list.');
+      const snap = await readJSON('backup/' + sess.id + '/' + p.name + '.json');
+      if (!snap) return fail(404, 'That backup no longer exists.');
+      const now = await readJSON(ppath);
+      if (now) await writeBackup(sess.id, 'before-restore-' + Date.now(), JSON.stringify(now));
+      const restored = await updateRecord(ppath, current => {
+        const data = progressView(snap).data, revisions = {};
+        const ids = new Set([...Object.keys(data.u || {}), ...Object.keys((current && current.u) || {}), ...Object.keys((current && current._revisions) || {})]);
+        ids.forEach(id => { revisions[id] = crypto.randomBytes(16).toString('hex'); });
+        data.u = data.u || {};
+        data.hist = mergeHistory(data.hist, current && current.hist);
+        data.v = 2; data._revisions = revisions; data._backupDay = dayOf(Date.now());
+        // Restoring answers does not reset the current account's save allowance.
+        ['_saveDay', '_saveCount'].forEach(key => {
+          if (current && Object.prototype.hasOwnProperty.call(current, key)) data[key] = current[key];
+        });
+        return data;
+      });
+      return res.status(200).json(Object.assign({ ok: true, restored: p.name }, progressView(restored)));
     }
     return fail(400, 'Unknown request.');
   } catch (e) {
     if (e.status) return res.status(e.status).json(Object.assign({ error: e.message }, e.details || {}));
     console.error('auth error:', e && (e.stack || e));
-    if (!process.env.BLOB_READ_WRITE_TOKEN) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to connect a private Blob store in Vercel and redeploy.');
+    if (!(await blob()).configured()) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to add the Cloudflare D1 settings in Vercel and redeploy.');
     const kind = String((e && e.name) || 'Error').slice(0, 60);
-    if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage is set up wrongly (it must be a private Blob store). Error: ' + kind + '.');
+    if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage could not be accessed. Check the Cloudflare D1 settings. Error: ' + kind + '.');
     return fail(500, 'The account service had a problem. Try again in a moment. (Error: ' + kind + ')');
   }
 };

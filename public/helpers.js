@@ -5,7 +5,7 @@ function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 var S=null;
 try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
-S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0;
+S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0;S.classCode=S.classCode||'';
 S.owner=S.owner||S.ae||'';S.revisions=S.revisions||{};
 // Legacy drafts have no cloud revision: preserve them until the user resolves any conflict.
 if(!S.pending){S.pending={};Object.keys(S.u).forEach(function(id){S.pending[id]=1})}
@@ -32,7 +32,7 @@ function Q(tp,st,items,o){o=o||{};var m=0;items.forEach(function(i){m+=i.m});ret
 function tbl(h,rows,cap){return (cap?'<p class="ttl">'+cap+'</p>':'')+'<div class="tw"><table class="hoa"><tr>'+h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
 function cls(list){return '<div class="clsg">'+list.map(function(c){return '<table class="hoa cls"><tr><th>'+c[0]+'</th></tr>'+c[1].map(function(a){return '<tr><td>'+a+'</td></tr>'}).join('')+'</table>'}).join('')+'</div>'}
 function code(s){return '<pre class="pre">'+esc(s)+'</pre>'}
-function dbTables(db){var ns=Object.keys(db);return ns.map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)}),ns.length>1?'<b>'+n+'</b>':'').replace('<table class="hoa">','<table class="hoa db">')}).join('')}
+function dbTables(db){var ns=Object.keys(db);return ns.map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)})).replace('<table class="hoa">','<table class="hoa db">')}).join('')}
 /* bulleted list for stimulus and prompt text: bl(['one','two']) */
 function bl(list){return '<ul class="bl">'+list.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>'}
 /* inline SVG icons used by the toolbar, question bar and buttons (they take the text colour) */

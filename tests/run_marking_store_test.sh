@@ -1,11 +1,13 @@
 #!/bin/sh
-# Uses only the existing in-memory Blob stand-in. No live API or storage calls.
+# Uses only the in-memory D1 stand-in. No live API or storage calls.
 set -e
 D=$(mktemp -d)
 trap 'rm -rf "$D"' EXIT HUP INT TERM
-mkdir -p "$D/node_modules/@vercel/blob" "$D/api" "$D/server" "$D/tests"
-cp "$(dirname "$0")/stub/blob/"* "$D/node_modules/@vercel/blob/"
-cp "$(dirname "$0")/../api/auth.js" "$D/api/auth.js"
-cp "$(dirname "$0")/../server/marking-store.js" "$D/server/marking-store.js"
-cp "$(dirname "$0")/marking_store_test.js" "$D/tests/marking_store_test.js"
+T=$(dirname "$0")
+mkdir -p "$D/api" "$D/server" "$D/tests"
+cp "$T/stub/d1-blob.js" "$D/server/d1-blob.js"
+cp "$T/../api/auth.js" "$D/api/auth.js"
+cp "$T/../server/class-store.js" "$D/server/class-store.js"
+cp "$T/../server/marking-store.js" "$D/server/marking-store.js"
+cp "$T/marking_store_test.js" "$D/tests/marking_store_test.js"
 cd "$D" && node tests/marking_store_test.js

@@ -58,6 +58,24 @@ function createHandler(deps = {}) {
         const snapshot = await input.prepareExport(request, paper, value => markerStore.getCached(session.id, value));
         return res.status(200).json({ export: await evidence.sign(snapshot, session.id) });
       }
+      if (request.action === 'class_publish') {
+        if (!evidence.publishToClass) throw input.error(501, 'not_implemented', 'Class sharing is not supported by this storage provider.');
+        input.bankFor(request.bankId);
+        let exportPkg = request.export;
+        if (!exportPkg) {
+          const paper = await evidence.loadPaper(session.id, request.bankId);
+          const snapshot = await input.prepareExport(request, paper, value => markerStore.getCached(session.id, value));
+          exportPkg = await evidence.sign(snapshot, session.id);
+        }
+        await evidence.publishToClass(request.classCode, request.bankId, session.id, exportPkg);
+        return res.status(200).json({ ok: true, classCode: request.classCode.toUpperCase().trim(), bankId: request.bankId });
+      }
+      if (request.action === 'class_list') {
+        if (!evidence.listClassExports) return res.status(200).json({ ok: true, classmates: [] });
+        input.bankFor(request.bankId);
+        const classmates = await evidence.listClassExports(request.classCode, request.bankId);
+        return res.status(200).json({ ok: true, classCode: request.classCode.toUpperCase().trim(), bankId: request.bankId, classmates });
+      }
       if (request.action !== 'compare' || Object.keys(request).some(k => !['action', 'exports'].includes(k)) || !Array.isArray(request.exports) || request.exports.length < 2 || request.exports.length > 8) throw input.error(400, 'invalid_comparison', 'Import evidence files from 2 to 8 individuals.');
       // Verify signatures and expiry before cache access. A cache never bypasses sharing checks.
       const snapshots = await Promise.all(request.exports.map(value => evidence.verify(value)));

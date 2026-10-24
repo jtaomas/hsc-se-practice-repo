@@ -111,5 +111,29 @@ function edit(c,id,value){c.BS(id).ans['1.0']=value;c.save(id)}
   badConflict.fetch=async()=>({ok:false,status:409,json:async()=>({error:'bad conflict',code:'progress_conflict',conflicts:['10'],data:{},revisions:null})});
   await badConflict.pushRemote().catch(badConflict.syncFail);assert.equal(JSON.stringify(badConflict.S),beforeConflict);assert.equal(Object.keys(badConflict.SYNC.conflicts).length,0);
   for(const invalid of [{},{token:null,email:'a@example.test'},{token:'synthetic',email:null}]){badConflict.fetch=async()=>({ok:true,status:200,json:async()=>invalid});await assert.rejects(badConflict.api('login',{}),/invalid reply/)}
+  // Newly merged account actions retain strict, action-specific boundaries.
+  const backup=client('backup@example.test'),day='2026-10-25';backup.confirm=()=>true;
+  backup.fetch=async()=>({ok:true,status:200,json:async()=>({backups:[day,'before-restore-1792886400000']})});
+  await backup.bkLoadList();assert.deepEqual(clone(backup.BK.list),[day,'before-restore-1792886400000']);
+  backup.fetch=async()=>({ok:true,status:200,json:async()=>({backups:['../../users/other']})});await assert.rejects(backup.api('backups'),/invalid reply/);
+  edit(backup,'10','before restore');const beforeBadRestore=JSON.stringify(backup.S);
+  backup.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true,restored:day})});await backup.bkRestore(day);
+  assert.equal(JSON.stringify(backup.S),beforeBadRestore);assert.match(backup.BK.msg,/invalid reply/);
+  const restored={ok:true,restored:day,data:{u:{'10':{ans:{'1.0':'restored answer'}}},hist:[]},revisions:{'10':'restored'}};
+  backup.fetch=async()=>({ok:true,status:200,json:async()=>restored});await backup.bkRestore(day);
+  assert.equal(backup.S.u['10'].ans['1.0'],'restored answer');assert.equal(backup.S.revisions['10'],'restored');assert.equal(Object.keys(backup.S.pending).length,0);
+  let releaseRestore;backup.fetch=()=>new Promise(resolve=>{releaseRestore=()=>resolve({ok:true,status:200,json:async()=>restored})});
+  const restoring=backup.bkRestore(day);while(!releaseRestore)await Promise.resolve();edit(backup,'10','new local edit');releaseRestore();await restoring;
+  assert.equal(backup.S.u['10'].ans['1.0'],'new local edit');assert(backup.S.pending['10']);assert.match(backup.BK.msg,/local work changed/);
+  let releaseQueue,callsAfterSwitch=0;backup.SYNC.queue=new Promise(resolve=>{releaseQueue=resolve});backup.fetch=async()=>{callsAfterSwitch++;throw new Error('Wrong account request')};
+  const waitingRestore=backup.bkRestore(day);backup.acceptAccount({token:'another@example.test',email:'another@example.test'},false);releaseQueue();await waitingRestore;
+  assert.equal(callsAfterSwitch,0,'queued restore used a replacement account');assert.equal(Object.keys(backup.S.u).length,0);assert.equal(backup.BK.list,null);
+  let releaseList;backup.fetch=()=>new Promise(resolve=>{releaseList=()=>resolve({ok:true,status:200,json:async()=>({backups:[day]})})});
+  const listing=backup.bkLoadList();while(!releaseList)await Promise.resolve();backup.acceptAccount({token:'third-backup@example.test',email:'third-backup@example.test'},false);releaseList();await listing;assert.equal(backup.BK.list,null);
+  let reader;backup.FileReader=function(){reader=this;this.readAsText=function(){}};backup.bkReadFile({});backup.acceptAccount({token:'file-new@example.test',email:'file-new@example.test'},false);
+  reader.result=JSON.stringify({kind:'sehsc-backup',data:{u:{'10':{ans:{'1.0':'old owner file'}}}}});reader.onload();assert.equal(Object.keys(backup.S.u).length,0);
+  const named=client('name@example.test');named.ACC.mode='up';named.$=selector=>({value:selector==='#acname'?'S':selector==='#acemail'?'name@example.test':'synthetic-password'});named.acGo();assert.equal(named.ACC.busy,false,'short name trapped sign-up in busy state');
+  edit(named,'10','metadata compatible');named.fetch=async(_,req)=>({ok:true,status:200,json:async()=>({ok:true,dailyLimit:150,data:JSON.parse(req.body).data,revisions:{'10':'new-with-metadata'}})});await named.pushRemote();assert.equal(named.SYNC.state,'ok');
+  assert.equal(named.syncReply('signup',{token:'synthetic',email:'name@example.test',name:'Sam Lee',joined:true,joinError:''},{}),true);
   console.log('sync OK: independent devices, conflict choices, account isolation, late responses, in-flight edits and bounded fetch/body timeouts preserving drafts');
 })().catch(e=>{console.error(e);process.exitCode=1});

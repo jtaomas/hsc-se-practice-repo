@@ -8,7 +8,7 @@ const user = n => sha('synthetic-user-' + n);
 const digest = n => sha('synthetic-input-' + n);
 const result = status => ({ status: status || 'marked', mark: status === 'needs_review' ? null : 2, summary: 'Synthetic result.', strengths: [], improve: [], advice: [], criteria: [], audit: { requestedModel: 'deepseek-flash', returnedModels: ['deepseek-flash'], calls: 3 } });
 let clock = Date.UTC(2026, 9, 24, 12);
-const provider = () => import('@vercel/blob');
+const provider = async () => require('../server/d1-blob');
 const make = limits => createStore({ blob: provider, now: () => clock, limits });
 const code = wanted => e => e.code === wanted;
 function reset() { for (const path of globalThis.__M.keys()) if (path.startsWith('marking/')) globalThis.__M.delete(path); }
@@ -17,7 +17,7 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
 
 (async () => {
   await provider();
-  process.env.BLOB_READ_WRITE_TOKEN = 'synthetic-storage-test-token';
+  process.env.CF_API_TOKEN = 'synthetic-storage-test-token';
   const created = await call({ action: 'signup', email: 'marking@example.test', password: 'synthetic-password-only' });
   assert.equal(created.status, 200);
   const token = created.body.token;
@@ -27,9 +27,9 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   const secret = Buffer.from(JSON.parse(globalThis.__M.get('system/secret.json')).k, 'hex');
   function signed(payload) { const body = Buffer.from(JSON.stringify(payload)).toString('base64url'); return body + '.' + crypto.createHmac('sha256', secret).update(body).digest('base64url'); }
   for (const payload of [{ id: '../other', exp: Date.now() + 10000 }, { id: user(1), exp: '9999999999999' }, { id: user(1), exp: Date.now() - 1 }, { id: { path: 'x' }, exp: Date.now() + 10000 }]) assert.equal(await auth.verifySession(signed(payload)), null);
-  delete process.env.BLOB_READ_WRITE_TOKEN;
+  delete process.env.CF_API_TOKEN;
   await assert.rejects(authorize({ authorization: 'Bearer ' + token }), code('marking_storage_unavailable'));
-  process.env.BLOB_READ_WRITE_TOKEN = 'synthetic-storage-test-token';
+  process.env.CF_API_TOKEN = 'synthetic-storage-test-token';
 
   // Different store instances share durable state, not an in-memory lock.
   const a = make(), b = make();

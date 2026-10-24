@@ -14,7 +14,7 @@ function syncStatusHTML(){
   if(SYNC.state==='error')return 'The last save failed: '+esc(SYNC.msg)+'. Your progress is still safe in this browser.';
   return 'Signed in. Progress saves to your account as you work.';
 }
-function syncPayload(){return {v:2,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S.fg,bg:S.bg}}
+function syncPayload(){return {v:2,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S.fg,bg:S.bg,classCode:S.classCode||''}}
 function mergeRemote(r,revisions){
   r=r||{};var remote=r.u||{};revisions=revisions||{};
   Object.keys(Object.assign({},S.u,remote,revisions)).forEach(function(id){
@@ -24,6 +24,7 @@ function mergeRemote(r,revisions){
   });
   (r.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
   if((r.ts||0)>(S.ts||0)){S.font=r.font||0;S.fg=r.fg||0;S.bg=r.bg||0}
+  if(r.classCode!==undefined)S.classCode=r.classCode||'';
   persist();
 }
 function syncObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
@@ -44,8 +45,10 @@ function syncEnvelope(j){
 function syncReply(action,j,sent){
   if(!syncObject(j)||j.error!==undefined)return false;
   if(action==='signup'||action==='login')return typeof j.token==='string'&&j.token.length>0&&j.token.length<=4096&&typeof j.email==='string'&&j.email.length>0&&j.email.length<=120;
+  if(action==='backups')return Array.isArray(j.backups)&&j.backups.length<=1000&&j.backups.every(function(n){return typeof n==='string'&&/^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/.test(n)});
   if(!syncEnvelope(j))return false;
   if(action==='load')return true;
+  if(action==='restore')return j.ok===true&&syncObject(j.data.u)&&j.restored===sent.name&&typeof sent.name==='string'&&/^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/.test(sent.name);
   if(action!=='save'||j.ok!==true||!syncObject(j.data.u)||!Array.isArray(sent.changes))return false;
   return sent.changes.every(function(id){
     var paper=sent.data&&sent.data.u&&sent.data.u[id],revision=j.revisions[id];
@@ -85,6 +88,7 @@ function replaceState(next){
   if(typeof xdCleanup==='function')xdCleanup();
   if(typeof stopPython==='function')stopPython();
   clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();SYNC.conflicts={};
+  if(typeof BK!=='undefined')BK={list:null,msg:'',busy:false};
   if(typeof AIRUN!=='undefined')AIRUN={};
   S=Object.assign({u:{},hist:[],pending:{},revisions:{},tok:'',ae:'',owner:'',ts:0,font:0,fg:0,bg:0},next);
   if(typeof CUR!=='undefined')CUR={b:null,n:0};persist();
@@ -131,8 +135,15 @@ function syncSoon(){
   clearTimeout(SYNC.tmr);
   SYNC.tmr=setTimeout(function(){
     pushRemote().catch(syncFail);
-  },3000);
+  },20000);
 }
+/* Saves are batched (20 s) to keep storage writes low; leaving or hiding the page sends anything still waiting. */
+function flushPending(){
+  if(!S.tok||!Object.keys(S.pending||{}).length)return;
+  clearTimeout(SYNC.tmr);pushRemote().catch(syncFail);
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushPending()});
+window.addEventListener('pagehide',flushPending);
 function conflictHTML(){
   return Object.keys(SYNC.conflicts).map(function(id){var b=BANKS.filter(function(x){return x.id===id})[0];return '<div class="aib bad"><b>'+esc(b?b.name:'Paper '+id)+' changed on another device.</b><p>Your answers on this device are still saved here. Choose which complete paper to keep in your account.</p><button class="nb" data-act="acresolve" data-id="'+id+'" data-v="local">Keep this device’s paper</button> <button class="nb ol" data-act="acresolve" data-id="'+id+'" data-v="remote">Use the saved paper</button></div>'}).join('');
 }
@@ -143,13 +154,66 @@ function resolveSync(id,choice){
   S.revisions[id]=c.revision;delete SYNC.conflicts[id];persist();render();
   if(!Object.keys(SYNC.conflicts).length)syncNow();
 }
+/* ---------- Backups: a file you keep, and daily copies on the server ---------- */
+var BK={list:null,msg:'',busy:false};
+function bkSet(m){BK.msg=m;var e=$('#bkmsg');if(e)e.textContent=m}
+function bkLabel(n){return /^before-restore-/.test(n)?'Saved just before a restore ('+new Date(+n.slice(15)).toLocaleString()+')':'Start of '+n}
+function backupHTML(){
+  var h='<h3 class="pt" style="margin-top:22px">Backups</h3><p>A backup file is a copy of all your papers and marks that you keep yourself. The site also keeps a copy of your progress from the start of each of the last 7 days that you saved.</p>'+
+    '<div class="acts"><button class="nb ol" data-act="bkdownload">Download a backup file</button><button class="nb ol" data-act="bkupload">Restore from a backup file</button>'+
+    (S.tok?'<button class="nb ol" data-act="bklist">Show daily backups</button>':'')+'</div>'+
+    '<input type="file" id="bkfile" accept=".json,application/json" hidden>'+'<div class="acmsg" id="bkmsg" role="status">'+esc(BK.msg)+'</div>';
+  if(S.tok&&BK.list)h+=BK.list.length?'<div class="bklist">'+BK.list.map(function(n){return '<div class="aib"><b>'+esc(bkLabel(n))+'</b> <button class="nb ol" data-act="bkrestore" data-name="'+esc(n)+'">Restore this backup</button></div>'}).join('')+'</div>':'<p>No daily backups yet. The first one is made the next day you save.</p>';
+  return h;
+}
+function bkDownload(){
+  var file={kind:'sehsc-backup',v:1,email:S.ae||'',at:new Date().toISOString(),data:syncPayload()};
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(file)],{type:'application/json'}));
+  a.download='hsc-se-backup-'+file.at.slice(0,10)+'.json';document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);bkSet('Backup file downloaded.');
+}
+function bkReadFile(f){
+  if(!f)return;
+  var epoch=SYNC.epoch,rd=new FileReader();
+  rd.onload=function(){
+    if(epoch!==SYNC.epoch)return;
+    var file;try{file=JSON.parse(rd.result)}catch(e){return bkSet('That file is not a backup file.')}
+    if(!file||file.kind!=='sehsc-backup'||!file.data||typeof file.data.u!=='object'||file.data.u===null)return bkSet('That file is not a backup file.');
+    var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|10)$/.test(id)});
+    if(!ids.length)return bkSet('That backup has no papers in it.');
+    if(!confirm('Restore '+ids.length+' paper'+(ids.length===1?'':'s')+' from this backup? Papers in the file replace the same papers here. Other papers are not touched.'))return;
+    ids.forEach(function(id){S.u[id]=file.data.u[id];S.pending[id]=(S.pending[id]||0)+1;delete SYNC.conflicts[id]});
+    (file.data.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
+    persist();bkSet('Restored '+ids.length+' paper'+(ids.length===1?'':'s')+' from the backup file.');
+    if(S.tok)syncSoon();
+  };
+  rd.readAsText(f);
+}
+function bkLoadList(){
+  if(BK.busy)return;var epoch=SYNC.epoch;BK.busy=true;bkSet('Loading...');
+  return api('backups').then(function(r){checkSession(epoch);BK.list=r.backups;BK.busy=false;BK.msg='';render()}).catch(function(e){if(epoch!==SYNC.epoch)return;BK.busy=false;bkSet(e.message)});
+}
+function bkRestore(name){
+  if(BK.busy)return;
+  if(!confirm('Restore your account to this backup? Your current progress is kept as a "before restore" backup first.'))return;
+  var epoch=SYNC.epoch,token=S.tok,snapshot;BK.busy=true;bkSet('Restoring...');clearTimeout(SYNC.tmr);
+  var task=SYNC.queue.catch(function(){}).then(function(){checkSession(epoch);snapshot=JSON.parse(JSON.stringify(syncPayload()));return api('restore',{name:name},token)}).then(function(r){
+    checkSession(epoch);
+    if(!syncSame(snapshot,syncPayload()))throw new Error('Your local work changed while the backup was being restored. It remains saved in this browser. Review it before syncing again.');
+    S.pending={};S.u=(r.data&&r.data.u)||{};S.revisions=r.revisions||{};SYNC.conflicts={};
+    (r.data&&r.data.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
+    persist();BK.busy=false;BK.list=null;BK.msg='Restored. Your papers now match that backup.';render();
+  }).catch(function(e){if(epoch!==SYNC.epoch)return;BK.busy=false;if(!e.stale)bkSet(e.message)});
+  SYNC.queue=task.catch(function(){});return task;
+}
 function accountPage(){
   CUR={b:null,n:0};
   var body;
   if(S.tok&&S.ae){
     body='<h2 class="pt">Your account</h2><p>Signed in as <b>'+esc(S.ae)+'</b>.</p><p id="syncst">'+syncStatusHTML()+'</p>'+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
-      conflictHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
+      '<p class="note"><a href="#/class">Class page</a>: join your class with the class code and see classmates\' answers.</p>'+
+      conflictHTML()+backupHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
   }else{
     var up=ACC.mode==='up';
     body='<h2 class="pt">'+(up?'Create an account':'Sign in')+'</h2>'+
@@ -157,6 +221,8 @@ function accountPage(){
       '<form class="acform" onsubmit="return false"><label for="acemail">Email</label><input id="acemail" type="email" autocomplete="username" placeholder="name@student.det.nsw.edu.au">'+
       '<label for="acpw">Password</label><input id="acpw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="At least 8 characters">'+
       (up?'<label for="acpw2">Confirm password</label><input id="acpw2" type="password" autocomplete="new-password">':'')+
+      (up?'<label for="acname">Your name</label><input id="acname" autocomplete="name" maxlength="40" placeholder="Shown to classmates next to your answers">'+
+        '<label for="acclass">Class code (optional)</label><input id="acclass" autocomplete="off" maxlength="60" placeholder="Ask your teacher. You can add it later on the Class page.">':'')+
       '<div class="acmsg" id="accmsg" role="alert">'+esc(ACC.msg)+'</div>'+
       '<div class="acts"><button class="nb" data-act="acgo" type="button">'+(up?'Create account':'Sign in')+'</button>'+
       '<button class="nb ol" data-act="acmode" data-v="'+(up?'in':'up')+'" type="button">'+(up?'I already have an account':'Create an account')+'</button></div></form>'+
@@ -171,9 +237,16 @@ function acGo(){
   em=em.trim();
   if(!em||!pw)return acSet('Enter your email and password.');
   if(up&&pw!==(($('#acpw2')||{}).value||''))return acSet('The two passwords do not match.');
-  var epoch=SYNC.epoch;ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
-  api(up?'signup':'login',{email:em,password:pw}).then(function(r){
-    checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';
+  var epoch=SYNC.epoch;
+  var extra={};
+  if(up){
+    var nm=(($('#acname')||{}).value||'').trim(),cc=(($('#acclass')||{}).value||'').trim();
+    if(nm.length<2)return acSet('Enter your name (2 to 40 characters). Classmates see it next to your answers.');
+    extra.name=nm;if(cc)extra.classCode=cc;
+  }
+  ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
+  api(up?'signup':'login',Object.assign({email:em,password:pw},extra)).then(function(r){
+    checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';if(r.joinError)ACC.notice=r.joinError;
     return syncNow().then(function(){location.hash='#/'});
   }).catch(function(e){ACC.busy=false;acSet(e.message)});
 }
@@ -189,6 +262,17 @@ function acSignOut(){
   pushRemote().then(go).catch(function(e){
     if(confirm('Your latest progress could not be saved ('+e.message+'). Sign out anyway and lose it from this browser?'))go();
   });
+}
+function acSetClassCode(clear){
+  if(clear){ S.classCode=''; }
+  else{
+    var inp=$('#ac-classcode');
+    if(!inp)return;
+    S.classCode=inp.value.toUpperCase().trim().slice(0,20);
+  }
+  persist();
+  if(typeof syncSoon==='function')syncSoon();
+  render();
 }
 document.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target&&/^ac(email|pw|pw2)$/.test(e.target.id))acGo()});
 if(S.tok)setTimeout(syncNow,300);

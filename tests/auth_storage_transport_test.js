@@ -1,5 +1,5 @@
 'use strict';
-// Source runs in a VM with only its Blob loader and deadline constants replaced.
+// Source runs in a VM with only its D1 adapter loader and deadline constants replaced.
 // No HTTP, real account, credentials or model calls are used.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -9,11 +9,11 @@ const { Readable } = require('node:stream');
 const source = fs.readFileSync(path.join(__dirname, '../api/auth.js'), 'utf8');
 function replaceOnce(text, old, replacement) { assert.equal(text.split(old).length, 2); return text.replace(old, replacement); }
 function load(provider, operation = 5000, update = 10000) {
-  let script = replaceOnce(source, "async function blob() { return import('@vercel/blob'); }", 'async function blob() { return testProvider(); }');
+  let script = replaceOnce(source, "async function blob() { return require('../server/d1-blob'); }", 'async function blob() { return testProvider(); }');
   script = replaceOnce(script, 'const STORAGE_TIMEOUT_MS = 5000;', 'const STORAGE_TIMEOUT_MS = ' + operation + ';');
   script = replaceOnce(script, 'const UPDATE_TIMEOUT_MS = 10000;', 'const UPDATE_TIMEOUT_MS = ' + update + ';');
-  const context = { module: { exports: {} }, require, Buffer, AbortController, setTimeout, clearTimeout, process: { env: { BLOB_READ_WRITE_TOKEN: 'offline-only' } }, console, testProvider: provider };
-  vm.runInNewContext(script + '\nmodule.exports.test = { readRecord, updateRecord, writeJSON };', context, { filename: 'offline-auth.js' });
+  const context = { module: { exports: {} }, require, Buffer, AbortController, setTimeout, clearTimeout, process: { env: { CF_API_TOKEN: 'offline-only' } }, console, testProvider: provider };
+  vm.runInNewContext(script + '\nmodule.exports.test = { readRecord, updateRecord, writeJSON, writeBackup, pruneBackups };', context, { filename: 'offline-auth.js' });
   return context.module.exports;
 }
 function conflict() { const e = new Error('Synthetic precondition failure'); e.name = 'BlobPreconditionFailedError'; return e; }
@@ -33,6 +33,9 @@ function transport() {
     if (!previous && settings.ifMatch) throw conflict();
     t.seed(p, JSON.parse(text)); return { pathname: p, etag: records.get(p).etag };
   };
+  t.list = async ({prefix}) => ({blobs:[...records.keys()].filter(p=>p.startsWith(prefix)).map(pathname=>({pathname}))});
+  t.del = async paths => paths.forEach(p=>records.delete(p));
+  t.configured = () => true;
   return t;
 }
 function call(handler, body, token) {
@@ -96,5 +99,18 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 10));
   conflicts.beforePut = () => { attempts++; throw conflict(); };
   await assert.rejects(load(async () => conflicts, 1000, 40).test.updateRecord('progress/synthetic.json', () => ({})), e => e.code === 'account_storage_busy');
   assert(attempts >= 1 && attempts < 16, 'total deadline did not bound conflict retries');
-  console.log('Auth storage transport OK: mini-paper compression, strong versions, weak/missing refusal, concurrent merge, bounded provider/read/body/write and late-operation safety. OFFLINE ONLY.');
+  // Backups added with the D1 migration obey the same transport deadline.
+  const listing=gate();let listSignal;
+  t.list=async settings=>{listSignal=settings.abortSignal;return listing.promise};
+  const listTimeout=await call(load(async()=>t,25),{action:'backups'},token);
+  assert.equal(listTimeout.status,503);assert.equal(listTimeout.body.code,'account_storage_timeout');assert(listSignal.aborted);listing.resolve({blobs:[]});await settle();
+  const backupWrite=gate(),backupTransport=transport();let backupSignal,backupCommits=0;
+  backupTransport.put=async(_p,_text,settings)=>{backupSignal=settings.abortSignal;await backupWrite.promise;if(backupSignal.aborted)throw new Error('Cancelled');backupCommits++};
+  await assert.rejects(load(async()=>backupTransport,25).test.writeBackup('synthetic','2026-10-25','{}'),e=>e.code==='account_storage_timeout');
+  assert(backupSignal.aborted);backupWrite.resolve();await settle();assert.equal(backupCommits,0);
+  const pruning=gate();let pruneSignal;backupTransport.del=async(_paths,settings)=>{pruneSignal=settings.abortSignal;await pruning.promise};
+  const originalError=console.error;console.error=()=>{};
+  try{await load(async()=>backupTransport,25).test.pruneBackups('synthetic')}finally{console.error=originalError}
+  assert(pruneSignal.aborted);pruning.resolve();await settle();
+  console.log('Auth storage transport OK: D1-compatible mini-paper saves, exact versions, weak/missing refusal, concurrent merge, bounded provider/read/body/write and late-operation safety. OFFLINE ONLY.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

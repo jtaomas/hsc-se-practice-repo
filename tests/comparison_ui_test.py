@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import expect, sync_playwright
 
 SITE = os.environ.get('SITE', 'http://127.0.0.1:8767').rstrip('/')
-URL = SITE + '/index.html'
+URL = SITE + '/index.html?archive=1'
 TOKEN = 'mock-comparison-session'
 EMAIL = 'comparison@student.det.nsw.edu.au'
 storage = {'data': {'u': {}, 'hist': []}, 'revisions': {}}
@@ -137,22 +137,17 @@ with sync_playwright() as playwright:
         bs.ai['18.0']={status:'marked',g:2,stamp:aiStamp(b,18,0),audit:{inputDigest:'verified-answer-18'},fb:{summary:'Explain why the salt helps.'}};
         save(b.id);render();
     }""")
-    expect(page.locator('#comparison-export')).to_be_disabled()
-    page.check('#comparison-export-consent')
     with page.expect_download() as downloading:
         page.click('#comparison-export')
     downloaded = downloading.value
     assert json.loads(Path(downloaded.path()).read_text()) == package('first')
     expect(page.locator('#comparison-status')).to_contain_text('Evidence downloaded')
-    expect(page.locator('#comparison-export-consent')).not_to_be_checked()
     assert requests[0]['action'] == 'export'
     capture(page, 'comparison-export.png')
 
     page.set_input_files('#comparison-files', [upload('first'), upload('second')])
     expect(page.locator('.comparison-file-list li')).to_have_count(2)
     page.fill('#comparison-label-0', 'Alex <private>')
-    expect(page.locator('#comparison-run')).to_be_disabled()
-    page.check('#comparison-run-consent')
     page.click('#comparison-run')
     expect(page.locator('#comparison-report')).to_be_visible()
     report_node = page.locator('#comparison-report')
@@ -178,12 +173,9 @@ with sync_playwright() as playwright:
 
     # The same private evidence remains in memory only; no uncontrolled request follows an error.
     comparison_mode = 'fail'
-    page.check('#comparison-run-consent')
     page.click('#comparison-run')
     expect(page.locator('#comparison-error')).to_contain_text('Mock temporary provider failure')
-    expect(page.locator('#comparison-run-consent')).not_to_be_checked()
     comparison_mode = 'needs_review'
-    page.check('#comparison-run-consent')
     page.click('#comparison-run')
     expect(page.locator('#comparison-report')).to_contain_text('AI comparison needs review')
     assert page.locator('.comparison-profile').count() == 0
@@ -192,7 +184,6 @@ with sync_playwright() as playwright:
 
     # Cancellation invalidates the pending generation even if the server already began work.
     comparison_mode = 'hold'
-    page.check('#comparison-run-consent')
     page.click('#comparison-run')
     expect(page.locator('#comparison-cancel')).to_be_visible()
     expect(page.locator('#comparison-run')).to_be_disabled()
@@ -206,7 +197,6 @@ with sync_playwright() as playwright:
             pass  # Chromium may have already discarded the aborted transport.
 
     comparison_mode = 'complete'
-    page.check('#comparison-run-consent')
     page.click('#comparison-run')
     expect(page.locator('#comparison-report')).to_be_visible()
     page.set_viewport_size({'width': 390, 'height': 844})

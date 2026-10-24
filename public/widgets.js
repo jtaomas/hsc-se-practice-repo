@@ -87,9 +87,9 @@ function isAns(it,a){
 function qAnswered(b,n){var bs=BS(b.id);return b.qs[n-1].it.some(function(it,i){return isAns(it,bs.ans[n+'.'+i])})}
 function normOut(x){return String(x).trim().split('\n').map(function(y){return y.replace(/\s+$/,'')}).join('\n')}
 function passTest(out,t){return normOut(out)===normOut(t.o)}
-function runChecks(b){
+function runChecks(b,only){
   var bs=BS(b.id),state=S,jobs=[];
-  b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){
+  b.qs.forEach(function(q,qi){if(only&&qi+1!==only)return;q.it.forEach(function(it,i){
     var k=(qi+1)+'.'+i,a=bs.ans[k],stamp=JSON.stringify({answer:a,item:it,db:q.db});
     function current(){return S===state&&S.u[b.id]===bs&&stamp===JSON.stringify({answer:bs.ans[k],item:it,db:q.db})}
     if(it.t==='py'&&a&&it.tests.length){
@@ -160,7 +160,7 @@ function itemHTML(b,n,i,rv){
         '<div class="rta" data-k="'+k+'" contenteditable="'+(ro?'false':'true')+'" role="textbox" aria-multiline="true" aria-label="Your answer">'+(a||'')+'</div></div><div class="wc'+(wc>it.w?' over':'')+'" id="wc'+k+'">'+wc+' / '+it.w+' words</div>';
     }
   }
-  return h+(rv?guideHTML(b,n,i):'')+'</div>';
+  return h+(rv||(typeof pqShown==='function'&&pqShown(b,n))?guideHTML(b,n,i):'')+'</div>';
 }
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
@@ -174,14 +174,15 @@ function guideHTML(b,n,i){
   else if(it.t==='tk'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+(r[1].map(function(c){return it.h[c+1]}).join(', ')||'none')+'</b>'}))}
   else{
     h+=aiBlock(b,n,i,it,bs,k,a,sc);
-    if(QT[it.t]&&QT[it.t].sample)h+='<p><b>Sample answer:</b></p>'+QT[it.t].sample(it);
-    else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
-    else h+='<p><b>Sample answer:</b></p><div>'+it.model+'</div>';
+    if(QT[it.t]&&QT[it.t].sample)h+='<p class="gh"><b>Sample answer:</b></p>'+QT[it.t].sample(it);
+    else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p class="gh"><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
+    else h+='<p class="gh"><b>Sample answer:</b></p><div>'+it.model+'</div>';
     if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>Drawing summary</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
-    if(it.crit.length)h+='<p><b>Marking criteria</b></p>'+critList(it.crit);
+    if(it.crit.length)h+='<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit);
     var c=bs.chk[k];if(c)h+='<p><b>Practice check:</b> '+(it.t==='sq'?(c.p?'your query matched the sample rows and required column headings':'your query did not match the sample rows and required column headings'):c.p+' of '+c.t+' example test runs gave the expected output')+'. Example checks do not award marks.</p>';
     else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(isAns(it,a)?'running...':'no answer to check')+'</p>';
     if(c&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
+    if(typeof classSlot==='function')h+=classSlot(b,n,i);
     h+='<div class="smk"><span>'+(bs.ai[k]&&bs.ai[k].g!=null?'Change the mark:':'Your mark:')+'</span>';for(var j=0;j<=it.m;j++)h+='<button data-act="sm" data-k="'+k+'" data-v="'+j+'"'+(sc.set&&sc.g===j?' class="on"':'')+'>'+j+'</button>';h+='</div>';
   }
   if(it.why)h+='<p style="margin-top:8px">'+it.why+'</p>';

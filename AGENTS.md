@@ -1,12 +1,12 @@
 # Instructions for AI coding assistants
 
-Read README.md first. Then follow these rules.
+Read README.md first, then `docs/HANDOFF.md` for the current state, live wiring and open decisions. Then follow these rules.
 
 ## Stack and constraints
 - Plain browser JavaScript (ES5 style, `var`, `function`) in global scope. No framework, no bundler, no build step. Do not introduce one without the owner's approval.
 - Script order in `public/index.html` matters. If you add a file, add its tag in the right place.
 - Keep new code in the same style as the file you edit. Small edits beat rewrites.
-- Serverless functions in `api/` are CommonJS and load `@vercel/blob` with dynamic `import()`.
+- Serverless functions in `api/` are CommonJS. All storage goes through `server/d1-blob.js` (Cloudflare D1).
 
 ## Never do these
 - Never commit secrets, tokens, `.env` files or API keys. Never print them.
@@ -18,7 +18,7 @@ Read README.md first. Then follow these rules.
 
 ## How to add or change a question
 Read AUTHORING.md: it lists every constructor and stimulus panel, with examples. `public/formats.js` (open `#/formats`) is a working demo of each format.
-Banks are in `public/bank1.js` to `bank10.js`. Each question is an object with `tp` (syllabus topic), `st` (stimulus HTML), `it` (parts) built from the constructors in `helpers.js`. Closed types (`mc`, `ms`, `dd`, `mt`, `gd`, `tk`, `od`, `dm`) carry the correct answer and are marked in the browser. `tx`, `py`, `ps`, `sq`, `dr`, `ft` carry `model` (sample answer) and `crit` (marking criteria strings) that are sent to the AI marker. Full-length original papers total 80 marks across 27 questions. Explicitly requested mini papers use the `mini`, `questions`, `marks` and `duration` metadata described in AUTHORING.md; Mini Paper 1 has three questions and 15 marks. Look at an existing question of the same type and copy its shape.
+Banks 1 to 7 are archived: hidden from students, kept as data in `archive/` (read `archive/README.md` before touching them; do not edit or re-surface them, and start new papers at bank 11). Banks are in `public/bank1.js` to `bank10.js`. Each question is an object with `tp` (syllabus topic), `st` (stimulus HTML), `it` (parts) built from the constructors in `helpers.js`. Closed types (`mc`, `ms`, `dd`, `mt`, `gd`, `tk`, `od`, `dm`) carry the correct answer and are marked in the browser. `tx`, `py`, `ps`, `sq`, `dr`, `ft` carry `model` (sample answer) and `crit` (marking criteria strings) that are sent to the AI marker. Full-length original papers total 80 marks across 27 questions. Explicitly requested mini papers use the `mini`, `questions`, `marks` and `duration` metadata described in AUTHORING.md; Mini Paper 1 has three questions and 15 marks. Look at an existing question of the same type and copy its shape.
 
 ## Working on main
 Everyone works directly on `main`. No pull request and no side branch is needed.

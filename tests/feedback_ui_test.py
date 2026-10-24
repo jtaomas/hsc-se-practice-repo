@@ -48,7 +48,7 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={'width': 1280, 'height': 1000})
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.route('**/*', route_request)
-    page.goto(SITE + '/index.html')
+    page.goto(SITE + '/index.html?archive=1')
     page.evaluate("""() => {
       save=function(){};syncSoon=function(){};
       S.tok='mock-feedback';S.owner='fixture@example.test';S.ae=S.owner;

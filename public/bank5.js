@@ -107,7 +107,7 @@ qs.push(Q(SEP,'A program needs a class named <b>Account</b>. The constructor tak
         return False`,[{app:'a = Account("Sam", 50)\na.deposit(25)\nprint(a.balance)',o:'75'},{app:'a = Account("Sam", 50)\nprint(a.withdraw(80))\nprint(a.balance)',o:'False\n50'},{app:'a = Account("Sam", 50)\nprint(a.withdraw(20))\nprint(a.balance)',o:'True\n30'}],['1 mark: class with a constructor that stores the owner and the balance.','1 mark: deposit adds to the balance.','1 mark: withdraw checks the balance, updates it only when allowed, and returns True or False.'])],{two:true}));
 qs.push(Q(SSA,'',[
  tx('Describe how sandboxing contributes to the \'security by design\' approach.',3,55,'A sandbox runs a program in an isolated space with limited access to the rest of the system, such as files, memory and the network. If the program contains a flaw or is malicious, the damage is contained inside the sandbox. Building the software to run in a sandbox from the start is part of designing it to be secure.',['3 marks: describes isolation, the effect of limiting damage, and links it to design from the start.','2 marks: describes isolation with limited explanation.','1 mark: states that a program is kept separate.'])]));
-qs.push(Q(PW,'A medical clinic keeps its doctors and appointments in two related tables.',[
+qs.push(Q(PW,'A medical clinic keeps its doctors and appointments in two related tables, Doctors and Appointments.',[
  sq('Construct a SQL query that displays each Clinic and the number of appointments with a Status of \'Attended\'.<br>Use the column headings Clinic and Attended. List the results in alphabetical order of Clinic.',4,`SELECT Clinic, COUNT(*) AS Attended
 FROM Doctors
 JOIN Appointments ON Doctors.DoctorID = Appointments.DoctorID

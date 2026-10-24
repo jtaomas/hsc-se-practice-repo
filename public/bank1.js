@@ -83,7 +83,7 @@ else:
     print("Invalid card")`,[{i:['AB123456'],o:'Valid card'},{i:['ab123456'],o:'Invalid card'},{i:['A1234567'],o:'Invalid card'},{i:['AB12345'],o:'Invalid card'},{i:['ABC12345'],o:'Invalid card'}],['1 mark: reads the input and displays the two messages.','1 mark: correct length check.','1 mark: correct checks of the letters and digits.'])],{two:true}));
 qs.push(Q(PW,'',[
  tx('Describe how HTTPS (HTTP over TLS) protects data sent between a browser and a web server.',3,55,'HTTPS uses TLS to set up an encrypted connection. The server proves its identity with a digital certificate, and the browser and server agree on session keys. Data sent after that is encrypted, so anyone intercepting it cannot read it, and changes to it can be detected.',['3 marks: describes certificate or authentication, key exchange and encryption of data in transit.','2 marks: describes encryption with some detail about how it is set up.','1 mark: states that HTTPS encrypts data.'])]));
-qs.push(Q(PW,'A community library stores its members and loans in two related tables.',[
+qs.push(Q(PW,'A community library stores its members and loans in two related tables, Members and Loans.',[
  sq('Construct a SQL query that displays, for each suburb, the number of loans that have a fine greater than 0.<br>Use the column headings Suburb and FinedLoans. List the results from the highest to the lowest number of fined loans.',4,`SELECT Suburb, COUNT(LoanID) AS FinedLoans
 FROM Members
 JOIN Loans ON Members.MemberID = Loans.MemberID

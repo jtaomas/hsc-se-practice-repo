@@ -88,7 +88,7 @@ for c in commands:
 print("Position: " + str(x) + "," + str(y))`,[{i:['UURD'],o:'Position: 1,1'},{i:['RRRR'],o:'Position: 4,0'},{i:['LDLq'],o:'Position: -2,-1'},{i:[''],o:'Position: 0,0'}],['1 mark: reads the commands and processes each character.','1 mark: changes x and y correctly for the four commands and ignores other characters.','1 mark: displays the final position in the correct format.'])],{two:true}));
 qs.push(Q(PW,'',[
  tx('Explain how open-source software is used and developed in web development.',3,55,'Open-source software has source code that anyone can view, use and change under its licence, and many web tools such as frameworks and CMS platforms are open source. Developers use these tools for free, which lowers the cost of a project. The code is improved by a community of contributors who report faults and add features, so problems are often found and fixed quickly.',['3 marks: explains use, community development and a benefit.','2 marks: explains two of these with limited detail.','1 mark: states that source code is freely available.'])]));
-qs.push(Q(PW,'A cinema keeps its films and sessions in two related tables.',[
+qs.push(Q(PW,'A cinema keeps its films and sessions in two related tables, Films and Sessions.',[
  sq('Construct a SQL query that displays the Genre of each film and the total revenue from the sessions that sold more than 50 tickets. The revenue for a session is Tickets multiplied by Price.<br>Use the column headings Genre and Revenue. List the results from the highest to the lowest revenue.',4,`SELECT Genre, SUM(Tickets * Price) AS Revenue
 FROM Films
 JOIN Sessions ON Films.FilmID = Sessions.FilmID

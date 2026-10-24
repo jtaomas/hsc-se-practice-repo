@@ -86,7 +86,7 @@ else:
     print(bits)`,[{i:['13'],o:'1101'},{i:['0'],o:'0'},{i:['8'],o:'1000'},{i:['255'],o:'11111111'}],['1 mark: reads the number and handles 0.','1 mark: repeatedly divides by 2 and uses the remainder as the next binary digit.','1 mark: builds the digits in the correct order and displays them.'])],{two:true}));
 qs.push(Q(PW,'',[
  tx('Describe how data packets are used to send a file across the internet.',3,55,'The file is split into small data packets. Each packet is labelled with the IP addresses of the sender and the receiver and a sequence number. The packets can travel by different routes through routers and may arrive in a different order. At the destination, TCP uses the sequence numbers to put the packets back in order and asks for any missing packet to be sent again.',['3 marks: describes splitting into packets, labelling with addresses or sequence, and reassembly at the destination.','2 marks: describes the process with limited detail.','1 mark: states that data is sent in packets.'])]));
-qs.push(Q(PW,'An equipment hire company keeps its customers and hires in two related tables.',[
+qs.push(Q(PW,'An equipment hire company keeps its customers and hires in two related tables, Customers and Hires.',[
  sq('Construct a SQL query that displays the Name of each customer and the total Fee of the hires that have a Status of \'Returned\'.<br>Use the column headings Name and TotalFee. List the results from the highest to the lowest total.',4,`SELECT Name, SUM(Fee) AS TotalFee
 FROM Customers
 JOIN Hires ON Customers.CustomerID = Hires.CustomerID

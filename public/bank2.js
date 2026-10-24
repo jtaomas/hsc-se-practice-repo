@@ -88,7 +88,7 @@ print("Words:", words)
 print("Vowels:", vowels)`,[{i:['The quick brown fox jumps'],o:'Words: 5\nVowels: 6'},{i:['I love Python'],o:'Words: 3\nVowels: 4'},{i:['Rhythm'],o:'Words: 1\nVowels: 0'},{i:['AEIOU aeiou'],o:'Words: 2\nVowels: 10'}],['1 mark: reads input and counts the words.','1 mark: counts vowels in both cases.','1 mark: displays both results in the correct format.'])],{two:true}));
 qs.push(Q(PW,'',[
  tx('Describe how a content delivery network (CDN) can reduce the load time of a website that is used around the world.',3,55,'A CDN stores copies of a site\'s static files, such as images and scripts, on servers in many locations. When a user requests the page, the files come from the server nearest to them instead of the main server. The shorter distance reduces delay, and spreading requests across servers reduces the load on the main server.',['3 marks: describes copies stored in many locations, delivery from the nearest server and the effect on load time.','2 marks: describes the use of multiple servers with limited link to load time.','1 mark: identifies that a CDN stores content.'])]));
-qs.push(Q(PW,'A school canteen keeps its menu and orders in two related tables.',[
+qs.push(Q(PW,'A school canteen keeps its menu and orders in two related tables, Items and Orders.',[
  sq('Construct a SQL query that displays the Category of each item and the total value of the orders for that category on Monday. The value of an order is Qty multiplied by Price.<br>Use the column headings Category and TotalValue. List the results from the highest to the lowest total value.',4,`SELECT Category, SUM(Qty * Price) AS TotalValue
 FROM Orders
 JOIN Items ON Orders.ItemID = Items.ItemID

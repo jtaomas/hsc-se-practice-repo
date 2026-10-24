@@ -85,7 +85,7 @@ print("Sum:", total)
 print("Largest:", largest)`,[{i:['3','9','4','0'],o:'Sum: 16\nLargest: 9'},{i:['5','0'],o:'Sum: 5\nLargest: 5'},{i:['-2','-8','0'],o:'Sum: -10\nLargest: -2'},{i:['10','20','30','0'],o:'Sum: 60\nLargest: 30'}],['1 mark: loop that stops when 0 is entered and does not include 0 in the results.','1 mark: correct sum.','1 mark: correct largest value, including when all numbers are negative, and correct output format.'])],{two:true}));
 qs.push(Q(PW,'',[
  tx('Describe how the Domain Name System (DNS) is used when a user enters a web address into a browser.',3,55,'The browser asks a DNS server to find the IP address that matches the domain name. If the first server does not hold the answer, it queries other DNS servers until the address is found, then returns it and may store it in a cache. The browser uses the IP address to contact the web server.',['3 marks: describes the request for an IP address, the lookup through DNS servers and the use of the address by the browser.','2 marks: describes the lookup with limited detail.','1 mark: states that DNS converts names to addresses.'])]));
-qs.push(Q(PW,'A farm records readings from sensors in a database with two related tables.',[
+qs.push(Q(PW,'A farm records readings from sensors in a database with two related tables, Sensors and Readings.',[
  sq('Construct a SQL query that displays the Location of each sensor site and the average Value of its Temperature sensors, using only readings that were not taken on Monday.<br>Use the column headings Location and AvgTemp. List the results from the highest to the lowest average.',4,`SELECT Location, AVG(Value) AS AvgTemp
 FROM Readings
 JOIN Sensors ON Readings.SensorID = Sensors.SensorID

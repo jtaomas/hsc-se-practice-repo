@@ -14,9 +14,17 @@ function createHandler(deps) {
   const banksOf = deps.banks || loadBanks;
   const engine = deps.synthesis || synthesis;
   const env = deps.env || process.env;
+  const clock = deps.now || Date.now;
   const bankFor = id => banksOf().find(b => b.id === id && !b.hidden && !b.archived);
 
-  // Submitted open-ended answers of every member for one paper, in a fixed order.
+  const sharedPaper = paper => !!paper && (paper.done === true || paper.mode === 'practice');
+  // A member who is sitting an exam right now cannot look at the class. Past three hours the exam is treated as abandoned.
+  async function sittingExam(id) {
+    const papers = await store.papersOf(id).catch(() => ({}));
+    return Object.keys(papers).some(k => { const p = papers[k]; return p && p.mode === 'exam' && p.start && !p.done && clock() - p.start < 3 * 3600e3; });
+  }
+
+  // Open-ended answers of every member for one paper, in a fixed order.
   async function classAnswers(bank, me) {
     const members = await store.members();
     const parts = {};
@@ -26,7 +34,8 @@ function createHandler(deps) {
       const papers = await Promise.all(batch.map(m => store.paperOf(m.id, bank.id).catch(() => null)));
       batch.forEach((m, k) => rows.push({ member: m, paper: papers[k] }));
     }
-    const submitted = rows.filter(r => r.paper && r.paper.done);
+    // Practice answers are shared as they are saved and exam answers once submitted. An exam that is still being sat stays private.
+    const submitted = rows.filter(r => r.paper && sharedPaper(r.paper));
     bank.qs.forEach((q, qi) => q.it.forEach((item, pi) => {
       if (!engine.isOpen(item)) return;
       const list = [];
@@ -68,13 +77,14 @@ function createHandler(deps) {
         const counts = {};
         for (let i = 0; i < members.length; i += 6) {
           const done = await Promise.all(members.slice(i, i + 6).map(m => store.papersOf(m.id).catch(() => ({}))));
-          done.forEach(u => Object.keys(u).forEach(id => { if (BANK_ID.test(id) && u[id] && u[id].done) counts[id] = (counts[id] || 0) + 1; }));
+          done.forEach(u => Object.keys(u).forEach(id => { if (BANK_ID.test(id) && sharedPaper(u[id])) counts[id] = (counts[id] || 0) + 1; }));
         }
         return res.status(200).json({ members: members.length, counts });
       }
 
       const bank = typeof p.bankId === 'string' && BANK_ID.test(p.bankId) ? bankFor(p.bankId) : null;
       if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+      if ((p.action === 'answers' || p.action === 'analyse') && await sittingExam(sess.id)) return fail(403, 'exam_in_progress', 'Class answers are locked while you are sitting an exam. Submit it or wait for your working time to end.');
       if (p.action === 'answers') {
         const all = await classAnswers(bank, sess.id);
         return res.status(200).json({ bankId: bank.id, members: all.members.length, submitted: all.submitted, parts: all.parts });
@@ -86,7 +96,7 @@ function createHandler(deps) {
         if (!context) return fail(400, 'invalid_part', 'This part is not a written answer, so there is nothing to analyse.');
         const all = await classAnswers(bank, sess.id);
         const entries = (all.parts[qn + '.' + pi] || []);
-        if (entries.length < 2) return fail(409, 'too_few', 'At least two classmates need to have submitted this paper before the class can be analysed.');
+        if (entries.length < 2) return fail(409, 'too_few', 'At least two classmates need to have shared an answer to this part before the class can be analysed.');
         const labelled = engine.label(entries, bank.id + '.' + qn + '.' + pi);
         const digest = engine.digestFor(context, labelled);
         const names = {}; labelled.forEach(x => { names[x.letter] = x.mine ? 'You' : x.name; });

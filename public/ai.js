@@ -40,6 +40,13 @@ function aiTodo(b){
 }
 function aiReviews(b){var count=0;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var a=aiRecord(b,qi+1,i);if(a&&a.status==='needs_review')count++})});return count}
 function aiPaperStamp(b){return JSON.stringify(b.qs.map(function(q,qi){return q.it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,qi+1,i)})}))}
+/* Stores one finished AI result in the paper, in the shape the review pages read. */
+function aiStore(bs,k,it,stamp,r){
+  if(r.status==='marked'&&(r.mark<0||r.mark>it.m))throw new Error('The marking service returned a mark outside the available range.');
+  function strings(a){return Array.isArray(a)?a.filter(function(x){return typeof x==='string'}):[]}
+  bs.ai[k]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};
+  delete bs.aiErr[k];
+}
 var AIRUN={};
 /* Rolling update: as each answer finishes, refresh the status panel, scores and nav without a full redraw. */
 function aiLive(b,qn){
@@ -82,16 +89,49 @@ function runAI(b,onProg){
     return prepared.then(function(p){if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return null;return attempt(p,0)}).then(function(r){
       if(!r)return;
       if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run||stamp!==aiStamp(b,t[0],t[1]))return;
-      if(r.status==='marked'&&(r.mark<0||r.mark>t[3].m))throw new Error('The marking service returned a mark outside the available range.');
-      function strings(a){return Array.isArray(a)?a.filter(function(x){return typeof x==='string'}):[]}
-      bs.ai[t[2]]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};delete bs.aiErr[t[2]];
+      aiStore(bs,t[2],t[3],stamp,r);
     }).catch(function(e){if(aiRunCurrent(b,run)&&AIRUN[b.id]===run)bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(aiRunCurrent(b,run)&&AIRUN[b.id]===run){run.done=done;save(b.id);aiLive(b,t[0]);onProg&&onProg(done,total,fatal)}return next()});
   }
   run.promise=Promise.all([next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
   return run.promise;
 }
+/* Practice mode: mark one question on its own. Runs beside, never instead of, the whole-paper run. */
+var AIQ={};
+function aiqKey(b,n){return b.id+'/'+n}
+function aiqLive(b,n){
+  if(typeof CUR==='undefined'||CUR.b!==b||CUR.n!==n||CUR.rv||!$('#qarea'))return;
+  var ae=document.activeElement;
+  if(ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable)){var pn=$('#pq');if(pn)pn.outerHTML=pqPanelHTML(b,n);return}
+  var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,false);afterQDraw();window.scrollTo(0,y);refreshNav();
+}
+function runAIQuestion(b,n){
+  var bs=BS(b.id),key=aiqKey(b,n);
+  if(!S.tok)return Promise.resolve();
+  if(AIQ[key])return AIQ[key].promise;
+  var calls=aiTodo(b).filter(function(t){return t[0]===n});
+  if(!calls.length)return Promise.resolve();
+  var run={state:S,paper:bs,token:S.tok,total:calls.length,done:0,waiting:0};
+  AIQ[key]=run;
+  function current(){return AIQ[key]===run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token}
+  function attempt(p,tries){
+    return aiCall(p,run.token).catch(function(e){
+      if(!e.busy||tries>=24||!current())throw e;
+      run.waiting++;aiqLive(b,n);
+      return new Promise(function(ok){setTimeout(ok,e.retryMs||15000)}).then(function(){run.waiting--;return attempt(p,tries+1)});
+    });
+  }
+  run.promise=Promise.all(calls.map(function(t){
+    var stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
+    var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
+    return prepared.then(function(p){return current()?attempt(p,0):null}).then(function(r){
+      if(!r||!current()||stamp!==aiStamp(b,t[0],t[1]))return;
+      aiStore(bs,t[2],t[3],stamp,r);
+    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message}).then(function(){run.done++;if(current()){save(b.id);aiqLive(b,n)}});
+  })).then(function(){if(AIQ[key]===run)delete AIQ[key];aiqLive(b,n)});
+  return run.promise;
+}
 function aiBlock(b,n,i,it,bs,k,a,sc){
-  var ai=aiRecord(b,n,i);
+  var ai=aiRecord(b,n,i),live=bs.done||(typeof pqShown==='function'&&pqShown(b,n));
   if(ai){
     var f=ai.fb||{},review=ai.status==='needs_review',legacy=!ai.stamp,audit=ai.audit||{};
     var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(aiPayload(b,n,i).answer):null;
@@ -107,9 +147,10 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
       (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+(S.tok?'<button class="nb sm" data-act="airemark" data-k="'+esc(k)+'">Re-mark with current process</button>':'<a href="#/account">Sign in to re-mark</a>'))+
       (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
   }
-  if(bs.done&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
+  if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
   if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p><button class="nb sm" data-act="airetry">Try again</button></div>';
-  if(bs.done&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';
+  if(live&&isAns(it,a)&&AIQ[aiqKey(b,n)])return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
+  if(live&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   return '';
 }
 /* ---------- helpers for the mistakes page ---------- */

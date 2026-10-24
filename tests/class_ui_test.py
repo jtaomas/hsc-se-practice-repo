@@ -46,9 +46,6 @@ with sync_playwright() as pw:
     page.fill('#cvcode', 'good-code'); page.click('[data-cv=join]')
     expect(page.locator('#cvroot')).to_contain_text('You are in the class as')
     page.click('[data-cv=bank][data-id="8"]')
-    expect(page.locator('#cvroot')).to_contain_text('Submit')   # not submitted yet: answers hidden
-    assert page.locator('.cvans').count() == 0
-    page.check('#cvearly')
     expect(page.locator('.cvpart').first).to_be_visible()
     page.click('[data-cv=toggle]')
     expect(page.locator('.cvans').first).to_contain_text('Priya')
@@ -61,4 +58,4 @@ with sync_playwright() as pw:
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'no sideways scroll on a phone'
     browser.close()
 assert not errors, errors
-print('CLASS UI OK: sign-in gate, join with wrong then right code, hidden until submitted or switch on, escaped answers, analysis rendering, phone width')
+print('CLASS UI OK: sign-in gate, join with wrong then right code, escaped answers, analysis rendering, phone width')

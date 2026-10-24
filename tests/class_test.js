@@ -116,5 +116,16 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await rest(h, { action: 'analyse', bankId: '8', questionNumber: 17, partIndex: 0 })).body.code, 'too_few');
   // Unsubmitted work never leaves its owner.
   assert.equal((await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].length, 1);
+  // Practice answers are shared as saved; an exam still being sat is private.
+  await m.put('progress/' + id(2) + '.json', { u: { 8: { done: false, mode: 'practice', ans: { '17.0': text2 } } } });
+  assert.equal((await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].length, 2);
+  await m.put('progress/' + id(2) + '.json', { u: { 8: { done: false, mode: 'exam', start: Date.now(), ans: { '17.0': text2 } } } });
+  assert.equal((await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].length, 1);
+  // Someone sitting an exam cannot read the class; an abandoned exam (over three hours) no longer locks them.
+  await m.put('progress/' + id(1) + '.json', { u: { 8: Object.assign(paper('<p>' + text1 + '</p>'), {}), 9: { done: false, mode: 'exam', start: Date.now() - 600e3, ans: {} } } });
+  assert.equal((await rest(h, { action: 'answers', bankId: '8' })).body.code, 'exam_in_progress');
+  assert.equal((await rest(h, { action: 'analyse', bankId: '8', questionNumber: 17, partIndex: 0 })).body.code, 'exam_in_progress');
+  await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>' + text1 + '</p>'), 9: { done: false, mode: 'exam', start: Date.now() - 4 * 3600e3, ans: {} } } });
+  assert.equal((await rest(h, { action: 'answers', bankId: '8' })).status, 200);
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

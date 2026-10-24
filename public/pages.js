@@ -35,7 +35,7 @@ function frame(title,main,opt){
   opt=opt||{};
   var right;
   if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
-  else right='<nav class="hn"><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
+  else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
     (opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>');
@@ -86,7 +86,7 @@ function homePage(){
   var visible=BANKS.filter(function(b){return !b.hidden}),full=visible.filter(function(b){return !b.mini}).length,mini=visible.length-full;
   var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
     return '<a class="nb" href="#/'+b.id+'">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+st+'</small></a>'}).join('');
-  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. The full-length original papers have 27 questions in the same order of question types as the 2025 HSC online examination. Papers marked as trial papers are school trial examinations converted question for question into the online format, and keep their own question counts.</p><div class="bks">'+books+'</div></div>'+
+  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="feature" style="margin-bottom:20px"><h2 class="pt">Review and analyse</h2><p>Open any paper straight in review: your answers, the marking guide, sample answers, AI feedback and what your class wrote.</p><div class="acts"><a class="nb" href="#/review">Review a paper</a><a class="nb ol" href="#/class">Class answers</a></div></div><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. The full-length original papers have 27 questions in the same order of question types as the 2025 HSC online examination. Papers marked as trial papers are school trial examinations converted question for question into the online format, and keep their own question counts.</p><div class="bks">'+books+'</div></div>'+
     '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode with the working time shown on its opening page, or in practice mode with no timer. Full-length papers allow 2 hours 20 minutes; mini papers have a shorter timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you. Sign in for AI marking of written, code and diagram answers against the criteria; answers that need review remain unscored. You can use the marking guides to set or change any mark. The Papers page keeps every paper, and My mistakes collects every assessed answer that lost marks.</p><p>The original questions are written for practice. They are not past HSC questions and they do not predict the real paper. The trial papers are credited on their own paper pages.</p></div></div></div>');
 }
 function landingPage(b){
@@ -116,7 +116,7 @@ function qHTML(b,n,rv){
   var q=b.qs[n-1];
   var title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
   var st=(q.st||'')+(q.db?dbTables(q.db):'');
-  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('');
+  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('')+(rv?'':pqPanelHTML(b,n));
   var last=n===b.qs.length;
   var acts='<div class="acts">'+(rv?'<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Back to results':'Next question')+(last?'':IC.right)+'</button>':
     '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Finish exam':'Next question')+(last?'':IC.right)+'</button>')+'</div>';
@@ -157,7 +157,10 @@ function render(){
   /* Archived papers (see archive/README.md) are not reachable from the app; ?archive=1 is for tests and maintainers. */
   if(b&&b.archived&&!/[?&]archive=1\b/.test(location.search))b=undefined;
   MENU={};CPK='';xdCleanup();
-  if(h[0]==='papers')html=papersPage();
+  var lock=examLock();
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'))))html=lockedPage(lock);
+  else if(h[0]==='papers')html=papersPage();
+  else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
   else if(h[0]==='class')html=classPage(h[1]||'');
@@ -171,20 +174,64 @@ function render(){
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
-  if(h[0]==='class')classBind();
+  if(!lock&&h[0]==='class')classBind();
   if(h[0]==='compare')comparisonBind();
-  if(b&&(h[1]==='q'||h[1]==='review')){afterQ();navArrows(true)}
+  if(b&&(h[1]==='q'||h[1]==='review')&&!(lock&&h[1]==='review')){afterQ();navArrows(true)}
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();
+}
+/* ---------- exam lock, review hub, practice marking ---------- */
+/* The paper being sat in exam mode right now (started, not submitted, inside its working time), or null. */
+function examLock(){
+  var out=null;
+  BANKS.forEach(function(b){var u=S.u[b.id];
+    if(!out&&!b.hidden&&u&&u.mode==='exam'&&u.start&&!u.done&&Date.now()-u.start<paperDuration(b)*1000)out=b});
+  return out;
+}
+function lockedPage(b){
+  CUR={b:null,n:0};
+  return frame('Exam in progress','<div class="pg"><h1 class="pt">Exam in progress</h1><div class="feature"><p>Review, marking guides, sample answers and class answers are locked while you sit <b>'+esc(b.name)+'</b> in exam mode.</p><p>They unlock when you submit the paper or when its working time ends.</p><div class="acts"><a class="nb" href="#/'+b.id+'/q/'+(BS(b.id).cur||1)+'">Return to the exam</a></div></div></div>');
+}
+function reviewStatus(b){
+  var u=S.u[b.id];
+  if(!u)return 'Not attempted';
+  if(u.done){var t=totals(b);return 'Submitted &middot; '+t.T+' / '+t.markedM+' marks'}
+  var answered=0;b.qs.forEach(function(q,qi){if(qAnswered(b,qi+1))answered++});
+  if(u.start||answered)return (u.mode==='practice'?'Practice':'Exam')+' in progress &middot; '+answered+' of '+b.qs.length+' questions answered';
+  return 'Not attempted';
+}
+function reviewHubPage(){
+  CUR={b:null,n:0};
+  var books=BANKS.filter(function(b){return !b.hidden}).map(function(b){
+    return '<a class="nb" href="#/'+b.id+'/review/1">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+reviewStatus(b)+'</small></a>'}).join('');
+  return frame('Review','<div class="pg"><h1 class="pt">Review and analyse</h1><div class="feature"><p>Choose a paper to open it in review. Each question shows your answer, the marking guide, the sample answer and any AI feedback. Under each written part you can read what your classmates wrote and run the class analysis.</p><div class="bks">'+books+'</div></div></div>');
+}
+function pqShown(b,n){var bs=BS(b.id);return !bs.done&&bs.mode==='practice'&&!!(bs.pq&&bs.pq[n])}
+function pqPanelHTML(b,n){
+  var bs=BS(b.id);if(bs.done||bs.mode!=='practice')return '';
+  var shown=pqShown(b,n),run=AIQ[aiqKey(b,n)],open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
+  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answers done.</b> Feedback appears under each part as it finishes.'+(run.waiting?' <i>'+run.waiting+' waiting for a free marker.</i>':'')
+    :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
+    :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
+  if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
+  return '<div class="aib" id="pq">'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button></div></div>';
+}
+function pqMark(){
+  var b=CUR.b,n=CUR.n,bs=BS(b.id);if(!b||bs.done||bs.mode!=='practice')return;
+  if(!bs.pq)bs.pq={};bs.pq[n]=1;Object.keys(bs.aiErr).forEach(function(k){if(k.indexOf(n+'.')===0)delete bs.aiErr[k]});save(b.id);
+  function redraw(){if(CUR.b!==b||CUR.n!==n||CUR.rv||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,false);afterQDraw();window.scrollTo(0,y);refreshNav()}
+  redraw();
+  runChecks(b,n).then(redraw);
+  runAIQuestion(b,n);
 }
 function afterQ(){
   var b=CUR.b,n=CUR.n,q=b.qs[n-1],rv=CUR.rv;
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
-  aceMount();
+  aceMount();classEnsure(b);
   var state=S,bs=BS(b.id);
   if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b).then(function(){if(S!==state||S.u[b.id]!==bs||CUR.b!==b||location.hash.indexOf('review/'+n)<0||CUR.n!==n||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,true);afterQDraw();window.scrollTo(0,y);refreshNav()});
 }
-function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount()}
+function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount();classEnsure(b)}
 function ensureMarked(b){
   var bs=BS(b.id),state=S;
   var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S===state&&S.u[b.id]===bs){bs.checked=1;save(b.id)}});
@@ -254,6 +301,7 @@ document.addEventListener('click',function(e){
   else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
+  else if(a==='airetry'&&CUR.b&&!BS(CUR.b.id).done&&!CUR.rv)pqMark();
   else if(a==='airetry'){var rb=CUR.b;if(rb){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
   else if(a==='airemark'){var mb=CUR.b,old=mb&&BS(mb.id).ai[d.k];if(mb&&S.tok&&old&&!old.stamp&&!old.status){delete BS(mb.id).ai[d.k];delete BS(mb.id).aiErr[d.k];save(mb.id);markAndShow(mb)}}
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
@@ -267,7 +315,8 @@ document.addEventListener('click',function(e){
   else if(a==='bklist')bkLoadList();
   else if(a==='bkrestore')bkRestore(d.name);
   else if(a==='acresolve')resolveSync(d.id,d.v);
-  else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,true);afterQDraw();window.scrollTo(0,y);refreshNav()}
+  else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,CUR.rv);afterQDraw();window.scrollTo(0,y);refreshNav()}
+  else if(a==='pqmark')pqMark();
 });
 document.addEventListener('mousedown',function(e){if(e.target.closest('[data-act="rt"]'))e.preventDefault()});
 function saveRte(ed){

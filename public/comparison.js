@@ -1,10 +1,10 @@
 /* ---------- Cohort comparison: sensitive evidence stays in memory ---------- */
-var COMPARISON={subject:'',serial:0,files:[],report:null,busy:'',error:'',message:'',control:null,bankId:''};
+var COMPARISON={subject:'',serial:0,files:[],report:null,busy:'',error:'',message:'',control:null,bankId:'',classmates:[],classLoading:false};
 var COMPARISON_FILE_LIMIT=200*1024,COMPARISON_BODY_LIMIT=2*1024*1024;
 function comparisonSubject(){return JSON.stringify([S.tok||'',S.owner||'',typeof SYNC==='undefined'?0:SYNC.epoch])}
 function comparisonReset(){
   if(COMPARISON.control)COMPARISON.control.abort();
-  COMPARISON={subject:comparisonSubject(),serial:COMPARISON.serial+1,files:[],report:null,busy:'',error:'',message:'',control:null,bankId:''};
+  COMPARISON={subject:comparisonSubject(),serial:COMPARISON.serial+1,files:[],report:null,busy:'',error:'',message:'',control:null,bankId:'',classmates:[],classLoading:false};
 }
 function comparisonGuard(){if(COMPARISON.subject!==comparisonSubject())comparisonReset()}
 function comparisonRefresh(){if(location.hash==='#/compare'&&typeof render==='function')render()}
@@ -57,6 +57,49 @@ function comparisonExport(){
     comparisonDownload(result.export,'software-engineering-paper-'+b.id+'-comparison-evidence.json',true);
     COMPARISON.message='Evidence downloaded. Share this file only with the person organising your comparison. It contains original answers and marking feedback and expires after 7 days.';
   }).catch(function(e){if(comparisonCurrent(run)){COMPARISON.error=e.message;COMPARISON.message=''}}).then(function(){if(comparisonCurrent(run)){COMPARISON.busy='';COMPARISON.control=null;comparisonRefresh()}});
+}
+function comparisonClassPublish(){
+  comparisonGuard();if(COMPARISON.busy)return Promise.resolve();
+  var b=comparisonBank();if(!b)return Promise.resolve();
+  var code=(S.classCode||'').toUpperCase().trim();
+  if(!code){COMPARISON.error='Set a class code first before sharing with your class.';comparisonRefresh();return Promise.resolve()}
+  var data;
+  try{data=comparisonExportData(b)}catch(e){COMPARISON.error=e.message;comparisonRefresh();return Promise.resolve()}
+  if(!data.payload.parts.length){COMPARISON.error='This paper has no eligible evidence. Complete current AI marking first.';comparisonRefresh();return Promise.resolve()}
+  var run=comparisonRun();
+  COMPARISON.busy='publish';COMPARISON.error='';COMPARISON.message='Sharing verified responses with class '+code+'…';comparisonRefresh();
+  return Promise.resolve().then(function(){return typeof queuedSync==='function'?queuedSync(false):null}).then(function(){
+    if(!comparisonCurrent(run))return null;
+    return comparisonRequest({action:'class_publish',classCode:code,bankId:b.id,parts:data.payload.parts},run);
+  }).then(function(){
+    if(!comparisonCurrent(run))return;
+    COMPARISON.message='Paper shared with class code '+code+'! Your classmates can now compare with your responses.';
+    comparisonClassList();
+  }).catch(function(e){if(comparisonCurrent(run)){COMPARISON.error=e.message;COMPARISON.message=''}}).then(function(){if(comparisonCurrent(run)){COMPARISON.busy='';COMPARISON.control=null;comparisonRefresh()}});
+}
+function comparisonClassList(){
+  comparisonGuard();var b=comparisonBank(),code=(S.classCode||'').toUpperCase().trim();
+  if(!b||!code||!S.tok)return Promise.resolve();
+  COMPARISON.classLoading=true;var run=comparisonRun();
+  return comparisonRequest({action:'class_list',bankId:b.id,classCode:code},run).then(function(result){
+    if(!comparisonCurrent(run))return;
+    COMPARISON.classmates=(result&&result.classmates)||[];
+    COMPARISON.classLoading=false;
+    comparisonRefresh();
+  }).catch(function(){if(comparisonCurrent(run)){COMPARISON.classLoading=false;comparisonRefresh()}});
+}
+function comparisonClassLoad(){
+  comparisonGuard();
+  var cbs=$$('[data-classmate-cb]:checked');
+  if(cbs.length<2||cbs.length>8){COMPARISON.error='Select between 2 and 8 classmates to compare.';comparisonRefresh();return}
+  var list=[];
+  cbs.forEach(function(cb,i){
+    var idx=Number(cb.getAttribute('data-classmate-cb')),item=COMPARISON.classmates[idx];
+    if(item&&item.export)list.push({package:item.export,label:'Classmate '+(i+1),bytes:JSON.stringify(item.export).length});
+  });
+  COMPARISON.files=list;COMPARISON.report=null;COMPARISON.error='';
+  COMPARISON.message='Loaded '+list.length+' classmate submissions. Click "Compare verified responses" below.';
+  comparisonRefresh();
 }
 function comparisonReadFile(file){
   if(file.size>COMPARISON_FILE_LIMIT)return Promise.reject(new Error('Each evidence file must be no larger than 200 KiB.'));
@@ -130,9 +173,17 @@ function comparisonPage(){
   if(!signed)html+='<div class="feature"><p><a href="#/account">Sign in</a> to export your work or compare shared evidence.</p></div>';
   else{
     html+='<div class="comparison-steps"><section class="feature"><h2>1. Export your own evidence</h2><p>Select a submitted paper with current AI marking. The server verifies marks before creating a signed file valid for 7 days.</p>';
-    if(banks.length)html+='<label for="comparison-bank">Submitted paper</label><select id="comparison-bank"'+(busy?' disabled':'')+'>'+banks.map(function(bank){return '<option value="'+esc(bank.id)+'"'+(String(bank.id)===COMPARISON.bankId?' selected':'')+'>'+esc(bank.name)+'</option>'}).join('')+'</select><p>'+eligible.payload.parts.length+' parts eligible for verification. Excluded: '+excluded.diagram+' diagram parts, '+excluded.self+' self-marked parts and '+excluded.unverified+' parts without current verified AI marking. Only shared verified parts enter the comparison.</p><p class="mut">The file holds your original answers and marking feedback. Anyone you give it to can read it, so share it only with your class.</p><button class="nb" id="comparison-export"'+(busy?' disabled':'')+' type="button">Export signed evidence</button>';
+    if(banks.length)html+='<label for="comparison-bank">Submitted paper</label><select id="comparison-bank"'+(busy?' disabled':'')+'>'+banks.map(function(bank){return '<option value="'+esc(bank.id)+'"'+(String(bank.id)===COMPARISON.bankId?' selected':'')+'>'+esc(bank.name)+'</option>'}).join('')+'</select><p>'+eligible.payload.parts.length+' parts eligible for verification. Excluded: '+excluded.diagram+' diagram parts, '+excluded.self+' self-marked parts and '+excluded.unverified+' parts without current verified AI marking. Only shared verified parts enter the comparison.</p><p class="mut">The file holds your original answers and marking feedback. Anyone you give it to can read it, so share it only with your class.</p><div class="acts"><button class="nb" id="comparison-export"'+(busy?' disabled':'')+' type="button">Export signed evidence</button>'+(S.classCode?'<button class="nb ol" id="comparison-class-publish"'+(busy?' disabled':'')+' type="button">Share with my class ('+esc(S.classCode)+')</button>':'')+'</div><div style="margin-top:14px;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:4px"><label for="comparison-class-code"><b>Class code</b> (optional, lets your class compare without sending files)</label><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="comparison-class-code" value="'+esc(S.classCode||'')+'" placeholder="e.g. 12SE2026" maxlength="20" style="max-width:180px;text-transform:uppercase;padding:6px 10px"'+(busy?' disabled':'')+'><button class="nb sm" id="comparison-class-save"'+(busy?' disabled':'')+' type="button">Set code</button></div></div>';
     else html+='<p>No submitted papers are available. <a href="#/papers">Finish and submit a paper</a>, then complete its AI marking.</p>';
-    html+='</section><section class="feature"><h2>2. Compare shared evidence</h2><p>Import one signed file from each person. Names and email addresses are not required. Labels below stay in this browser and are not sent to the AI service.</p><label for="comparison-files">Signed evidence files (JSON, up to 200 KiB each)</label><input id="comparison-files" type="file" accept=".json,application/json" multiple'+(busy?' disabled':'')+'>';
+    html+='</section><section class="feature"><h2>2. Compare shared evidence</h2><p>Import one signed file from each person, or select from your class roster below.</p>'+
+      (S.classCode?'<div style="margin-bottom:16px;padding:12px;background:#fff;border:1px solid #c8d7ee;border-radius:4px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>Classmates in code '+esc(S.classCode)+':</b><button class="nb sm ol" id="comparison-class-refresh"'+(busy||COMPARISON.classLoading?' disabled':'')+' type="button">'+(COMPARISON.classLoading?'Loading...':'Find classmates')+'</button></div>'+
+      (COMPARISON.classmates.length?
+        '<p style="margin:8px 0 6px">Select 2 to 8 submissions to compare:</p><ul style="list-style:none;padding:0;margin:0 0 10px">'+
+        COMPARISON.classmates.map(function(cm,idx){return '<li style="margin:6px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-classmate-cb="'+idx+'" '+(busy?'disabled':'')+'><span>Classmate '+(idx+1)+' ('+cm.partsCount+' verified parts &middot; expires in '+Math.max(1,Math.round((cm.expiresAt-Date.now())/86400000))+'d)</span></label></li>'}).join('')+
+        '</ul><button class="nb sm" id="comparison-class-load"'+(busy?' disabled':'')+' type="button">Use selected classmates</button>':
+        '<p style="margin:6px 0 0;font-size:.9em;color:#444">No classmate submissions loaded yet. Click "Find classmates" to look for peers in your class code.</p>'
+      )+'</div>':'')+
+      '<label for="comparison-files">Or upload signed evidence files (JSON, up to 200 KiB each)</label><input id="comparison-files" type="file" accept=".json,application/json" multiple'+(busy?' disabled':'')+'>';
     if(COMPARISON.files.length)html+='<ul class="comparison-file-list">'+COMPARISON.files.map(function(entry,index){return '<li><label for="comparison-label-'+index+'">Participant '+(index+1)+' label</label><input id="comparison-label-'+index+'" data-comparison-label="'+index+'" value="'+esc(entry.label)+'" maxlength="40"'+(busy?' disabled':'')+'><button class="nb sm ol" data-comparison-remove="'+index+'" type="button"'+(busy?' disabled':'')+'>Remove</button></li>'}).join('')+'</ul>';
     html+='<p>'+COMPARISON.files.length+' of 8 files loaded. This browser keeps files and reports only in memory; sign-out, account changes, refresh or Clear erase that browser copy. The service privately caches completed reports for your account.</p><p class="mut">Comparing sends the selected answers and marking feedback to DeepSeek and shows you the report. This is a class activity, so no separate permission step is needed.</p><div class="acts"><button class="nb" id="comparison-run"'+(busy||COMPARISON.files.length<2?' disabled':'')+' type="button">Compare verified responses</button><button class="nb ol" id="comparison-clear" type="button"'+(busy?' disabled':'')+'>Clear files and report</button></div></section></div>';
   }
@@ -147,6 +198,18 @@ function comparisonBind(){
   function buttons(){var exportButton=$('#comparison-export'),runButton=$('#comparison-run');if(exportButton)exportButton.disabled=!!COMPARISON.busy;if(runButton)runButton.disabled=!!COMPARISON.busy||COMPARISON.files.length<2}
   on('comparison-bank','change',function(e){COMPARISON.bankId=e.target.value;COMPARISON.error='';COMPARISON.message='';comparisonRefresh()});
   on('comparison-export','click',comparisonExport);on('comparison-run','click',comparisonCompare);
+  on('comparison-class-publish','click',comparisonClassPublish);
+  on('comparison-class-refresh','click',comparisonClassList);
+  on('comparison-class-load','click',comparisonClassLoad);
+  on('comparison-class-save','click',function(){
+    var inp=$('#comparison-class-code');
+    if(!inp)return;
+    S.classCode=inp.value.toUpperCase().trim().slice(0,20);
+    persist();
+    if(typeof syncSoon==='function')syncSoon();
+    comparisonClassList();
+    comparisonRefresh();
+  });
   on('comparison-files','change',function(e){comparisonImport(e.target.files)});
   on('comparison-clear','click',function(){comparisonReset();COMPARISON.message='Shared evidence and report cleared from this page.';comparisonRefresh()});
   on('comparison-cancel','click',comparisonCancel);

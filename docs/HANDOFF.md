@@ -33,6 +33,7 @@ Verified by tests (all pass at `f001457`): auth, marking store, comparison, sync
 
 ## Changes made in this session, newest first
 
+- Class code response sharing and daily save caps implemented: students can enter a class code to share and compare responses directly without downloading files. Daily save cap of 150 saves per account in `api/auth.js` protects D1 storage. See rollback instructions below.
 - `f001457` Removed the two consent tick boxes from Compare responses. Plain notices replace them. See "Open decisions".
 - `11b6125` Banks 1 to 7 archived: `archived:true` on their `BANKS.push` line, hidden at load by `public/boot.js`, content exported to `archive/banks-1-7.json` with `archive/README.md`. `?archive=1` on the site address shows them again, and the browser tests use it. Also fixed the review-page bug where question box 2 sat lower than its neighbours: the rule `.part+.part` (spacing between parts of a question) also matched the orange `nav-elem part` box; it is now `.part+.part:not(.nav-elem)`, with a regression check in `tests/ui_test.py`.
 - `2579592` Marking no longer stops on "This answer is already being marked". The client waits and asks again, up to about six minutes (24 tries). The status panel, results totals and open review question update as each answer finishes (`aiLive` in `public/ai.js`).
@@ -49,10 +50,18 @@ Verified by tests (all pass at `f001457`): auth, marking store, comparison, sync
 - `public/pages.js.rej` is a stray file from an earlier contributor commit. It is not ours and has been left alone.
 - Run the whole set before pushing: `node tests/check_banks.js`, `sh tests/run_auth_test.sh`, `sh tests/run_marking_store_test.sh`, `node tests/d1_adapter_test.js`, `node tests/archive_test.js`, `node tests/sync_test.js`, `npm run test:comparison`, the marking and improvement tests listed in `.github/workflows/check.yml`, and `ACE_DIR=<path to ace-builds> python3 tests/run_ui_test.py`.
 
-## Open decisions and loose ends
+## Built features and rollback steps
 
-1. **Automatic sharing of classmates' answers.** The owner asked for answers to be viewable automatically because "it's a class". Only the consent tick boxes are gone; the flow still needs file export and import. The site has no concept of a class and anyone can sign up, so automatic visibility would expose students' written work to strangers. Recommended design, not yet approved: a class code that students enter, scoping visibility to people with the same code. Two alternatives were offered: visible to everyone on the site with a notice at submission, or leave as is. Wait for the owner's answer before building.
-2. **Save caps not built.** A per-account and a site-wide daily save limit were discussed but held back because D1's free tier already hard-caps. Build only if asked.
+1. **Automatic sharing of classmates' answers via class code:**
+   Students enter an optional class code (on Account or Compare page). Clicking "Share with my class" publishes their signed, verified export to their class roster. Classmates with the same code see them listed and can compare with one click.
+   - **Rollback in Vercel:** Go to Vercel Deployments, find commit `75b516d`, click the three dots, and click **Promote to Production**.
+   - **Disable via env var:** Set `DISABLE_CLASS_SHARING=1` in Vercel Environment Variables.
+   - **Rollback in Git:** Run `git revert HEAD` and push to `main`.
+
+2. **Daily save caps:**
+   Limits each account to 150 progress saves per UTC day to protect Cloudflare D1 free tier limits. Stored directly on the user record at zero extra write cost.
+   - **Disable via env var:** Set `DISABLE_SAVE_CAPS=1` in Vercel Environment Variables.
+
 3. **The odd nav box** the owner reported is fixed (see `11b6125`), but they have not confirmed it on the live site.
 4. **Old Vercel Blob store, old Vercel project and an accidental Cloudflare Workers project** may still exist. The owner was told the Workers project is unnecessary. Do not delete anything without explicit confirmation.
 5. **Existing accounts:** nothing was copied from Blob to D1. Only test data existed when the move happened.

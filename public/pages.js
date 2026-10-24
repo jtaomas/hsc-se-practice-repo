@@ -258,6 +258,8 @@ document.addEventListener('click',function(e){
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();
   else if(a==='acsync')syncNow();
+  else if(a==='acclasscode')acSetClassCode(false);
+  else if(a==='acclasscodeclear')acSetClassCode(true);
   else if(a==='bkdownload')bkDownload();
   else if(a==='bkupload'){var bf=$('#bkfile');if(bf){bf.value='';bf.onchange=function(){bkReadFile(bf.files[0])};bf.click()}}
   else if(a==='bklist')bkLoadList();

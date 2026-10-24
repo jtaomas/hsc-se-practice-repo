@@ -66,6 +66,56 @@ function createSharing(options = {}) {
     const data = await read('progress/' + owner + '.json', 3500000);
     return data && data.u && data.u[bankId] || null;
   }
-  return { sign, verify, loadPaper };
+  function classCodeHash(code) {
+    if (typeof code !== 'string') throw error(400, 'invalid_class_code', 'Enter a valid class code.');
+    const clean = code.toUpperCase().trim();
+    if (!/^[A-Z0-9_-]{2,20}$/.test(clean)) throw error(400, 'invalid_class_code', 'Class codes must be 2 to 20 letters or numbers.');
+    return crypto.createHash('sha256').update('class:' + clean).digest('hex');
+  }
+  async function publishToClass(classCode, bankId, owner, exportPackage) {
+    if (process.env.DISABLE_CLASS_SHARING) throw error(503, 'class_sharing_disabled', 'Class sharing is currently disabled.');
+    const hash = classCodeHash(classCode);
+    if (!/^[a-f0-9]{64}$/.test(owner)) throw new Error('Invalid account');
+    await verify(exportPackage);
+    await bounded(async signal => {
+      const blob = await provider();
+      if (signal.aborted) throw new Error('Cancelled');
+      await blob.put('class/' + hash + '/' + bankId + '/' + owner + '.json', JSON.stringify(exportPackage), { access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json', abortSignal: signal });
+    });
+    return { ok: true, classCode: classCode.toUpperCase().trim() };
+  }
+  async function listClassExports(classCode, bankId) {
+    if (process.env.DISABLE_CLASS_SHARING) return [];
+    const hash = classCodeHash(classCode);
+    const blob = await provider();
+    const prefix = 'class/' + hash + '/' + bankId + '/';
+    let found;
+    try {
+      found = await bounded(async signal => blob.list({ prefix, abortSignal: signal }));
+    } catch (_) {
+      return [];
+    }
+    const blobs = (found && found.blobs || []).slice(0, 16);
+    const results = [];
+    for (const b of blobs) {
+      try {
+        const item = await read(b.pathname, MAX_EXPORT_BYTES);
+        if (item && item.snapshot && item.signature) {
+          const s = await verify(item);
+          results.push({
+            participantId: s.participantId,
+            createdAt: s.createdAt,
+            expiresAt: s.expiresAt,
+            partsCount: Array.isArray(s.parts) ? s.parts.length : 0,
+            export: item
+          });
+        }
+      } catch (_) {
+        // Skip unreadable or expired
+      }
+    }
+    return results;
+  }
+  return { sign, verify, loadPaper, publishToClass, listClassExports, classCodeHash };
 }
 module.exports = Object.assign({ createSharing, TTL_MS, MAX_EXPORT_BYTES }, createSharing());

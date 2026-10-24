@@ -62,7 +62,7 @@ function progressView(data) {
   data = data || {};
   const revisions = Object.assign({}, data._revisions || {});
   Object.keys(data.u || {}).forEach(id => { if (!revisions[id]) revisions[id] = sha(JSON.stringify(data.u[id])); });
-  const clean = Object.assign({}, data); delete clean._revisions; delete clean._backupDay;
+  const clean = Object.assign({}, data); delete clean._revisions; delete clean._backupDay; delete clean._saveDay; delete clean._saveCount;
   return { data: clean, revisions };
 }
 function mergeHistory(a, b) {
@@ -199,6 +199,22 @@ module.exports = async (req, res) => {
           ['ts', 'font', 'fg', 'bg'].forEach(k => { data[k] = incoming[k] || 0; });
         }
         data.v = 2; data._revisions = revisions; data._backupDay = today;
+        if (!process.env.DISABLE_SAVE_CAPS) {
+          const maxUserSaves = parseInt(process.env.MAX_DAILY_SAVES || '150', 10);
+          const saveCount = (current && current._saveDay === today ? current._saveCount : 0) || 0;
+          if (saveCount >= maxUserSaves) {
+            const e = new Error('Daily save limit reached for this account. Your answers remain saved in this browser until tomorrow.');
+            e.status = 429; e.details = { code: 'daily_save_cap_reached' }; throw e;
+          }
+          data._saveDay = today;
+          data._saveCount = saveCount + 1;
+        }
+        if (typeof incoming.classCode === 'string') {
+          const cc = incoming.classCode.toUpperCase().trim().slice(0, 20);
+          if (/^[A-Z0-9_-]{2,20}$/.test(cc)) data.classCode = cc; else delete data.classCode;
+        } else if (incoming.classCode === null || incoming.classCode === '') {
+          delete data.classCode;
+        }
         if (Buffer.byteLength(JSON.stringify(data)) > MAX_PROGRESS) {
           const e = new Error('Your saved progress is too large to store.'); e.status = 413; throw e;
         }

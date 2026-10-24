@@ -5,7 +5,7 @@ function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 var S=null;
 try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
-S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0;
+S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0;S.classCode=S.classCode||'';
 S.owner=S.owner||S.ae||'';S.revisions=S.revisions||{};
 // Legacy drafts have no cloud revision: preserve them until the user resolves any conflict.
 if(!S.pending){S.pending={};Object.keys(S.u).forEach(function(id){S.pending[id]=1})}

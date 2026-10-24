@@ -125,6 +125,8 @@ with sync_playwright() as playwright:
     page.fill('#acpw', 'mock-only-password')
     page.click('[data-act=acgo]')
     page.wait_for_function('S.tok === "mock-comparison-session" && !ACC.busy')
+    # Sign-in sync finishes with a home redirect after ACC.busy is cleared.
+    page.wait_for_url(URL + '#/')
     page.goto(URL + '#/compare')
     expect(page.locator('.comparison-page')).to_contain_text('No submitted papers')
 

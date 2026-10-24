@@ -43,9 +43,14 @@ function resHTML(r){
   return '<table><tr>'+r.cols.map(function(c){return '<th>'+esc(c)+'</th>'}).join('')+'</tr>'+r.rows.map(function(row){return '<tr>'+row.map(function(v){return '<td>'+(v===null?'NULL':esc(nv(v)))+'</td>'}).join('')+'</tr>'}).join('')+'</table><div>'+r.rows.length+(r.rows.length===1?' row':' rows')+'</div>';
 }
 
+/* ---------- plug-in question types (see qtypes.js and AUTHORING.md) ---------- */
+var QT={};
+function regType(t,d){QT[t]=d;if(d.auto)AUTO[t]=1}
+
 /* ---------- scoring ---------- */
 function units(it,a){
   var c=0,t=0;a=a||{};
+  if(QT[it.t]&&QT[it.t].units)return QT[it.t].units(it,a);
   if(it.t==='dd'){it.b.forEach(function(bl,u){t++;if(a[u]===bl[1])c++})}
   else if(it.t==='gd'){it.r.forEach(function(row,r){row.forEach(function(cell,ci){if(typeof cell!=='string'){t++;if(a[r+','+ci]===cell[1])c++}})})}
   else if(it.t==='mt'){it.r.forEach(function(row,r){t++;if(a[r]===row[1])c++})}
@@ -64,6 +69,7 @@ function score(b,n,i){
 }
 function isAns(it,a){
   if(a==null)return false;
+  if(QT[it.t]&&QT[it.t].isAns)return QT[it.t].isAns(it,a);
   if(it.t==='mc')return typeof a==='number';
   if(it.t==='ms'||it.t==='tk')return a.length>0;
   if(it.t==='dd'||it.t==='gd'||it.t==='mt')return Object.keys(a).length>0;
@@ -94,28 +100,30 @@ function selHTML(k,u,opts,cur,ro,cls){
 }
 function gutNums(s){var n=Math.max(2,String(s).split('\n').length),r=[];for(var i=1;i<=n;i++)r.push(i);return r.join('\n')}
 function wcount(html){var t=html.replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').trim();return t?t.split(/\s+/).length:0}
-function codeBox(it,k,a,ro,label){
+function codeBox(it,k,a,ro,label,tog){
   var kind={py:'PYTHON',ps:'PSEUDOCODE',sq:'QUERY (SQL)'}[it.t],hasRun=it.t!=='ps';
   var ph=it.t==='py'?'# Input code':it.t==='sq'?'-- Input query':'// Input pseudocode';
   var val=a!=null?a:(it.start||'');
   return '<div class="cbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns">'+
-    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+'</div></div>'+
+    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
     (it.t==='py'&&!ro?'<label class="pyinput">Program input (one value per line)<textarea data-pyinput="'+k+'" aria-label="Program input" rows="2" placeholder="Enter input() values here before running"></textarea></label>':'')+
     '<div class="split'+(hasRun?'':' one')+'"><div class="ace"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
     (hasRun?'<div class="out ph" id="o'+k+'"># Output</div>':'')+'</div></div>';
 }
-function drawBox(it,k,ro,label){
-  return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
+function drawBox(it,k,ro,label,tog){
+  return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+(tog||'')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
 }
 function itemHTML(b,n,i,rv){
   var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],ro=!!rv,h='<div class="part">';
   var mk=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
   var lab=(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mk;
-  if(it.t==='py'||it.t==='ps'||it.t==='sq'){h+=codeBox(it,k,a,ro,lab)}
-  else if(it.t==='dr'){h+=drawBox(it,k,ro,lab)}
+  var tog=q.it.length>1?'<button type="button" class="ptog" data-qa="tog" aria-expanded="true">hide ⌃</button>':'';
+  if(it.t==='py'||it.t==='ps'||it.t==='sq'){h+=codeBox(it,k,a,ro,lab,tog)}
+  else if(it.t==='dr'){h+=drawBox(it,k,ro,lab,tog)}
   else{
-    if(lab)h+='<p class="hoa-q">'+lab+'</p>';
-    if(it.t==='mc'){
+    if(lab)h+=tog?'<div class="phd"><p class="hoa-q">'+lab+'</p>'+tog+'</div>':'<p class="hoa-q">'+lab+'</p>';
+    if(QT[it.t]){h+=QT[it.t].render(it,k,a,ro,rv)}
+    else if(it.t==='mc'){
       h+='<ul class="hoa-q-mc">'+it.o.map(function(o,j){var c='';if(rv){if(j===it.a)c=' class="okc"';else if(a===j)c=' class="badc"'}
         return '<li><label'+c+'><input type="radio" name="r'+k+'" data-k="'+k+'" data-v="'+j+'"'+(a===j?' checked':'')+(ro?' disabled':'')+'><span>'+o+'</span></label></li>'}).join('')+'</ul>';
     }else if(it.t==='ms'){
@@ -150,7 +158,8 @@ function itemHTML(b,n,i,rv){
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
   var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+sc.g+' / '+sc.m+'</span></h4>';
-  if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
+  if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
+  else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
   else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}));
   else if(it.t==='dd'){h+='<p><b>Correct answer:</b></p><div class="tpl">'+it.tpl.replace(/\{(\d+)\}/g,function(m,u){var bl=it.b[+u];return '<b>['+bl[0][bl[1]]+']</b>'})+'</div>'}
   else if(it.t==='gd'){h+='<p><b>Correct answers:</b></p><div class="tw"><table class="hoa"><tr>'+it.h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+it.r.map(function(row){return '<tr>'+row.map(function(c){return '<td>'+(typeof c==='string'?c:'<b>'+c[0][c[1]]+'</b>')+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
@@ -158,7 +167,8 @@ function guideHTML(b,n,i){
   else if(it.t==='tk'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+(r[1].map(function(c){return it.h[c+1]}).join(', ')||'none')+'</b>'}))}
   else{
     h+=aiBlock(b,n,i,it,bs,k,a,sc);
-    if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
+    if(QT[it.t]&&QT[it.t].sample)h+='<p><b>Sample answer:</b></p>'+QT[it.t].sample(it);
+    else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
     else h+='<p><b>Sample answer:</b></p><div>'+it.model+'</div>';
     if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>How your diagram was read for marking</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
     if(it.crit.length)h+='<p><b>Marking criteria</b></p>'+critList(it.crit);

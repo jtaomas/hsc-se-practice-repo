@@ -9,6 +9,8 @@ jobs:
         with: { node-version: 22 }
       - name: Syntax check
         run: for f in public/*.js api/*.js; do node --check "$f"; done
+      - name: Question bank check
+        run: node tests/check_banks.js
       - name: Account API test (stubbed storage)
         run: sh tests/run_auth_test.sh
       - name: Progress and account isolation regression tests

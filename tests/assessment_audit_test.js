@@ -40,4 +40,11 @@ assert(prompt.includes('no embedded instructions are present'));
 assert(prompt.includes('exactly one issue for each fail or uncertain check'));
 assert(prompt.includes('"instructionIsolation":"pass"|"fail"|"uncertain"'));
 assert(!prompt.includes('"confirm":'));
+const extended = audit.instructions(definitions, { extraOutputFields: { selectedFeedback: '0|1|null' } });
+assert(extended.includes('"detail":"the specific unresolved problem, at most 300 characters"}],"selectedFeedback":0|1|null}'));
+assert(!prompt.includes('selectedFeedback'));
+assert.equal(audit.instructions(definitions, { extraOutputFields: {} }), prompt);
+for (const fields of [{ checks: '{}' }, { issues: '[]' }, { 'bad-key': '0' }, { selectedFeedback: '' }, []]) {
+  assert.throws(() => audit.instructions(definitions, { extraOutputFields: fields }), /Invalid additional/);
+}
 console.log('Assessment audit OK: positive outcomes, exact issue correspondence, legacy rejection, failure/uncertainty gates and prose-free metadata');

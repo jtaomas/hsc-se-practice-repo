@@ -45,7 +45,7 @@ a{color:var(--navy)}
 .hoa-q.st{margin-bottom:.8em}
 .part+.part{margin-top:22px;padding-top:14px;border-top:1px solid #d0d0d0}
 .plab{font-weight:700;margin-right:.4em}
-.acts{display:flex;margin:14px 0 0;gap:17px}
+.acts{display:flex;flex-wrap:wrap;margin:14px 0 0;gap:17px}
 .acts.r{margin-top:14px}
 .nb{display:inline-flex;align-items:center;gap:10px;font-weight:700;border:1.6px solid #002664;border-radius:4px;padding:10px 22px;min-width:8rem;justify-content:center;font-size:.9em;cursor:pointer;background:#002664;color:#fff}
 .nb.ol{background:transparent;color:#002664}
@@ -304,6 +304,20 @@ table.ctbl td{font-weight:600}
 .cedit.ace-on>textarea[data-code],.cedit.ace-on>.gut{display:none}
 .cedit .cedit-ed{position:absolute;inset:0;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace}
 .cedit .ace-empty{position:absolute;top:0;left:6px;color:#75715E;pointer-events:none;font-size:13px;line-height:1.5}
+/* Detailed response feedback and post-exam coaching. */
+.quality-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin:14px 0 22px}
+.quality-card{border:1px solid #b8c8d8;border-radius:6px;padding:12px;min-width:0;background:var(--pbg,#fff)}
+.quality-card summary{cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.quality-card summary b{white-space:nowrap;color:var(--pfg,#002664)}
+.quality-card p,.feedback-loss p,.improvement-step p{line-height:1.6;overflow-wrap:anywhere}
+.feedback-evidence{border-left:3px solid #7798b8;margin:10px 0;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.92em}
+.feedback-loss{border-left:3px solid #c39146;padding:8px 16px;margin:14px 0}
+.feedback-loss h4,.improvement-step h4{margin:4px 0 10px}
+.improvement-panel{border-top:2px solid #9caec0;margin-top:32px;padding-top:24px}
+.improvement-step{border:1px solid #b8c8d8;border-radius:6px;padding:18px;margin:16px 0}
+.improvement-step li{line-height:1.6;margin-bottom:8px}
+.feedback-table{overflow-x:auto}
+@media(max-width:540px){.quality-grid{grid-template-columns:1fr}.improvement-step{padding:12px}.feedback-loss{padding-left:10px}}
 
 /* ---------- HSC online exam fidelity: icons, bars, code boxes, tables ---------- */
 .ic{display:inline-block;width:1em;height:1em;flex:none;vertical-align:-.12em;fill:currentColor}

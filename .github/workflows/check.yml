@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Syntax check
-        run: for f in public/*.js api/*.js server/*.js; do node --check "$f"; done
+        run: for f in public/*.js public/marking/*.js api/*.js server/*.js scripts/*.js; do node --check "$f"; done
       - name: Question bank check
         run: node tests/check_banks.js
       - name: Account API test (stubbed storage)
@@ -19,9 +19,18 @@ jobs:
         run: |
           node tests/assessment_audit_test.js
           node tests/marking_input_test.js
+          node tests/deployment_bundle_test.js
           node tests/marking_engine_test.js
           node tests/marking_api_test.js
           node tests/marking_client_test.js
+          node tests/feedback_client_test.js
+          node tests/improvement_input_test.js
+          node tests/improvement_engine_test.js
+          node tests/improvement_api_test.js
+          node tests/improvement_evaluator_test.js
+          node tests/marking_evaluator_test.js
+          node tests/marking_summary_test.js
+          node scripts/evaluate-marking.js --validate --split all
           sh tests/run_marking_store_test.sh
       - name: Comparison evidence, agent audit, sharing and regression harness (no network)
         run: npm run test:comparison

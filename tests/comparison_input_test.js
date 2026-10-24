@@ -3,12 +3,20 @@ const assert = require('node:assert/strict');
 const input = require('../server/comparison-input');
 const marking = require('../server/marking-input');
 const marker = require('../server/marking-engine');
+const { QUALITY_FACTORS } = require('../server/feedback-policy');
+const { markerAudit } = require('./improvement_fixtures');
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
 
 function markedFixture(answer = 'Hashing is one way.') {
   const payload = { bankId:'1', questionNumber:18, partIndex:0, answer };
   const p = marking.prepare(payload), inputDigest = marking.digest({ input:p.input, questionVersion:p.questionVersion, rubricVersion:p.rubricVersion, model:marker.MODEL, harness:marker.HARNESS_VERSION });
-  const result = { status:'marked',mark:1,summary:'One requirement demonstrated.',strengths:['Identifies hashing.'],improve:['Explain salting.'],advice:[],criteria:p.input.criteria.map(c => ({id:c.id,assessment:'partial',evidence:['Hashing'],basis:'Partial evidence.'})),audit:{inputDigest,questionVersion:p.questionVersion,rubricVersion:p.rubricVersion,harnessVersion:marker.HARNESS_VERSION} };
+  // Synthetic, mock-only one-mark record with the complete current contract.
+  const result = { status:'marked',mark:1,summary:'One requirement demonstrated.',strengths:['Identifies hashing.'],improve:['Explain salting.'],advice:[],
+    criteria:p.input.criteria.map(c => ({id:c.id,assessment:c.id==='c3'?'met':'context',evidence:c.id==='c3'?['Hashing']:[],basis:c.id==='c3'?'Identifies hashing.':'Unselected higher comparison band.'})),
+    losses:{allocation:'holistic',totalLost:2,items:[{category:'missing_requirement',marksLost:null,criterionIds:['c1','c2'],evidence:['Hashing'],explanation:'The salting mechanism is not explained.',action:'Explain what a unique salt changes and how that protects passwords.'}]},
+    quality:QUALITY_FACTORS.map(id=>({id,rating:id==='clarity'?8:null,evidence:id==='clarity'?['Hashing']:[],feedback:id==='clarity'?'The named concept is understandable.':'This synthetic fixture does not assess this factor.',action:id==='clarity'?'Keep naming the concept clearly.':'Review applicable response evidence before assessing this factor.'})),
+    audit:{inputDigest,questionVersion:p.questionVersion,rubricVersion:p.rubricVersion,harnessVersion:marker.HARNESS_VERSION} };
+  Object.assign(result.audit,markerAudit(result));
   return { payload, inputDigest, result };
 }
 async function fixtureSnapshot(owner='a') {
@@ -29,7 +37,40 @@ async function fixtureSnapshot(owner='a') {
   await assert.rejects(input.prepareExport({...req,parts:[{...row,markingDigest:'0'.repeat(64)}]},paper,async()=>f.result), /no verified/i);
   await assert.rejects(input.prepareExport(req,paper,async()=>({...f.result,status:'needs_review',mark:null})), /no verified/i);
   await assert.rejects(input.prepareExport(req,paper,async()=>({...f.result,audit:{...f.result.audit,rubricVersion:'old'}})), /no verified/i);
+  // A status/hash match alone cannot sign unapproved, changed or unsupported feedback.
+  for(const mutate of [
+    r=>{r.audit.requestedModel='other-model'},
+    r=>{r.audit.checks.auditorApproved=false},
+    r=>{r.audit.checks.blindAgreement=false},
+    r=>{r.audit.auditor.checks[Object.keys(marker.AUDIT_CHECKS)[0]]='fail'},
+    r=>{r.audit.auditor.issueCount=1},
+    r=>{r.audit.returnedModels[0]='other-model'},
+    r=>{r.audit.selectedFeedback=1},
+    r=>{r.audit.feedbackDigest='0'.repeat(64)},
+    r=>{r.summary='Changed but superficially valid feedback.'},
+    r=>{delete r.audit.feedbackDigest}
+  ]){
+    const changed=JSON.parse(JSON.stringify(f.result));mutate(changed);
+    await assert.rejects(input.prepareExport(req,paper,async()=>changed),/no verified/i);
+  }
+  // A checksum is not authentication: source/diagnostic validation still rejects
+  // altered evidence even when the mock checksum is deliberately recomputed.
+  for(const mutate of [
+    r=>{r.criteria.find(c=>c.id==='c3').evidence=['Invented student quotation']},
+    r=>{r.quality[0].evidence=['Invented quality quotation']},
+    r=>{r.losses.items[0].evidence=['Invented loss quotation']},
+    r=>{r.losses.totalLost=0}
+  ]){
+    const changed=JSON.parse(JSON.stringify(f.result));mutate(changed);changed.audit.feedbackDigest=marker.selectedFeedbackDigest(changed);
+    assert.equal(marker.confirmedProvenanceProblem(changed),null,'the independent canonical-evidence layer is required');
+    await assert.rejects(input.prepareExport(req,paper,async()=>changed),/no verified/i);
+  }
   const snapshot=await fixtureSnapshot(), other=await fixtureSnapshot('b');
+  assert.deepEqual(snapshot.parts[0].feedback.losses,f.result.losses,'verified holistic shortfall targets survive export without relabelling bands');
+  assert.equal(snapshot.parts[0].feedback.criteria.find(c=>c.id==='c1').assessment,'context');
+  const direct=await input.prepareExport(req,paper,async()=>f.result);
+  direct.parts[0].feedback.losses.items[0].criterionIds.push('modified-copy');
+  assert.deepEqual(f.result.losses.items[0].criterionIds,['c1','c2'],'export copies must not mutate approved cached losses');
   const html=markedFixture('Hashing <script> and A & B.');
   const htmlExport=await input.prepareExport({action:'export',bankId:'1',parts:[{questionNumber:18,partIndex:0,answer:html.payload.answer,markingDigest:html.inputDigest}]},{done:true,ans:{'18.0':'<p>Hashing &lt;script&gt; and A &amp; B.</p>'}},async()=>html.result);
   assert.equal(htmlExport.parts[0].answer,html.payload.answer,'literal tag examples survive rich-text export');

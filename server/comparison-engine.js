@@ -2,6 +2,7 @@
 
 const { parse } = require('./marking-json');
 const assessmentAudit = require('./assessment-audit');
+const { LOSS_CATEGORIES, scoringModel, scoreProblem } = require('./feedback-policy');
 const { HARNESS_VERSION, UNCERTAINTY_LIMIT, CATEGORIES, ERROR_TYPES, AUDIT_FLAGS, EXTRACTOR_POLICY, SYNTHESIS_POLICY, AUDITOR_POLICY } = require('./comparison-policy');
 // This is the provider's rolling alias, not an immutable dated snapshot.
 const MODEL = 'deepseek-flash';
@@ -22,6 +23,42 @@ function mentionedParticipants(value) { return (value.match(/\bp\d+\b/gi) || [])
 function byteLength(value) { try { return Buffer.byteLength(JSON.stringify(value), 'utf8'); } catch (_) { return Infinity; } }
 function repairText(value) { return value.trim().replace(/\s+/g, ' '); }
 function invalidInput() { throw failure(400, 'invalid_comparison_input', 'The comparison requires verified responses to the same question parts from two to eight participants.'); }
+
+function canonicalLosses(loss, part) {
+  // Legacy exports may omit diagnostics. When present, preserve the marker's
+  // bounded loss contract; a label alone cannot turn context into a deficit.
+  const model = scoringModel(part), exact = model.kind === 'additive';
+  if (part.source !== 'agentic' || !exactKeys(loss, ['allocation', 'totalLost', 'items']) ||
+      loss.allocation !== (exact ? 'exact' : 'holistic') || loss.totalLost !== part.maxMarks - part.mark ||
+      !Number.isInteger(loss.totalLost) || !Array.isArray(loss.items) || loss.items.length > LOSS_CATEGORIES.length ||
+      ((loss.totalLost === 0) !== (loss.items.length === 0)) || scoreProblem({ mark: part.mark, criteria: part.feedback.criteria }, part)) invalidInput();
+  const criteria = new Map(part.feedback.criteria.map(item => [item.id, item]));
+  const bandIds = new Set((model.bands || []).map(item => item.id)), categories = new Set(), assigned = new Set();
+  let allocated = 0;
+  const items = loss.items.map(item => {
+    if (!exactKeys(item, ['category', 'marksLost', 'criterionIds', 'evidence', 'explanation', 'action']) ||
+        !LOSS_CATEGORIES.includes(item.category) || categories.has(item.category) ||
+        !Array.isArray(item.criterionIds) || !item.criterionIds.length || item.criterionIds.length > part.criteria.length ||
+        new Set(item.criterionIds).size !== item.criterionIds.length || item.criterionIds.some(id =>
+          !criteria.has(id) || criteria.get(id).assessment === 'context' && !bandIds.has(id)) ||
+        !strings(item.evidence, 6, 400) || new Set(item.evidence).size !== item.evidence.length ||
+        item.evidence.some(quote => !part.answer.includes(quote)) || !text(item.explanation, 600, false) || !text(item.action, 500, false) ||
+        item.category === 'no_response' && part.answer.trim()) invalidInput();
+    categories.add(item.category);
+    if (exact) {
+      if (!Number.isInteger(item.marksLost) || item.marksLost < 1 || item.marksLost !== item.criterionIds.length) invalidInput();
+      for (const id of item.criterionIds) {
+        if (assigned.has(id) || criteria.get(id).assessment === 'met') invalidInput();
+        assigned.add(id);
+      }
+      allocated += item.marksLost;
+    } else if (item.marksLost !== null) invalidInput();
+    return { category: item.category, marksLost: item.marksLost, criterionIds: item.criterionIds.slice(), evidence: item.evidence.slice(),
+      explanation: item.explanation, action: item.action };
+  });
+  if (exact && (allocated !== loss.totalLost || part.feedback.criteria.some(item => item.assessment !== 'met' && !assigned.has(item.id)))) invalidInput();
+  return { allocation: loss.allocation, totalLost: loss.totalLost, items };
+}
 
 function canonicalData(input) {
   if (byteLength(input) > LIMITS.inputBytes) throw failure(413, 'comparison_input_too_large', 'Select fewer responses or participants for this comparison.');
@@ -52,13 +89,16 @@ function canonicalData(input) {
         if (!object(criterion) || !expected.delete(criterion.id) || !ASSESSMENTS.includes(criterion.assessment) ||
             !strings(criterion.evidence, 10, 1000) || !text(criterion.basis, 2000, true)) invalidInput();
       }
+      const losses = Object.prototype.hasOwnProperty.call(feedback, 'losses') ? canonicalLosses(feedback.losses, part) : undefined;
       // Reconstruct every object. Unknown fields (names, emails, account IDs,
       // signatures, browser labels, and client statistics) never reach a model.
       return { id: part.id, questionNumber: part.questionNumber, partIndex: part.partIndex, topic: part.topic, type: part.type,
         question: part.question, stimulus: part.stimulus, criteria: part.criteria.map(item => ({ id: item.id, text: item.text })), sample: part.sample,
         maxMarks: part.maxMarks, answer: part.answer, mark: part.mark, status: 'marked', source: part.source,
+        ...(part.source === 'agentic' ? { scoringModel: scoringModel(part) } : {}),
         feedback: { summary: feedback.summary, strengths: feedback.strengths.slice(), improve: feedback.improve.slice(), advice: feedback.advice.slice(),
-          criteria: feedback.criteria.map(item => ({ id: item.id, assessment: item.assessment, evidence: item.evidence.slice(), basis: item.basis })) } };
+          criteria: feedback.criteria.map(item => ({ id: item.id, assessment: item.assessment, evidence: item.evidence.slice(), basis: item.basis })),
+          ...(losses === undefined ? {} : { losses }) } };
     });
     return { id: participant.id, parts, coverage: { includedParts: participant.coverage.includedParts,
       excludedParts: participant.coverage.excludedParts, totalParts: participant.coverage.totalParts } };
@@ -92,12 +132,26 @@ function evidenceProblem(evidence, participants, expectedParticipantId) {
     if (!record) return 'unknown_evidence_reference';
     const feedback = record.part.feedback;
     const source = citation.source === 'answer' ? [record.part.answer] : [feedback.summary].concat(feedback.strengths, feedback.improve, feedback.advice, [record.assessment.basis], record.assessment.evidence);
+    if (citation.source === 'feedback' && feedback.losses) for (const item of feedback.losses.items) {
+      if (item.criterionIds.includes(citation.criterionId)) source.push(item.explanation, item.action, ...item.evidence);
+    }
     if (!source.some(item => item.includes(citation.quote))) return 'unsupported_evidence';
     const key = JSON.stringify([citation.participantId, citation.questionId, citation.criterionId, citation.source, citation.quote]);
     if (seen.has(key)) return 'duplicate_evidence';
     seen.add(key);
   }
   return null;
+}
+
+function isShortfall(record) {
+  if (record.part.mark === record.part.maxMarks) return false;
+  if (['partial', 'not_met'].includes(record.assessment.assessment)) return true;
+  const loss = record.part.feedback.losses;
+  if (!['context', 'met'].includes(record.assessment.assessment) || !loss || loss.allocation !== 'holistic' ||
+      loss.totalLost !== record.part.maxMarks - record.part.mark || !loss.items.some(item => item.criterionIds.includes(record.criterion.id))) return false;
+  // Recompute from rubric text, never trust a supplied/model-proposed band.
+  return (scoringModel(record.part).bands || []).some(band => band.id === record.criterion.id &&
+    (record.assessment.assessment === 'context' ? band.minMarks > record.part.mark : band.minMarks <= record.part.mark && record.part.mark < band.maxMarks));
 }
 
 function profileProblem(value, participant) {
@@ -124,7 +178,7 @@ function profileProblem(value, participant) {
     if (finding.kind === 'strength' && (finding.errorType !== null || !finding.evidence.some(citation => citation.source === 'answer') ||
         records.some(record => !['met', 'partial'].includes(record.assessment.assessment)))) return 'uncredited_strength';
     if (finding.kind === 'criterion_shortfall') {
-      if (finding.errorType === null || records.some(record => record.part.mark === record.part.maxMarks || !['partial', 'not_met'].includes(record.assessment.assessment))) return 'unsupported_shortfall';
+      if (finding.errorType === null || records.some(record => !isShortfall(record))) return 'unsupported_shortfall';
       const cited = new Set(finding.evidence.map(citation => citation.questionId + ':' + citation.criterionId));
       for (const key of cited) if (!finding.evidence.some(citation => citation.source === 'feedback' && citation.questionId + ':' + citation.criterionId === key)) return 'shortfall_without_feedback';
     }

@@ -35,7 +35,9 @@ function failureDiagnostics(value, kind) {
     if (audit.requestedModel != null) clean.audit.requestedModel = model(audit.requestedModel);
     if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, comparison ? 10 : 3).map(model);
     if (Array.isArray(audit.calls)) for (const call of audit.calls.slice(0, comparison ? 10 : 3)) {
-      if (!call || (comparison ? !/^(profile:p[1-8]|synthesis|auditor)$/.test(call.stage) : !['marker1', 'marker2', 'auditor'].includes(call.stage))) continue;
+      // The coach shares marking jobs and quotas, so its two stage names must
+      // survive the same bounded diagnostic projection as marker failures.
+      if (!call || (comparison ? !/^(profile:p[1-8]|synthesis|auditor)$/.test(call.stage) : !['marker1', 'marker2', 'auditor', 'coach', 'coach_auditor'].includes(call.stage))) continue;
       const out = { stage: call.stage, usage: usage(call.usage) };
       if (['running', 'completed', 'failed'].includes(call.status)) out.status = call.status;
       if (number(call.durationMs)) out.durationMs = call.durationMs;
@@ -210,7 +212,7 @@ function createStore(options) {
     try { const text = JSON.stringify(result); if (Buffer.byteLength(text) > limits.resultBytes) throw new Error('Too large'); copy = JSON.parse(text); }
     catch (_) { throw error(500, 'invalid_marking_result', 'The marking result cannot be stored.'); }
     // Only validated response data belongs here, never the submitted input bundle.
-    const keys = kind === 'comparison' ? ['status', 'summary', 'profiles', 'comparisons', 'statistics', 'audit'] : ['status', 'mark', 'summary', 'strengths', 'improve', 'advice', 'criteria', 'audit'];
+    const keys = kind === 'comparison' ? ['status', 'summary', 'profiles', 'comparisons', 'statistics', 'audit'] : ['status', 'mark', 'summary', 'strengths', 'improve', 'advice', 'criteria', 'losses', 'quality', 'improvement', 'audit'];
     if (Object.keys(copy).some(key => !keys.includes(key))) throw error(500, 'invalid_marking_result', 'The marking result contains unexpected source data.');
     return change(path, job => {
       checkJob(job, digest);

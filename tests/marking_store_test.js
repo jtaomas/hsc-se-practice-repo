@@ -102,6 +102,37 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   assert.equal((await a.getCached(user(1), digest('diagnostic'))).diagnostics, undefined);
   reset();
 
+  // Coaching shares this store. Its completed draft and failed audit retain
+  // only the established bounded telemetry, never candidate/provider text.
+  job = await a.getOrReserve(user(1), digest('coach-diagnostic'));
+  await a.fail(user(1), digest('coach-diagnostic'), job.leaseId, { code: 'marking_timeout', message: 'PRIVATE TRANSPORT', audit: {
+    requestedModel: 'deepseek-flash', returnedModels: ['deepseek-flash'], durationMs: 180000, reasoning_content: 'PRIVATE REASONING',
+    calls: [
+      { stage: 'coach', status: 'completed', requestedModel: 'deepseek-flash', returnedModel: 'deepseek-flash', durationMs: 75000, finishReason: 'stop',
+        usage: { prompt_tokens: 1000, completion_tokens: 12000, total_tokens: 13000, reasoning_tokens: 8000, raw: 'PRIVATE USAGE' },
+        maxTokens: 24576, content: 'PRIVATE CANDIDATE', headers: { authorization: 'PRIVATE KEY' } },
+      { stage: 'coach_auditor', status: 'failed', requestedModel: 'deepseek-flash', returnedModel: 'PRIVATE MODEL', durationMs: 105000,
+        errorCode: 'marking_timeout', finishReason: 'PRIVATE FINISH', usage: { prompt_tokens: -1, completion_tokens: 10000001 }, message: 'PRIVATE ERROR' },
+      { stage: 'PRIVATE UNKNOWN STAGE', status: 'failed', errorCode: 'provider_error' }
+    ]
+  } });
+  const coachPath = [...globalThis.__M.keys()].find(p => p.includes('/jobs/'));
+  const coachDiagnostic = JSON.parse(globalThis.__M.get(coachPath)).diagnostics;
+  assert.deepEqual(coachDiagnostic.audit.calls, [
+    { stage: 'coach', status: 'completed', requestedModel: 'deepseek-flash', returnedModel: 'deepseek-flash', durationMs: 75000, finishReason: 'stop',
+      usage: { prompt_tokens: 1000, completion_tokens: 12000, total_tokens: 13000, reasoning_tokens: 8000 } },
+    { stage: 'coach_auditor', status: 'failed', requestedModel: 'deepseek-flash', returnedModel: 'unexpected_model', durationMs: 105000,
+      errorCode: 'marking_timeout', usage: {} }
+  ]);
+  assert(!JSON.stringify(coachDiagnostic).includes('PRIVATE')); assert(Buffer.byteLength(JSON.stringify(coachDiagnostic)) <= 8192);
+  assert.equal(await a.getCached(user(1), digest('coach-diagnostic')), null);
+  const coachRetry = await b.getOrReserve(user(1), digest('coach-diagnostic'));
+  assert.deepEqual(JSON.parse(globalThis.__M.get(coachPath)).diagnostics, coachDiagnostic);
+  await b.finish(user(1), digest('coach-diagnostic'), coachRetry.leaseId, result());
+  assert.deepEqual(JSON.parse(globalThis.__M.get(coachPath)).diagnostics, coachDiagnostic);
+  assert.equal((await a.getCached(user(1), digest('coach-diagnostic'))).diagnostics, undefined);
+  reset();
+
   const limitedA = make({ perUser: 2, site: 5 }), limitedB = make({ perUser: 2, site: 5 });
   const account = await Promise.allSettled(Array.from({ length: 10 }, (_, i) => (i % 2 ? limitedA : limitedB).getOrReserve(user(1), digest(i))));
   assert.equal(account.filter(r => r.status === 'fulfilled' && r.value.state === 'reserved').length, 2);
@@ -164,6 +195,16 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   await new Promise(resolve => setTimeout(resolve, 5)); assert.equal(mutations, 0, 'a cooperatively aborted write must not commit late');
   reset();
   const blob = await provider(), day = new Date(clock).toISOString().slice(0, 10);
+  const feedbackJob = await a.getOrReserve(user(1), digest('rich-feedback'));
+  const richResult = { ...result(), losses: { allocation: 'holistic', totalLost: 1, items: [] }, quality: [{ id: 'clarity', rating: 8 }] };
+  await a.finish(user(1), digest('rich-feedback'), feedbackJob.leaseId, richResult);
+  assert.deepEqual(await a.getCached(user(1), digest('rich-feedback')), richResult);
+  const coachJob = await a.getOrReserve(user(1), digest('coach-domain'));
+  const coachResult = { status: 'marked', mark: null, improvement: { status: 'ready', plan: [{ title: 'Practice a mechanism' }] }, audit: { harnessVersion: 'coach-v1' } };
+  await a.finish(user(1), digest('coach-domain'), coachJob.leaseId, coachResult);
+  assert.deepEqual(await a.getCached(user(1), digest('coach-domain')), coachResult);
+  assert.equal(await a.getCached(user(2), digest('coach-domain')), null, 'coaching records must remain private to the account');
+  reset();
   await blob.put('marking/v1/quota/' + day + '.json', JSON.stringify({ version: 1, day, total: 0, users: { [sha(user(1))]: 120 } }), { access: 'private', allowOverwrite: false });
   await assert.rejects(a.getOrReserve(user(2), digest(5)), code('marking_storage_invalid'), 'inconsistent quota counters must fail closed');
   console.log('marking store OK: shared sessions, durable deduplication, UTC quotas, concurrent reservations, terminal cache, stale leases, bounded results and storage failure safety');

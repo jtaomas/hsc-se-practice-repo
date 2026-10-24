@@ -1,4 +1,4 @@
-import json,re
+import json,re,hashlib,copy
 from playwright.sync_api import sync_playwright
 logs=[];store={'users':{},'prog':{}};reqs=[]
 def auth(r):
@@ -7,18 +7,28 @@ def auth(r):
     a=p['action']
     if a=='signup':
         if p['email'] in store['users']: return out(409,{'error':'An account with this email already exists. Sign in instead.'})
-        store['users'][p['email']]=p['password'];return out(200,{'token':'T:'+p['email'],'email':p['email']})
+        store['users'][p['email']]=hashlib.sha256(p['password'].encode()).hexdigest();return out(200,{'token':'T:'+p['email'],'email':p['email']})
     if a=='login':
-        if store['users'].get(p['email'])!=p['password']: return out(401,{'error':'The email or password is not correct.'})
+        if store['users'].get(p['email'])!=hashlib.sha256(p['password'].encode()).hexdigest(): return out(401,{'error':'The email or password is not correct.'})
         return out(200,{'token':'T:'+p['email'],'email':p['email']})
     tok=h.get('authorization','').replace('Bearer ','')
     if not tok.startswith('T:') : return out(401,{'error':'Your sign-in has expired. Sign in again.'})
-    if a=='load': return out(200,{'email':tok[2:],'data':store['prog'].get(tok)})
-    if a=='save': store['prog'][tok]=p['data'];return out(200,{'ok':True})
+    revisions=store.setdefault('revisions',{}).setdefault(tok,{})
+    if a=='load': return out(200,{'email':tok[2:],'data':store['prog'].get(tok),'revisions':revisions})
+    if a=='save':
+        current=store['prog'].setdefault(tok,{'u':{},'hist':[]})
+        clashes=[i for i in p['changes'] if p['revisions'].get(i)!=revisions.get(i)]
+        if clashes: return out(409,{'code':'progress_conflict','error':'Paper changed on another device.','conflicts':clashes,'data':current,'revisions':revisions})
+        for i in p['changes']:
+            if i in p['data']['u']: current['u'][i]=copy.deepcopy(p['data']['u'][i])
+            else: current['u'].pop(i,None)
+            revisions[i]=str(int(revisions.get(i,'0'))+1)
+        current['hist']=p['data'].get('hist',[])
+        return out(200,{'ok':True,'data':current,'revisions':revisions})
 import os
 U=os.environ.get("SITE","http://localhost:8767")+"/index.html"
 with sync_playwright() as p:
-    b=p.chromium.launch(); ctx=b.new_context(viewport={"width":1440,"height":900}); pg=ctx.new_page()
+    b=p.chromium.launch(**({'executable_path':os.environ['CHROME']} if os.environ.get('CHROME') else {})); ctx=b.new_context(viewport={"width":1440,"height":900}); pg=ctx.new_page()
     pg.on("pageerror",lambda e: logs.append(f"PAGEERROR: {e}"))
     pg.on("console",lambda m: logs.append(m.text) if m.type=='error' and 'ERR_FAILED' not in m.text else None)
     pg.route("https://fonts.g*/**",lambda r:r.abort())
@@ -41,6 +51,14 @@ with sync_playwright() as p:
     assert 'Unanswered' in pg.inner_text('.pg')
     pg.click('[data-act=submit]');pg.wait_for_timeout(800)
     assert 'results' in pg.url and pg.inner_text('.big').count('/')==1,pg.inner_text('.big')
+    pg.goto(U+'#/1/q/15');pg.wait_for_timeout(200)
+    assert pg.get_attribute('.rta','contenteditable')=='false','submitted answer is editable through an old route'
+    pg.goto(U+'#/1/q/19');pg.wait_for_timeout(200)
+    before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab')
+    assert pg.input_value('textarea[data-code]')==before,'Tab edited submitted Python'
+    assert pg.evaluate("passTest('110',{o:'10'})") is False
+    assert pg.evaluate("passTest('9990',{o:'0'})") is False
+    assert pg.evaluate("passTest('10\\n',{o:'10'})") is True
     pg.goto(U+'#/2');pg.click('[data-mode=exam]');pg.wait_for_timeout(1500)
     tm=pg.inner_text('#tmr');assert re.match(r'2:19:5\d|2:20:00',tm),tm
     pg.goto(U+'#/account');pg.wait_for_timeout(300)
@@ -67,4 +85,5 @@ with sync_playwright() as p:
     p2.evaluate("S.tok='bad';save()");p2.evaluate("syncNow()");p2.wait_for_timeout(600)
     assert p2.evaluate("S.tok")=='' and 'Sign in again' in p2.inner_text('.acct'),p2.inner_text('.acct')
     pg.goto(U+'#/settings');pg.wait_for_timeout(300);assert 'Practice exams' in pg.inner_text('#app')
-    print('logs',logs);print('ALL OK',reqs[:6])
+    assert not logs,logs
+    print('ALL OK: modes, submitted-paper lock, exact output checks, signup, login and sync')

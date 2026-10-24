@@ -2,6 +2,9 @@
   "name": "hsc-software-engineering-practice",
   "private": true,
   "dependencies": {
-    "@vercel/blob": "^2.3.0"
+    "@vercel/blob": "^2.8.2"
+  },
+  "overrides": {
+    "zod": "^4.6.6"
   }
 }

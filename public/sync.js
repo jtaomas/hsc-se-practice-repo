@@ -1,5 +1,5 @@
 /* ---------- Accounts: email and password, progress saved to the account ---------- */
-var SYNC={tmr:null,state:'off',msg:''};
+var SYNC={tmr:null,state:'off',msg:'',epoch:0,queue:Promise.resolve(),conflicts:{}};
 var ACC={mode:'in',msg:'',busy:false};
 function acctText(){
   if(!S.tok||!S.ae)return SYNC.state==='paused'?'Sign in again':'Sign in';
@@ -14,44 +14,96 @@ function syncStatusHTML(){
   if(SYNC.state==='error')return 'The last save failed: '+esc(SYNC.msg)+'. Your progress is still safe in this browser.';
   return 'Signed in. Progress saves to your account as you work.';
 }
-function syncPayload(){return {v:1,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S.fg,bg:S.bg}}
-function mergeRemote(r){
-  if(!r||!r.u)return;
-  Object.keys(r.u).forEach(function(id){var a=S.u[id],b=r.u[id];if(!b)return;if(!a||(b.upd||0)>(a.upd||0))S.u[id]=b});
+function syncPayload(){return {v:2,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S.fg,bg:S.bg}}
+function mergeRemote(r,revisions){
+  r=r||{};var remote=r.u||{};revisions=revisions||{};
+  Object.keys(Object.assign({},S.u,remote,revisions)).forEach(function(id){
+    if(S.pending[id])return;
+    if(remote[id]){if(JSON.stringify(S.u[id])!==JSON.stringify(remote[id]))S.u[id]=remote[id]}else delete S.u[id];
+    S.revisions[id]=revisions[id]||null;
+  });
   (r.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
   if((r.ts||0)>(S.ts||0)){S.font=r.font||0;S.fg=r.fg||0;S.bg=r.bg||0}
-  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+  persist();
 }
-function api(action,body){
-  var h={'content-type':'application/json'};if(S.tok)h.authorization='Bearer '+S.tok;
+function api(action,body,token){
+  var h={'content-type':'application/json'};token=token===undefined?S.tok:token;if(token)h.authorization='Bearer '+token;
   return fetch('/api/auth',{method:'POST',headers:h,body:JSON.stringify(Object.assign({action:action},body||{}))}).then(function(r){
     return r.json().catch(function(){return {error:'The account service sent an unreadable reply.'}}).then(function(j){
-      if(!r.ok){var e=new Error(j.error||'Request failed ('+r.status+')');e.status=r.status;throw e}
+      if(!r.ok){var e=new Error(j.error||'Request failed ('+r.status+')');e.status=r.status;e.details=j;throw e}
       return j;
     });
   });
 }
 function syncFail(e){
-  if(e.status===401&&S.tok){S.tok='';SYNC.state='paused';SYNC.msg='';try{localStorage.setItem(KEY,JSON.stringify(S))}catch(x){}}
+  if(e.stale)return;
+  if(e.status===401&&S.tok){stashDraft();replaceState({});SYNC.state='paused';SYNC.msg='';render()}
   else{SYNC.state='error';SYNC.msg=e.message}
   refreshAcct();
 }
-function pushRemote(){return api('save',{data:syncPayload()})}
-function syncNow(){
-  if(!S.tok)return Promise.resolve();
-  SYNC.state='saving';refreshAcct();
-  return api('load').then(function(r){mergeRemote(r.data);return pushRemote()}).then(function(){
-    SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
-    if(CUR.b===null&&/^#?\/?(papers|mistakes)?$/.test(location.hash))render();
-  }).catch(syncFail);
+function draftKey(owner){return KEY+':draft:'+encodeURIComponent(owner)}
+function stashDraft(){if(typeof xdCleanup==='function')xdCleanup();if(S.owner){try{localStorage.setItem(draftKey(S.owner),JSON.stringify(Object.assign(syncPayload(),{owner:S.owner,pending:S.pending,revisions:S.revisions})))}catch(e){}}}
+function replaceState(next){
+  if(typeof xdCleanup==='function')xdCleanup();
+  if(typeof stopPython==='function')stopPython();
+  clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();SYNC.conflicts={};
+  if(typeof AIRUN!=='undefined')AIRUN={};
+  S=Object.assign({u:{},hist:[],pending:{},revisions:{},tok:'',ae:'',owner:'',ts:0,font:0,fg:0,bg:0},next);
+  if(typeof CUR!=='undefined')CUR={b:null,n:0};persist();
 }
+function acceptAccount(r,signup){
+  var owner=r.email.toLowerCase(),next={};
+  if(S.owner===owner||(signup&&!S.owner))next=S;
+  else{stashDraft();try{next=JSON.parse(localStorage.getItem(draftKey(owner)))||{}}catch(e){}}
+  replaceState(Object.assign({},next,{tok:r.token,ae:r.email,owner:owner}));
+}
+function checkSession(epoch){if(epoch!==SYNC.epoch){var e=new Error('Account changed.');e.stale=true;throw e}}
+function queuedSync(load){
+  if(!S.tok)return Promise.resolve();
+  var epoch=SYNC.epoch,token=S.tok;
+  var task=SYNC.queue.catch(function(){}).then(function(){
+    checkSession(epoch);SYNC.state='saving';refreshAcct();
+    return load?api('load',{},token).then(function(r){checkSession(epoch);mergeRemote(r.data,r.revisions)}):null;
+  }).then(function(){
+    checkSession(epoch);
+    if(Object.keys(SYNC.conflicts).length)throw new Error('Choose which paper version to keep on the Account page.');
+    var sent=Object.assign({},S.pending),changes=Object.keys(sent);
+    return api('save',{data:syncPayload(),changes:changes,revisions:S.revisions},token).then(function(r){
+      checkSession(epoch);
+      changes.forEach(function(id){S.revisions[id]=(r.revisions||{})[id]||null;if(S.pending[id]===sent[id])delete S.pending[id]});
+      mergeRemote(r.data,r.revisions);SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
+    }).catch(function(e){
+      checkSession(epoch);
+      var d=e.details;
+      if(d&&d.code==='progress_conflict'){
+        (d.conflicts||[]).forEach(function(id){SYNC.conflicts[id]={data:(d.data.u||{})[id]||null,revision:d.revisions[id]||null}});
+        mergeRemote(d.data,d.revisions);
+        if(location.hash==='#/account')render();
+      }
+      throw e;
+    });
+  });
+  task=task.catch(function(e){checkSession(epoch);throw e});
+  SYNC.queue=task.catch(function(){});return task;
+}
+function pushRemote(){return queuedSync(false)}
+function syncNow(){return queuedSync(true).then(function(){if(CUR.b===null&&/^#?\/?(papers|mistakes)?$/.test(location.hash))render()}).catch(syncFail)}
 function syncSoon(){
   if(!S.tok)return;
   clearTimeout(SYNC.tmr);
   SYNC.tmr=setTimeout(function(){
-    SYNC.state='saving';refreshAcct();
-    pushRemote().then(function(){SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct()}).catch(syncFail);
+    pushRemote().catch(syncFail);
   },3000);
+}
+function conflictHTML(){
+  return Object.keys(SYNC.conflicts).map(function(id){var b=BANKS.filter(function(x){return x.id===id})[0];return '<div class="aib bad"><b>'+esc(b?b.name:'Paper '+id)+' changed on another device.</b><p>Your answers on this device are still saved here. Choose which complete paper to keep in your account.</p><button class="nb" data-act="acresolve" data-id="'+id+'" data-v="local">Keep this device’s paper</button> <button class="nb ol" data-act="acresolve" data-id="'+id+'" data-v="remote">Use the saved paper</button></div>'}).join('');
+}
+function resolveSync(id,choice){
+  var c=SYNC.conflicts[id];if(!c)return;
+  if(choice==='remote'){if(c.data)S.u[id]=c.data;else delete S.u[id];delete S.pending[id]}
+  else S.pending[id]=(S.pending[id]||0)+1;
+  S.revisions[id]=c.revision;delete SYNC.conflicts[id];persist();render();
+  if(!Object.keys(SYNC.conflicts).length)syncNow();
 }
 function accountPage(){
   CUR={b:null,n:0};
@@ -59,7 +111,7 @@ function accountPage(){
   if(S.tok&&S.ae){
     body='<h2 class="pt">Your account</h2><p>Signed in as <b>'+esc(S.ae)+'</b>.</p><p id="syncst">'+syncStatusHTML()+'</p>'+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
-      '<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
+      conflictHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
   }else{
     var up=ACC.mode==='up';
     body='<h2 class="pt">'+(up?'Create an account':'Sign in')+'</h2>'+
@@ -81,17 +133,18 @@ function acGo(){
   em=em.trim();
   if(!em||!pw)return acSet('Enter your email and password.');
   if(up&&pw!==(($('#acpw2')||{}).value||''))return acSet('The two passwords do not match.');
-  ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
+  var epoch=SYNC.epoch;ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
   api(up?'signup':'login',{email:em,password:pw}).then(function(r){
-    S.tok=r.token;S.ae=r.email;ACC.busy=false;ACC.msg='';
-    try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+    checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';
     return syncNow().then(function(){location.hash='#/'});
   }).catch(function(e){ACC.busy=false;acSet(e.message)});
 }
 function acSignOut(){
+  var epoch=SYNC.epoch;if(typeof xdCleanup==='function')xdCleanup();
   var go=function(){
-    S.tok='';S.ae='';S.u={};S.hist=[];S.ts=0;SYNC.state='off';
-    try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+    if(epoch!==SYNC.epoch)return;
+    try{if(S.owner)localStorage.removeItem(draftKey(S.owner))}catch(e){}
+    replaceState({});SYNC.state='off';
     location.hash='#/';render();
   };
   clearTimeout(SYNC.tmr);
@@ -101,3 +154,8 @@ function acSignOut(){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target&&/^ac(email|pw|pw2)$/.test(e.target.id))acGo()});
 if(S.tok)setTimeout(syncNow,300);
+window.addEventListener('storage',function(e){
+  if(e.key!==KEY||!e.newValue)return;
+  var next;try{next=JSON.parse(e.newValue)}catch(x){return}
+  if((next.owner||'')!==S.owner||(next.tok||'')!==(S.tok||'')){stashDraft();replaceState(next);render()}
+});

@@ -33,6 +33,8 @@ with sync_playwright() as p:
       }
       return total;
     }''')
-    assert count==42,count
+    # Every test case in every bank must have been run (the count grows as papers are added).
+    expected=page.evaluate("BANKS.reduce(function(n,b){return n+b.qs.reduce(function(m,q){return m+q.it.reduce(function(k,it){return k+(it.t==='py'?it.tests.length:0)},0)},0)},0)")
+    assert count==expected and count>=42,(count,expected)
     browser.close()
-    print('Python worker OK: interactive input, real infinite-loop stop/timeout, recovery and 42 model cases')
+    print('Python worker OK: interactive input, real infinite-loop stop/timeout, recovery and %d model cases'%count)

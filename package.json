@@ -8,7 +8,8 @@
     "zod": "^4.6.6"
   },
   "scripts": {
-    "test:comparison": "node tests/comparison_input_test.js && node tests/comparison_sharing_test.js && node tests/comparison_store_test.js && node tests/comparison_engine_test.js && node tests/comparison_api_test.js && node tests/comparison_client_test.js && node tests/comparison_evaluator_test.js && node scripts/evaluate-comparison.js",
-    "eval:comparison": "node scripts/evaluate-comparison.js"
+    "test:comparison": "node tests/assessment_audit_test.js && node tests/comparison_input_test.js && node tests/comparison_sharing_test.js && node tests/comparison_store_test.js && node tests/comparison_engine_test.js && node tests/comparison_api_test.js && node tests/comparison_client_test.js && node tests/comparison_evaluator_test.js && node scripts/evaluate-comparison.js && node tests/comparison_pipeline_evaluator_test.js && node scripts/evaluate-comparison.js --fixture tests/fixtures/comparison-short-answer.json",
+    "eval:comparison": "node scripts/evaluate-comparison.js",
+    "eval:comparison:pipeline": "node scripts/evaluate-comparison-pipeline.js"
   }
 }

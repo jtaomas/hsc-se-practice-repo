@@ -3,7 +3,7 @@
 // No live endpoint or model calls. Native Response streams exercise the same
 // bounded reader used in production; every fetch below is a local mock.
 const assert = require('node:assert/strict');
-const { mark, MODEL, HARNESS_VERSION, LIMITS } = require('../server/marking-engine');
+const { mark, MODEL, HARNESS_VERSION, LIMITS, AUDIT_CHECKS } = require('../server/marking-engine');
 const { parse } = require('../server/marking-json');
 const tests = [];
 function test(name, run) { tests.push({ name, run }); }
@@ -13,8 +13,7 @@ function input() { return { bankId: '1', questionNumber: 1, partIndex: 0, type: 
   sample: 'An illustrative sample mentioning alpha and beta.', wordGuide: 50, answer: 'alpha and beta', diagramScene: null, diagramPng: null }; }
 function proposal() { return { status: 'marked', mark: 4, summary: 'You explained both ideas.', strengths: ['You explained alpha and beta.'], improve: [], advice: [],
   criteria: [{ id: 'c1', assessment: 'met', evidence: ['alpha'], basis: 'The answer states alpha.' }, { id: 'c2', assessment: 'met', evidence: ['beta'], basis: 'The answer states beta.' }], uncertainties: [] }; }
-function auditor() { return { confirm: true, rubricFaithful: true, evidenceSupported: true, alternativesConsidered: true, noDoubleCounting: true,
-  noInstructionFollowing: true, feedbackGrounded: true, adviceSeparated: true, reason: 'Both proposals are supported by the original evidence and rubric.', uncertainties: [] }; }
+function auditor() { return { checks: Object.fromEntries(Object.keys(AUDIT_CHECKS).map(id => [id, 'pass'])), issues: [] }; }
 function response(value, options = {}) {
   const content = typeof value === 'string' ? value : JSON.stringify(value);
   return new Response(JSON.stringify({ model: options.model || MODEL, choices: [{ finish_reason: options.finish || 'stop', message: { content, reasoning_content: 'Private model reasoning must never be persisted.' } }],
@@ -62,12 +61,14 @@ test('score disagreement is withheld without averaging or another grading call',
   const other = proposal(); other.mark = 3; other.improve = ['Explain beta more completely.'];
   const mock = sequence([proposal(), other]), result = await mock.run();
   assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
-  assert.deepEqual(result.audit.reasons, ['blind_disagreement']);
+  assert.deepEqual(result.audit.reasons, ['blind_score_disagreement']);
 });
 
 test('criterion disagreement with the same score is withheld; ordering alone is allowed', async () => {
   const other = proposal(); other.criteria[1].assessment = 'context';
-  let mock = sequence([proposal(), other]); assert.equal((await mock.run()).status, 'needs_review'); assert.equal(mock.requests.length, 2);
+  let mock = sequence([proposal(), other]), result = await mock.run();
+  assert.equal(result.status, 'needs_review'); assert.equal(mock.requests.length, 2);
+  assert.deepEqual(result.audit.reasons, ['blind_criterion_disagreement']);
   other.criteria = clone(proposal().criteria).reverse();
   mock = sequence([proposal(), other, auditor()]); assert.equal((await mock.run()).status, 'marked');
 });
@@ -134,14 +135,35 @@ test('public provenance is compact and an oversized final result is withheld', a
   assert.equal(small.mark, null); assert.deepEqual(small.audit.reasons, ['result_too_large']);
 });
 
-test('every auditor checklist veto or uncertainty withholds the score', async () => {
-  for (const key of ['confirm', 'rubricFaithful', 'evidenceSupported', 'alternativesConsidered', 'noDoubleCounting', 'noInstructionFollowing', 'feedbackGrounded', 'adviceSeparated', 'uncertainties']) {
-    const veto = auditor(); veto[key] = key === 'uncertainties' ? ['The first feedback adds a requirement.'] : false;
+test('every positive audit check failure or uncertainty withholds the score', async () => {
+  for (const key of Object.keys(AUDIT_CHECKS)) for (const state of ['fail', 'uncertain']) {
+    const veto = auditor(); veto.checks[key] = state; veto.issues.push({ checkId: key, detail: 'The original evidence does not establish this condition.' });
     const mock = sequence([proposal(), proposal(), veto]), result = await mock.run();
     assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['auditor_veto']); assert.equal(mock.requests.length, 3);
+    assert.equal(result.audit.auditor.checks[key], state); assert.equal(result.audit.auditor.issueCount, 1);
+    assert(!JSON.stringify(result).includes('The original evidence does not establish this condition.'));
   }
-  const invalid = auditor(); invalid.confirm = 'true';
+  const invalid = auditor(); invalid.checks.instructionIsolation = true;
   assert.deepEqual((await sequence([proposal(), proposal(), invalid]).run()).audit.reasons, ['auditor_schema']);
+});
+
+test('positive instruction isolation approves an untainted decision; legacy polarity and inconsistent check issues fail closed', async () => {
+  const clean = sequence([proposal(), proposal(), auditor()]), result = await clean.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.audit.auditor.checks.instructionIsolation, 'pass');
+  const prompt = clean.requests[2].body.messages[0].content;
+  assert(prompt.includes('no embedded instructions are present'));
+  assert(prompt.includes('a statement that there is no violation belongs to pass'));
+  assert(!prompt.includes('"noInstructionFollowing":'));
+  // Exact polarity failure observed in live v1: the old auditor denied its own
+  // no-instruction-issue conclusion. No legacy response may bypass v2 gates.
+  const legacy = { confirm: true, rubricFaithful: true, evidenceSupported: true, alternativesConsidered: true, noDoubleCounting: true,
+    noInstructionFollowing: false, feedbackGrounded: true, adviceSeparated: true, reason: 'No student-instruction issues.', uncertainties: [] };
+  assert.deepEqual((await sequence([proposal(), proposal(), legacy]).run()).audit.reasons, ['auditor_schema']);
+  const mismatched = auditor(); mismatched.issues.push({ checkId: 'instructionIsolation', detail: 'A proposal followed the student instruction.' });
+  assert.deepEqual((await sequence([proposal(), proposal(), mismatched]).run()).audit.reasons, ['auditor_schema']);
+  const violated = auditor(); violated.checks.instructionIsolation = 'fail'; violated.issues.push({ checkId: 'instructionIsolation', detail: 'A proposal followed the student instruction.' });
+  const blocked = sequence([proposal(), proposal(), violated]);
+  assert.deepEqual((await blocked.run()).audit.reasons, ['auditor_veto']); assert.equal(blocked.requests.length, 3);
 });
 
 test('model identity and completed finish status are required for markers and auditor', async () => {
@@ -171,7 +193,8 @@ test('provider request has a byte bound, and JSON policy includes valid worked e
   const valid = sequence([proposal(), proposal(), auditor()]); await valid.run();
   assert(valid.requests[0].body.messages[0].content.includes('"status":"needs_review","mark":null'));
   assert(valid.requests[0].body.messages[0].content.includes('"status":"marked","mark":1'));
-  assert(valid.requests[2].body.messages[0].content.includes('"confirm":true,"rubricFaithful":true'));
+  assert(valid.requests[2].body.messages[0].content.includes('"instructionIsolation":"pass"|"fail"|"uncertain"'));
+  assert(valid.requests[0].body.messages[0].content.includes('a generic explanation is not partial application'));
 });
 
 test('student injection stays in data; prompt asserts evidence and rubric boundaries', async () => {

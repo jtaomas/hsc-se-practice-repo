@@ -1,0 +1,391 @@
+{
+  "schemaVersion": 1,
+  "id": "short-answer-comparison-v1",
+  "provenance": {
+    "realStudentData": false,
+    "teacherReviewed": false,
+    "labels": "Original synthetic development responses and provisional AI-authored expectations; expected marks and diagnoses are fixed before live runs.",
+    "purpose": "Real fresh marking and cohort comparison of written short answers, including concise correct explanation, complementary weaknesses, repeated scenario gaps and one conceptual fault affecting two criteria."
+  },
+  "cases": [
+    {
+      "id": "short_answer_complementary_gaps",
+      "purpose": "Two participants earn the same four of six marks through different demonstrated strengths and weaknesses on three original written questions.",
+      "input": {
+        "bankId": "short-answer-calibration",
+        "questionSetVersion": "short-answer-v1",
+        "participants": [
+          {
+            "id": "p1",
+            "parts": [
+              {
+                "id": "1.0",
+                "questionNumber": 1,
+                "partIndex": 0,
+                "topic": "Web programming",
+                "type": "written response",
+                "question": "Explain how caching reduces catalogue response latency. Apply your explanation to repeated requests for popular book-title records.",
+                "stimulus": "An original fictional library catalogue repeatedly receives requests for popular book-title records from a slower database.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: explains that reusing cached results avoids repeating slower database access and therefore gives a faster response. This is one complete causal achievement; related keywords alone are not partial credit."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: applies the reuse mechanism to a later request for a popular book-title record in this catalogue. A generic cache explanation without the named catalogue data does not meet this criterion."
+                  }
+                ],
+                "sample": "The catalogue caches a popular book-title result. A later request can reuse it instead of querying the slower database again, reducing response latency.",
+                "maxMarks": 2,
+                "answer": "Previously fetched results are reused instead of repeating slower database queries, so responses arrive sooner.",
+                "mark": 1,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "Explains reuse, avoided slower queries and the resulting faster response. The explanation never applies reuse to popular book-title records in the catalogue.",
+                  "strengths": [
+                    "Explains reuse, avoided slower queries and the resulting faster response."
+                  ],
+                  "improve": [
+                    "The explanation never applies reuse to popular book-title records in the catalogue."
+                  ],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "Previously fetched results are reused instead of repeating slower database queries, so responses arrive sooner."
+                      ],
+                      "basis": "Explains reuse, avoided slower queries and the resulting faster response."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "The explanation never applies reuse to popular book-title records in the catalogue."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "2.0",
+                "questionNumber": 2,
+                "partIndex": 0,
+                "topic": "Secure software architecture",
+                "type": "written response",
+                "question": "Explain how a stored password hash allows a login password to be checked without recovering the original password.",
+                "stimulus": "An original fictional login system stores a password hash. Explain the basic one-way transformation and verification process; additional security measures are outside this question.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: states that hashing is a one-way transformation and the stored hash is not decrypted to recover the original password. This is an atomic concept; claiming reversible encryption does not meet it."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: explains that the submitted password is hashed by the same process and the resulting hash is compared with the stored hash. Decrypting the stored value and comparing plaintext does not meet this criterion."
+                  }
+                ],
+                "sample": "A hash is one-way and is not decrypted back into the password. Hash the submitted password by the same process and compare the result with the stored hash to check it.",
+                "maxMarks": 2,
+                "answer": "A hash is one-way, so the stored hash is not decrypted back into the original password. Hash the submitted password by the same process and compare the result with the stored hash.",
+                "mark": 2,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "Explicitly describes hashing as one-way and says the hash is not decrypted. Explains hashing the submitted password by the same process and comparing the two hashes.",
+                  "strengths": [
+                    "Explicitly describes hashing as one-way and says the hash is not decrypted.",
+                    "Explains hashing the submitted password by the same process and comparing the two hashes."
+                  ],
+                  "improve": [],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "A hash is one-way, so the stored hash is not decrypted back into the original password. Hash the submitted password by the same process and compare the result with the stored hash."
+                      ],
+                      "basis": "Explicitly describes hashing as one-way and says the hash is not decrypted."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "met",
+                      "evidence": [
+                        "A hash is one-way, so the stored hash is not decrypted back into the original password. Hash the submitted password by the same process and compare the result with the stored hash."
+                      ],
+                      "basis": "Explains hashing the submitted password by the same process and comparing the two hashes."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "3.0",
+                "questionNumber": 3,
+                "partIndex": 0,
+                "topic": "Programming fundamentals",
+                "type": "written response",
+                "question": "Explain why checking an age before saving protects stored records. Apply your explanation to this enrolment form's allowed age range.",
+                "stimulus": "An original fictional enrolment form has a numeric age field. The stated business rule accepts ages from 0 to 120 inclusive.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: explains that validation rejects invalid input before saving, preventing invalid values from entering the stored records. This complete causal idea earns the point even without naming a specific range."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: applies the validation explanation to this numeric age field by rejecting ages outside 0 to 120 inclusive before storage. A generic explanation without this scenario's age constraint does not meet this criterion."
+                  }
+                ],
+                "sample": "Reject an age below 0 or above 120 before saving it. This applies the form's permitted range and stops invalid ages entering the stored records.",
+                "maxMarks": 2,
+                "answer": "Validate input before saving: reject invalid values so they do not become stored records.",
+                "mark": 1,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "Explains rejection before saving and the resulting prevention of invalid stored values. No application to the age field's permitted 0 to 120 inclusive range is supplied.",
+                  "strengths": [
+                    "Explains rejection before saving and the resulting prevention of invalid stored values."
+                  ],
+                  "improve": [
+                    "No application to the age field's permitted 0 to 120 inclusive range is supplied."
+                  ],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "Validate input before saving: reject invalid values so they do not become stored records."
+                      ],
+                      "basis": "Explains rejection before saving and the resulting prevention of invalid stored values."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "No application to the age field's permitted 0 to 120 inclusive range is supplied."
+                    }
+                  ]
+                }
+              }
+            ],
+            "coverage": {
+              "includedParts": 3,
+              "excludedParts": 0,
+              "totalParts": 3
+            }
+          },
+          {
+            "id": "p2",
+            "parts": [
+              {
+                "id": "1.0",
+                "questionNumber": 1,
+                "partIndex": 0,
+                "topic": "Web programming",
+                "type": "written response",
+                "question": "Explain how caching reduces catalogue response latency. Apply your explanation to repeated requests for popular book-title records.",
+                "stimulus": "An original fictional library catalogue repeatedly receives requests for popular book-title records from a slower database.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: explains that reusing cached results avoids repeating slower database access and therefore gives a faster response. This is one complete causal achievement; related keywords alone are not partial credit."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: applies the reuse mechanism to a later request for a popular book-title record in this catalogue. A generic cache explanation without the named catalogue data does not meet this criterion."
+                  }
+                ],
+                "sample": "The catalogue caches a popular book-title result. A later request can reuse it instead of querying the slower database again, reducing response latency.",
+                "maxMarks": 2,
+                "answer": "The catalogue stores the result for a popular book title in its cache. A later request for that title reuses the stored result rather than querying the slower database again, so the catalogue responds sooner.",
+                "mark": 2,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "Explains reuse instead of the slower database query and the faster catalogue response. Applies reuse to a later request for the same popular book-title record.",
+                  "strengths": [
+                    "Explains reuse instead of the slower database query and the faster catalogue response.",
+                    "Applies reuse to a later request for the same popular book-title record."
+                  ],
+                  "improve": [],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "The catalogue stores the result for a popular book title in its cache. A later request for that title reuses the stored result rather than querying the slower database again, so the catalogue responds sooner."
+                      ],
+                      "basis": "Explains reuse instead of the slower database query and the faster catalogue response."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "met",
+                      "evidence": [
+                        "The catalogue stores the result for a popular book title in its cache. A later request for that title reuses the stored result rather than querying the slower database again, so the catalogue responds sooner."
+                      ],
+                      "basis": "Applies reuse to a later request for the same popular book-title record."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "2.0",
+                "questionNumber": 2,
+                "partIndex": 0,
+                "topic": "Secure software architecture",
+                "type": "written response",
+                "question": "Explain how a stored password hash allows a login password to be checked without recovering the original password.",
+                "stimulus": "An original fictional login system stores a password hash. Explain the basic one-way transformation and verification process; additional security measures are outside this question.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: states that hashing is a one-way transformation and the stored hash is not decrypted to recover the original password. This is an atomic concept; claiming reversible encryption does not meet it."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: explains that the submitted password is hashed by the same process and the resulting hash is compared with the stored hash. Decrypting the stored value and comparing plaintext does not meet this criterion."
+                  }
+                ],
+                "sample": "A hash is one-way and is not decrypted back into the password. Hash the submitted password by the same process and compare the result with the stored hash to check it.",
+                "maxMarks": 2,
+                "answer": "Hashing is reversible encryption. At login, decrypt the stored hash to recover the original password and compare that original password with the submitted text.",
+                "mark": 0,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "The answer incorrectly describes hashing as reversible encryption. The proposed decryption and plaintext comparison is not hashing the submitted password and comparing hashes.",
+                  "strengths": [],
+                  "improve": [
+                    "The answer incorrectly describes hashing as reversible encryption.",
+                    "The proposed decryption and plaintext comparison is not hashing the submitted password and comparing hashes."
+                  ],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "The answer incorrectly describes hashing as reversible encryption."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "not_met",
+                      "evidence": [],
+                      "basis": "The proposed decryption and plaintext comparison is not hashing the submitted password and comparing hashes."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "3.0",
+                "questionNumber": 3,
+                "partIndex": 0,
+                "topic": "Programming fundamentals",
+                "type": "written response",
+                "question": "Explain why checking an age before saving protects stored records. Apply your explanation to this enrolment form's allowed age range.",
+                "stimulus": "An original fictional enrolment form has a numeric age field. The stated business rule accepts ages from 0 to 120 inclusive.",
+                "criteria": [
+                  {
+                    "id": "c1",
+                    "text": "One mark: explains that validation rejects invalid input before saving, preventing invalid values from entering the stored records. This complete causal idea earns the point even without naming a specific range."
+                  },
+                  {
+                    "id": "c2",
+                    "text": "One mark: applies the validation explanation to this numeric age field by rejecting ages outside 0 to 120 inclusive before storage. A generic explanation without this scenario's age constraint does not meet this criterion."
+                  }
+                ],
+                "sample": "Reject an age below 0 or above 120 before saving it. This applies the form's permitted range and stops invalid ages entering the stored records.",
+                "maxMarks": 2,
+                "answer": "For the enrolment form, accept an age only when it is between 0 and 120 inclusive. An age such as 150 fails that check and is rejected before saving. Stopping an invalid age before insertion prevents it from becoming an incorrect stored record.",
+                "mark": 2,
+                "status": "marked",
+                "source": "agentic",
+                "feedback": {
+                  "summary": "Explains that rejecting invalid input before insertion prevents incorrect stored records. Applies the 0 to 120 inclusive age constraint and rejects 150 before storage.",
+                  "strengths": [
+                    "Explains that rejecting invalid input before insertion prevents incorrect stored records.",
+                    "Applies the 0 to 120 inclusive age constraint and rejects 150 before storage."
+                  ],
+                  "improve": [],
+                  "advice": [],
+                  "criteria": [
+                    {
+                      "id": "c1",
+                      "assessment": "met",
+                      "evidence": [
+                        "For the enrolment form, accept an age only when it is between 0 and 120 inclusive. An age such as 150 fails that check and is rejected before saving. Stopping an invalid age before insertion prevents it from becoming an incorrect stored record."
+                      ],
+                      "basis": "Explains that rejecting invalid input before insertion prevents incorrect stored records."
+                    },
+                    {
+                      "id": "c2",
+                      "assessment": "met",
+                      "evidence": [
+                        "For the enrolment form, accept an age only when it is between 0 and 120 inclusive. An age such as 150 fails that check and is rejected before saving. Stopping an invalid age before insertion prevents it from becoming an incorrect stored record."
+                      ],
+                      "basis": "Applies the 0 to 120 inclusive age constraint and rejects 150 before storage."
+                    }
+                  ]
+                }
+              }
+            ],
+            "coverage": {
+              "includedParts": 3,
+              "excludedParts": 0,
+              "totalParts": 3
+            }
+          }
+        ]
+      },
+      "expected": {
+        "status": "complete",
+        "errors": [
+          {
+            "participantId": "p1",
+            "questionId": "1.0",
+            "errorType": "stimulus_not_applied"
+          },
+          {
+            "participantId": "p1",
+            "questionId": "3.0",
+            "errorType": "stimulus_not_applied"
+          },
+          {
+            "participantId": "p2",
+            "questionId": "2.0",
+            "errorType": "conceptual_confusion"
+          }
+        ],
+        "forbidCriterionShortfalls": [],
+        "requireActionsForErrors": true,
+        "singleResponseOnly": false,
+        "requiredFindings": [
+          {
+            "participantId": "p1",
+            "errorType": "stimulus_not_applied",
+            "scope": "repeated",
+            "questionIds": [
+              "1.0",
+              "3.0"
+            ]
+          }
+        ],
+        "forbiddenText": [],
+        "semanticChecks": [
+          "p1's Q1 and Q3 mechanism strengths remain credited while the repeated absence of concrete scenario application is identified only for these responses.",
+          "p2's reversible-hashing misconception and wrong verification procedure are one underlying conceptual fault, not two counted mistakes.",
+          "p1's concise correct Q2 answer receives no request for extra wording, salting, peppering or production security beyond this rubric.",
+          "Actions apply a popular-title result to a later catalogue request, name the stated inclusive age range, or replace decryption with hashing and comparing; do not add cache-miss-only architecture or unrelated requirements.",
+          "Equal totals do not imply identical strengths, ability rankings or an HSC band.",
+          "Peer comparisons add a demonstrated method or observation without repeating the individual repair in several forms."
+        ]
+      }
+    }
+  ]
+}

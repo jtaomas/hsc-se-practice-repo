@@ -52,7 +52,7 @@ async function invoke(handler, input = body, auth = 'Bearer mock') {
     requests++; const p = JSON.parse(request.body); assert.equal(p.model, 'deepseek-flash'); assert.equal(p.reasoning_effort, 'high');
     let output;
     if (requests <= 2) output = { status: 'marked', mark: 1, summary: 'You identify one-way hashing.', strengths: ['One-way hashing'], improve: ['Explain how a unique random salt protects passwords.'], advice: [], criteria: input.criteria.map((c, i) => ({ id: c.id, assessment: i === 2 ? 'met' : 'not_met', evidence: i === 2 ? ['Hashing is one way.'] : [], basis: i === 2 ? 'One idea identified.' : 'More detail is required.' })), uncertainties: [] };
-    else output = { confirm: true, rubricFaithful: true, evidenceSupported: true, alternativesConsidered: true, noDoubleCounting: true, noInstructionFollowing: true, feedbackGrounded: true, adviceSeparated: true, reason: 'One mark is supported by the answer and rubric.', uncertainties: [] };
+    else output = { checks: Object.fromEntries(Object.keys(realEngine.AUDIT_CHECKS).map(id => [id, 'pass'])), issues: [] };
     return new Response(JSON.stringify({ model: 'deepseek-flash', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }], usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }), { status: 200 });
   } }) };
   const integrated = await invoke(createHandler({ store: e.storage, engine: e.engine, env: e.env }));

@@ -58,9 +58,9 @@ function matchedComparison() {
   };
 }
 
-test('offline fixture lint validates all eight original cases and provisional provenance', () => {
+test('offline fixture lint validates original cases, disputed-credit guard and provisional provenance', () => {
   assert.equal(harness.lint(fixture, engine), fixture);
-  assert.equal(fixture.cases.length, 8);
+  assert.equal(fixture.cases.length, 9);
   assert.equal(fixture.provenance.teacherReviewed, false);
   assert.equal(fixture.provenance.realStudentData, false);
 });
@@ -80,7 +80,7 @@ test('fixture lint rejects unknown gold references, duplicate diagnoses and non-
 test('synthetic accepted reports produce exact categorical agreement without claiming measured accuracy', () => {
   const scored = result(reports());
   assert.equal(scored.passed, true);
-  assert.equal(scored.summary.passingCases, 8);
+  assert.equal(scored.summary.passingCases, fixture.cases.length);
   assert.equal(scored.summary.errorPrecision, 1);
   assert.equal(scored.summary.errorRecall, 1);
   assert.equal(scored.summary.correctCitationRate, 1);
@@ -136,6 +136,14 @@ test('peer comparison needs the same criterion as well as the same question', ()
   const scored = result(invalid);
   assert.equal(scored.passed, false);
   assert(scored.results[0].failures.includes('synthesis_validation:unmatched_comparison'));
+});
+
+test('an evidence-backed observation can omit homework while a repair cannot', () => {
+  const bundle = reports(), comparison = matchedComparison(); comparison.action = '';
+  bundle.reports[0].report.comparisons.push(comparison);
+  assert.equal(result(bundle).passed, true);
+  delete comparison.action;
+  assert.equal(result(bundle).passed, false);
 });
 
 test('unfounded recurrence and empty repair actions fail independently of correct labels', () => {

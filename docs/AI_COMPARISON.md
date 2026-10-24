@@ -41,6 +41,10 @@ Structural validation runs between stages and before release. It checks particip
 
 The full prompts and diagnostic enums are in `server/comparison-policy.js`; orchestration and structural gates are in `server/comparison-engine.js`. Change the comparison harness version when prompts or validator behaviour changes. Cached results must be keyed to the exact evidence and harness/model configuration.
 
+`hsc-comparison-2` defines each error type and its precedence in the actual prompts. A missing scenario link uses `stimulus_not_applied`; a missing function invocation uses `logic_control_flow`; `requirement_omission` is a fallback when no narrower type fits. The audit explicitly checks diagnostic specificity, distinct findings and the benefit of advice. The shared audit contract uses positive `pass`/`fail`/`uncertain` conditions with one issue per unresolved condition; all conditions must pass. It never overrides a failure because other prose sounds reassuring.
+
+One underlying fault receives one repair even when it affects several criteria. Matching answer anchors and repeated repair text are checked across criteria; distinct faults with separate evidence remain possible. These structural checks do not replace the semantic audit. A peer comparison may have an empty action when the individual's repair already covers it or both responses are effective. The page then omits the action heading. Optional advice must improve an identifiable issue; changing already-clear wording or adding an unrequested implementation rule is not enough.
+
 ## Dimensions and diagnostic taxonomy
 
 | Dimension | Useful evidence |
@@ -128,9 +132,11 @@ node scripts/evaluate-comparison.js
 node tests/comparison_evaluator_test.js
 ```
 
-This checks `tests/fixtures/comparison-calibration.json`, normalized engine inputs, gold reference membership, taxonomy and invariance-pair consistency. It does **not** measure model accuracy. The eight cases use original fictional tasks and AI-authored provisional expectations; `teacherReviewed` is deliberately `false`.
+This checks `tests/fixtures/comparison-calibration.json`, normalized engine inputs, gold reference membership, taxonomy and invariance-pair consistency. It does **not** measure model accuracy. The nine cases use original fictional tasks and AI-authored provisional expectations; `teacherReviewed` is deliberately `false`. Dataset v2 clarifies the equal-marks question's separate identification credit and adds a disputed scenario-application-credit case that must abstain. This repairs an ambiguous gold fixture rather than treating its earlier mark as authoritative.
 
 The cases cover equal marks with different gaps, concise/verbose full-credit responses, an equivalent built-in algorithm, incorrect marking feedback, embedded instructions, participant-order permutation, distinct control-flow/boundary errors, and a repeated scenario-application gap. Input, sharing, API and engine regression tests separately cover incompatible papers, no common parts, forged/expired exports, excluded scores, malformed output, fabricated citations and deadlines.
+
+`tests/fixtures/comparison-short-answer.json` adds two fictional participants answering three written questions on caching, password hashing and input validation. Their expected totals are equal, with different strengths and gaps. The fresh-pipeline evaluator runs the actual marking engine first, retains all abstentions and excludes any part not confirmed for both participants before comparison. It accepts synthetic fixtures only and never accesses live student application endpoints. Run its offline checks with `node tests/comparison_pipeline_evaluator_test.js`; use `npm run eval:comparison:pipeline -- --help` for the explicit paid-run interface. Expected marks and diagnostics are recorded before requests; repeated runs are retained rather than selected for favourable results.
 
 Evaluate saved engine reports offline:
 

@@ -102,7 +102,7 @@ function score(test, report, engine) {
   if (report.status === 'needs_review') check(!(report.profiles || []).length && !(report.comparisons || []).length, 'review_must_withhold_findings');
   if (report.status === 'complete') {
     const profiles = report.profiles || [];
-    const synthesis = engine.synthesisProblem({ status: 'complete', summary: report.summary, comparisons: report.comparisons, uncertainties: [] }, canonical.participants);
+    const synthesis = engine.synthesisProblem({ status: 'complete', summary: report.summary, comparisons: report.comparisons, uncertainties: [] }, canonical.participants, profiles);
     check(!synthesis, 'synthesis_validation:' + synthesis);
     check(new Set(profiles.map(p => p.participantId)).size === test.input.participants.length && profiles.length === test.input.participants.length && profiles.every(p => test.input.participants.some(item => item.id === p.participantId)), 'profile_coverage');
     for (const profile of profiles) {
@@ -196,11 +196,15 @@ async function main(argv) {
         try {
           const report = await engine.compare(test.input, { apiKey: process.env.DEEPSEEK_API_KEY });
           reports.reports.push({ caseId: test.id, run, report });
-        } catch (_) {
+        } catch (error) {
           // No provider error text, response body, or secret enters logs.
-          reports.reports.push({ caseId: test.id, run, report: { status: 'transport_error', profiles: [], comparisons: [] } });
+          const report = { status: 'transport_error', profiles: [], comparisons: [] };
+          if (error && typeof error.code === 'string' && /^[a-z_]{1,80}$/.test(error.code)) report.errorCode = error.code;
+          if (error && error.audit) report.audit = error.audit;
+          reports.reports.push({ caseId: test.id, run, report });
         }
         save();
+        console.error('Completed ' + test.id + ', run ' + run + ': ' + reports.reports[reports.reports.length - 1].report.status);
       }
     } finally { fs.closeSync(fd); }
   } else if (options.reports) reports = readJson(options.reports);

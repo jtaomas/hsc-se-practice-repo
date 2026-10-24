@@ -174,11 +174,11 @@ function guideHTML(b,n,i){
   else if(it.t==='tk'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+(r[1].map(function(c){return it.h[c+1]}).join(', ')||'none')+'</b>'}))}
   else{
     h+=aiBlock(b,n,i,it,bs,k,a,sc);
-    if(QT[it.t]&&QT[it.t].sample)h+='<p><b>Sample answer:</b></p>'+QT[it.t].sample(it);
-    else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
-    else h+='<p><b>Sample answer:</b></p><div>'+it.model+'</div>';
+    if(QT[it.t]&&QT[it.t].sample)h+='<p class="gh"><b>Sample answer:</b></p>'+QT[it.t].sample(it);
+    else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p class="gh"><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
+    else h+='<p class="gh"><b>Sample answer:</b></p><div>'+it.model+'</div>';
     if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>Drawing summary</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
-    if(it.crit.length)h+='<p><b>Marking criteria</b></p>'+critList(it.crit);
+    if(it.crit.length)h+='<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit);
     var c=bs.chk[k];if(c)h+='<p><b>Practice check:</b> '+(it.t==='sq'?(c.p?'your query matched the sample rows and required column headings':'your query did not match the sample rows and required column headings'):c.p+' of '+c.t+' example test runs gave the expected output')+'. Example checks do not award marks.</p>';
     else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(isAns(it,a)?'running...':'no answer to check')+'</p>';
     if(c&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';

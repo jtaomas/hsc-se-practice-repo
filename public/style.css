@@ -503,3 +503,27 @@ table.hoa.db{margin:12px 0}
 .aibar{height:6px;background:#cfdcec;margin:8px 0 6px}.aibar span{display:block;height:100%;background:#002664;transition:width .3s}
 /* Question number boxes: centre the number with flex so a box can never sit lower than its neighbours. */
 .nav-nums .nav-elem{display:inline-flex;align-items:center;justify-content:center;align-self:center;line-height:1;box-sizing:border-box;vertical-align:middle;transform:none;top:auto}
+
+/* ---------- review page: one navy bar per question, flat marking guide ---------- */
+.item .guide{margin-top:18px;background:#fff;border:1px solid #cfcfcf;border-left:1px solid #cfcfcf;border-radius:3px;padding:16px 20px 18px}
+.guide h4{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 12px;font-size:1.1em;color:#002664}
+.guide h4 .sc{background:#002664;color:#fff;font-weight:700;font-size:.85em;padding:2px 12px;border-radius:12px;white-space:nowrap}
+.guide p{margin:.4em 0}
+.guide p.gh{margin:1.3em 0 .35em;padding-top:.9em;border-top:1px solid #e2e2e2;color:#002664}
+.guide p.gh b{font-size:1.02em}
+.guide ul{margin:.2em 0 .6em 1.3em}
+.guide li{margin:.25em 0;line-height:1.5}
+.guide .aib{border:0;border-left:0;background:none;padding:0;margin:0 0 4px}
+.guide .aib.bad{background:#fdeef1;border:1px solid #e0a1ae;border-radius:3px;padding:12px 14px}
+.guide .aib>h5{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px;font-size:1.02em;color:#002664}
+.guide .aib>h5 .sc{background:#e6edf8;color:#002664;font-weight:700;font-size:.85em;padding:2px 12px;border-radius:12px;white-space:nowrap}
+.guide .aib h5{margin:1.3em 0 .4em;padding-top:.9em;border-top:1px solid #e2e2e2;font-size:1.02em;color:#002664}
+.guide .aib>h5:first-child{margin-top:0;padding-top:0;border-top:0}
+.guide .feedback-loss{border:1px solid #e4d9c6;border-left:1px solid #e4d9c6;background:#fffaf1;border-radius:3px;padding:12px 14px;margin:10px 0}
+.guide .feedback-loss>b{display:block;margin-bottom:2px}
+.guide .feedback-evidence{border-left:0;background:#f3f3f3;border-radius:3px;margin:8px 0;padding:8px 12px}
+.guide .quality-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:8px 0 12px}
+.guide .quality-card{border-radius:3px;padding:8px 12px}
+.guide .xdd{margin:10px 0}
+.guide .smk{margin-top:14px;padding-top:12px;border-top:1px solid #e2e2e2}
+.guide pre{background:#f6f6f6}

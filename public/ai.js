@@ -99,9 +99,9 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
     if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
     return '<div class="aib'+(review?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
       (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-      (f.strengths&&f.strengths.length?'<p><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.improve&&f.improve.length?'<p><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.advice&&f.advice.length?'<p><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (f.strengths&&f.strengths.length?'<p class="gh"><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (f.improve&&f.improve.length?'<p class="gh"><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
       (f.criteria&&f.criteria.length?'<details class="xdd"><summary>Criterion evidence</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
       (typeof feedbackDetails==='function'&&!review?feedbackDetails(f,scene):'')+
       (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+(S.tok?'<button class="nb sm" data-act="airemark" data-k="'+esc(k)+'">Re-mark with current process</button>':'<a href="#/account">Sign in to re-mark</a>'))+

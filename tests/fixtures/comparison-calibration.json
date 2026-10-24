@@ -608,6 +608,11 @@
         "forbiddenText": [],
         "semanticChecks": [
           "No replacement marks or comparison findings are published."
+        ],
+        "reviewReasons": [
+          "extractor_abstention",
+          "synthesis_abstention",
+          "auditor_veto"
         ]
       }
     },
@@ -1588,6 +1593,11 @@
         "semanticChecks": [
           "Withhold the comparison because p2 is credited for scenario application despite the rubric explicitly requiring a correct reuse mechanism and the response attributing speed to encryption.",
           "Do not silently re-mark, treat catalogue naming as the required explanation, or publish a strength based on the inconsistent credit."
+        ],
+        "reviewReasons": [
+          "extractor_abstention",
+          "synthesis_abstention",
+          "auditor_veto"
         ]
       }
     }

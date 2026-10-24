@@ -52,6 +52,7 @@ function lint(dataset, engine) {
     engine.canonicalData(test.input);
     const expected = test.expected;
     assert(expected && ['complete', 'needs_review'].includes(expected.status));
+    if (expected.reviewReasons) assert(expected.status === 'needs_review' && Array.isArray(expected.reviewReasons) && expected.reviewReasons.length && expected.reviewReasons.every(reason => ['extractor_abstention', 'synthesis_abstention', 'auditor_veto'].includes(reason)), 'Expected review reasons must represent substantive abstention.');
     assert(Array.isArray(expected.errors) && Array.isArray(expected.semanticChecks));
     const keys = new Set();
     for (const item of expected.errors) {
@@ -100,6 +101,7 @@ function score(test, report, engine) {
   check(report && Array.isArray(report.profiles) && Array.isArray(report.comparisons), 'report_shape');
   report = report || {};
   if (report.status === 'needs_review') check(!(report.profiles || []).length && !(report.comparisons || []).length, 'review_must_withhold_findings');
+  if (expected.reviewReasons) check(report.audit && Array.isArray(report.audit.reasons) && report.audit.reasons.some(reason => expected.reviewReasons.includes(reason)), 'substantive_review_reason');
   if (report.status === 'complete') {
     const profiles = report.profiles || [];
     const synthesis = engine.synthesisProblem({ status: 'complete', summary: report.summary, comparisons: report.comparisons, uncertainties: [] }, canonical.participants, profiles);

@@ -163,7 +163,7 @@ function synthesisProblem(value, participants, profiles = []) {
       !text(value.summary, 700, false) || !Array.isArray(value.comparisons) || value.comparisons.length > 8 || !strings(value.uncertainties, 5, 300)) return 'synthesis_schema';
   if (value.status !== 'complete') return value.comparisons.length || !value.uncertainties.length ? 'synthesis_schema' : 'synthesis_abstention';
   if (value.uncertainties.length) return 'uncertain_synthesis';
-  const ids = new Set(), contrasts = new Set(), anchors = new Set(), repairs = new Set();
+  const ids = new Set(), contrasts = new Set(), diagnosedContrasts = new Set(), repairs = new Set();
   for (const comparison of value.comparisons) {
     if (!exactKeys(comparison, ['id', 'category', 'statement', 'action', 'evidence']) || !identifier(comparison.id) || ids.has(comparison.id) ||
         !CATEGORIES.includes(comparison.category) || !text(comparison.statement, 700, false) || !text(comparison.action, 500, true)) return 'comparison_schema';
@@ -178,14 +178,22 @@ function synthesisProblem(value, participants, profiles = []) {
     const contrast = JSON.stringify([comparison.category, Array.from(basis), Array.from(people).sort()]);
     if (contrasts.has(contrast)) return 'duplicate_comparison';
     contrasts.add(contrast);
-    const answerAnchors = comparison.evidence.filter(citation => citation.source === 'answer').map(citation =>
-      JSON.stringify([citation.participantId, citation.questionId, citation.quote.trim()]));
-    // Identical peer response anchors should not be compared repeatedly merely
-    // by switching criterion IDs. An auditor checks less literal paraphrases.
-    if (answerAnchors.length >= 2) {
-      const anchor = JSON.stringify([comparison.category, Array.from(new Set(answerAnchors)).sort()]);
-      if (anchors.has(anchor)) return 'duplicate_comparison_anchor';
-      anchors.add(anchor);
+    // Sharing a whole-answer quotation does not make two credited criteria the
+    // same achievement (for example a sum and its empty-list result). Restrict
+    // cross-criterion detection to a non-strength cause already identified in
+    // a validated profile, for these same peers and this same question.
+    for (const profile of profiles) for (const finding of profile.findings) {
+      if (finding.kind === 'strength') continue;
+      const matching = comparison.evidence.filter(citation => citation.participantId === profile.participantId &&
+        finding.evidence.some(ref => ref.questionId === citation.questionId && ref.criterionId === citation.criterionId));
+      if (!matching.length) continue;
+      const questionId = matching[0].questionId;
+      const originalAnchors = finding.evidence.filter(ref => ref.questionId === questionId && ref.source === 'answer');
+      if (originalAnchors.length && !matching.some(citation => citation.source === 'answer' &&
+          originalAnchors.some(ref => ref.quote.trim() === citation.quote.trim()))) continue;
+      const diagnosed = JSON.stringify([profile.participantId, finding.id, questionId, comparison.category, Array.from(people).sort()]);
+      if (diagnosedContrasts.has(diagnosed)) return 'duplicate_diagnosed_comparison';
+      diagnosedContrasts.add(diagnosed);
     }
     if (comparison.action.trim()) {
       const action = repairText(comparison.action);

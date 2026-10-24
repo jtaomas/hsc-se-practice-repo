@@ -262,9 +262,9 @@ body.pyasking{overflow:hidden}
 .odt{padding:2px 0}
 .odc,.odt,.dslot.fixed,.chip{font-family:inherit}
 pre.odg{font-size:.95em}
-.dmrow{display:flex;align-items:center;gap:14px;margin:6px 0}
-.dmrow .dslot{flex:none;width:9.5em}
-.dmt{flex:1}
+.dmq-row{display:flex;align-items:center;gap:14px;margin:6px 0}
+.dmq-row .dslot{flex:none;width:11em}
+.dmq-text{flex:1}
 .ftab{width:100%}
 .ftab td{padding:4px}
 input.fti{width:100%;box-sizing:border-box;border:1.6px solid #4a55a2;border-radius:2px;padding:6px;font:inherit;background:#fff;color:#000;min-width:6em}
@@ -299,7 +299,7 @@ table.ctbl td{font-weight:600}
 .slt{flex:1 1 16em}.slt h4{margin:0 0 .4em;font-size:1.1em}
 .sla{flex:0 1 10em;text-align:center}
 @media (min-width:861px){.qwrap.two .qleft{position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto;padding-right:8px}}
-@media (max-width:860px){.dz.od{grid-template-columns:1fr}.dmrow .dslot{width:8em}}
+@media (max-width:860px){.dz.od{grid-template-columns:1fr}.dmq-row .dslot{width:8em}}
 
 .cedit.ace-on>textarea[data-code],.cedit.ace-on>.gut{display:none}
 .cedit .cedit-ed{position:absolute;inset:0;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace}

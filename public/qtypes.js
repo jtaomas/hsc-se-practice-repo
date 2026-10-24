@@ -125,8 +125,8 @@ regType('dm',{
     a=a||{};var used=dzUsed(a);
     var pool=it.tok.map(function(t,ci){return !it.reuse&&used[ci]!=null?'':chipHTML(k,ci,t,ro)}).join('');
     var rows=it.r.map(function(r,s){var ci=a[s];
-      return '<div class="dmrow">'+slotHTML(k,s,ci!=null?chipHTML(k,ci,it.tok[ci],ro):'',ro,rv?(ci===r[1]?'ok':'bad'):'')+'<div class="dmt">'+r[0]+'</div></div>'}).join('');
-    return '<div class="dz dm" data-k="'+k+'"><div class="pool row" data-pk="'+k+'" aria-label="Labels to place">'+(pool||'<span class="mut">All labels placed.</span>')+'</div><div class="dmr">'+rows+'</div></div>';
+      return '<div class="dmq-row">'+slotHTML(k,s,ci!=null?chipHTML(k,ci,it.tok[ci],ro):'',ro,rv?(ci===r[1]?'ok':'bad'):'')+'<div class="dmq-text">'+r[0]+'</div></div>'}).join('');
+    return '<div class="dz dm" data-k="'+k+'"><div class="pool row" data-pk="'+k+'" aria-label="Labels to place">'+(pool||'<span class="mut">All labels placed.</span>')+'</div><div class="dmq-rows">'+rows+'</div></div>';
   },
   units:function(it,a){var c=0;it.r.forEach(function(r,s){if(a[s]===r[1])c++});return [c,it.r.length]},
   isAns:function(it,a){return Object.keys(a).length>0},

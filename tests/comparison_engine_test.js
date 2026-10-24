@@ -232,7 +232,7 @@ test('synthesis can state an observation without inventing or repeating a repair
   assert.equal(engine.synthesisProblem(v, people, profiles), 'duplicate_repair', 'the individual next step is not repeated as peer homework');
 });
 
-test('switching criterion IDs cannot manufacture a second identical peer contrast', () => {
+test('cross-criterion duplicate checks need a diagnosed fault, not merely shared whole-answer quotations', () => {
   const people = input().participants;
   people.forEach(p => {
     p.parts[0].criteria.push({ id: 'c2', text: 'Another criterion affected by the same response.' });
@@ -241,11 +241,71 @@ test('switching criterion IDs cannot manufacture a second identical peer contras
   const v = synthesis(people), first = v.comparisons[0];
   first.action = ''; first.evidence = people.map(p => citation(p));
   v.comparisons.push(Object.assign(clone(first), { id: 'c2', evidence: people.map(p => citation(p, 'answer', '17.0', 'c2')) }));
-  assert.equal(engine.synthesisProblem(v, people), 'duplicate_comparison_anchor');
+  assert.equal(engine.synthesisProblem(v, people), null, 'shared quotes alone cannot establish duplication');
+  const fault = profile(people[1]);
+  fault.findings[0].evidence.push(citation(people[1]), citation(people[1], 'feedback', '17.0', 'c2'));
+  assert.equal(engine.profileProblem(fault, people[1]), null);
+  const profiles = [{ participantId: 'p2', findings: fault.findings }];
+  assert.equal(engine.synthesisProblem(v, people, profiles), 'duplicate_diagnosed_comparison');
   // A separate matched response location is not automatically the same contrast.
   people.forEach(p => { p.parts[0].answer += '\nA different explanation.'; });
   v.comparisons[1].evidence = people.map(p => Object.assign(citation(p, 'answer', '17.0', 'c2'), { quote: 'A different explanation.' }));
-  assert.equal(engine.synthesisProblem(v, people), null);
+  assert.equal(engine.synthesisProblem(v, people, profiles), null);
+});
+
+test('valid loop and built-in sum contrasts can quote both complete answers for distinct credited criteria', () => {
+  const people = input().participants;
+  people.forEach((p, index) => {
+    const part = p.parts[0]; part.type = 'Python program'; part.mark = part.maxMarks;
+    part.answer = index ? 'return sum(values)' : 'total = 0\nfor value in values:\n    total += value\nreturn total';
+    part.criteria = [{ id: 'c1', text: 'Returns the sum.' }, { id: 'c2', text: 'Returns zero for empty input.' }];
+    part.feedback.criteria = part.criteria.map(c => ({ id: c.id, assessment: 'met', evidence: [part.answer], basis: 'The implementation satisfies this criterion.' }));
+  });
+  const profiles = people.map(p => {
+    const value = profile(p); value.findings[0].category = 'algorithm_logic';
+    value.findings[0].evidence.push(citation(p, 'answer', '17.0', 'c2'));
+    assert.equal(engine.profileProblem(value, p), null);
+    return { participantId: p.id, findings: value.findings };
+  });
+  const v = synthesis(people); v.comparisons[0].category = 'algorithm_logic'; v.comparisons[0].action = '';
+  v.comparisons[0].evidence = people.map(p => citation(p));
+  v.comparisons.push(Object.assign(clone(v.comparisons[0]), { id: 'c2',
+    statement: 'The zero-initialised accumulator and built-in sum both return zero for an empty list.',
+    evidence: people.map(p => citation(p, 'answer', '17.0', 'c2')) }));
+  assert.equal(engine.synthesisProblem(v, people, profiles), null);
+});
+
+test('complete formatting examples satisfy the same strict contracts as generated results', () => {
+  const data = input();
+  data.participants.forEach((p, index) => {
+    const part = p.parts[0]; part.id = '901.0'; part.questionNumber = 901;
+    part.question = 'Explain how TLS protects tablet backups travelling to their server.';
+    part.criteria = [{ id: 'c1', text: 'Correctly identifies transmission protection.' }, { id: 'c2', text: 'Applies protection to the tablet backup transfer.' }];
+    part.answer = index ? 'TLS protects tablet backups while they travel to the server.' : 'TLS protects data during transmission.';
+    part.mark = index ? 2 : 1;
+    part.feedback = { summary: 'Transmission protection is correctly identified.', strengths: ['Identifies transmission protection.'], improve: index ? [] : ['The backup-transfer setting is not named.'], advice: [],
+      criteria: [{ id: 'c1', assessment: 'met', evidence: [part.answer], basis: 'Transmission protection is explained.' },
+        { id: 'c2', assessment: index ? 'met' : 'not_met', evidence: index ? [part.answer] : [], basis: index ? 'The transfer setting is applied.' : 'The backup-transfer setting is not named.' }] };
+  });
+  const people = engine.canonicalData(data).participants;
+  const examples = policy.FORMAT_EXAMPLES;
+  assert.equal(engine.profileProblem(examples.profile, people[0]), null);
+  assert.equal(engine.profileProblem(examples.profileReview, people[0]), 'extractor_abstention');
+  assert.equal(engine.synthesisProblem(examples.synthesis, people, [{ participantId: 'p1', findings: examples.profile.findings }]), null);
+  assert.equal(engine.synthesisProblem(examples.noDifference, people), null);
+  assert.equal(engine.synthesisProblem(examples.synthesisReview, people), 'synthesis_abstention');
+  let invalid = clone(examples.profile);
+  invalid.findings[0].evidence.push(clone(invalid.findings[1].evidence[0]));
+  assert.equal(engine.profileProblem(invalid, people[0]), 'uncredited_strength', 'unmet background criteria cannot be attached to strengths');
+  invalid = clone(examples.profile);
+  invalid.findings[1].evidence.push(clone(invalid.findings[0].evidence[0]));
+  assert.equal(engine.profileProblem(invalid, people[0]), 'unsupported_shortfall', 'met background criteria cannot be attached to shortfalls');
+  invalid = clone(examples.profile); invalid.findings[0].kind = 'strength|criterion_shortfall';
+  assert.equal(engine.profileProblem(invalid, people[0]), 'finding_schema');
+  invalid = clone(examples.profileReview); invalid.reason = 'Extra field';
+  assert.equal(engine.profileProblem(invalid, people[0]), 'profile_schema');
+  const unmatched = clone(examples.synthesis); unmatched.comparisons[0].evidence[1].criterionId = 'c1';
+  assert.equal(engine.synthesisProblem(unmatched, people), 'unmatched_comparison');
 });
 
 test('schemas reject unknown codes, score fields, missing fields, coerced values and large profiles', async () => {

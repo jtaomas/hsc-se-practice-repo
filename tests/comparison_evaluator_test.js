@@ -16,7 +16,7 @@ function test(name, run) { tests.push({ name, run }); }
 
 function syntheticReport(testCase) {
   if (testCase.expected.status === 'needs_review') {
-    return { status: 'needs_review', summary: 'Review is required.', profiles: [], comparisons: [] };
+    return { status: 'needs_review', summary: 'Review is required.', profiles: [], comparisons: [], audit: { reasons: ['extractor_abstention'] } };
   }
   return {
     status: 'complete', summary: 'This report describes the selected common responses.', comparisons: [],
@@ -186,6 +186,14 @@ test('empty metric denominators are null instead of perfect scores', () => {
   assert.equal(scored.summary.errorPrecision, null);
   assert.equal(scored.summary.errorRecall, null);
   assert.equal(scored.summary.correctCitationRate, null);
+});
+
+test('a malformed output is not a successful semantic contradiction detection', () => {
+  const bundle = reports();
+  bundle.reports.find(item => item.caseId === 'contradictory_marking_feedback').report.audit.reasons = ['profile_schema'];
+  const scored = result(bundle);
+  assert(scored.results.find(item => item.caseId === 'contradictory_marking_feedback').failures.includes('substantive_review_reason'));
+  assert.equal(scored.passed, false);
 });
 
 test('missing cases, duplicate case/run, invalid run and missing permutation baseline are rejected', () => {

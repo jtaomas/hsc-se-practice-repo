@@ -10,6 +10,8 @@ Live site: https://hsc-se-practice-repo.vercel.app
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
 - Papers page, My mistakes page, and opt-in **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
+- Evidence-linked feedback separates rubric shortfalls from 11 response-quality ratings. Lost marks are categorised where the rubric supports exact attribution; holistic shortfalls remain clearly labelled.
+- After submission, **Create my improvement plan** on the results page reviews verified feedback across the paper, identifies supported knowledge/writing patterns and gives prioritised exercises and success checks. A separate AI audit checks the plan; it never changes marks.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
 - Submitted answers are read-only. Use **Start again** for another attempt.
 - Python runs in a separate worker with a **Stop** button and a 10-second execution limit. When a program calls `input()`, a dialog asks for the value, as in the HSC exam. Like the exam, it cannot be closed (Cancel enters an empty value), so `while True: input()` traps you until you reload. Time spent at the dialog does not count towards the limit.
@@ -23,17 +25,20 @@ public/            static site, served as-is (no build step)
   index.html       loads the scripts below IN THIS ORDER (they share globals)
   helpers.js       state S (localStorage key sehsc-nesa-v2), save(), BS(id), question constructors mc/ms/dd/mt/gd/tk/tx/py/ps/sq/dr
   kit.js           more constructors (od drag-order, dm drag-match, ft typed table) and stimulus panels (fig, files, sbs, ctbl, slides)
-  bank1..7.js      the seven papers (push into BANKS)
+  marking/marking.js shared registry and criterion formatter
+  marking/pem2026.js PEM trial marking entries (loaded before banks)
+  marking/doe2026.js DoE trial marking entries (loaded before banks)
+  bank1..9.js      seven original papers and two converted trials (push into BANKS)
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)
   widgets.js       renderers and marking for each question type
   qtypes.js        plug-in question types registered with regType(); drag-and-drop engine
   xd.js            Excalidraw drawing question
-  marking-config.js shared marking-policy version for browser and server
   ace-editor.js    Ace code editor for the Python, pseudocode and SQL boxes (falls back to a textarea if Ace cannot load)
   marking-config.js shared marking-policy version for browser and server
   ai.js            builds the AI-marking request, mistakes helpers
+  feedback.js      detailed feedback, quality ratings and post-exam improvement UI
   sync.js          account UI and progress sync (talks to /api/auth)
   pages.js         header, routes, click handlers, exam / finish / results pages
   pages2.js        Papers and My mistakes pages
@@ -42,6 +47,7 @@ public/            static site, served as-is (no build step)
 api/
   compare.js       signed evidence exports and bounded cohort comparison
   mark.js          authenticated POST: canonical input, cache, quota and marking orchestration
+  improve.js       authenticated post-exam coaching using verified marking evidence
   auth.js          POST: signup, login, load, save (needs BLOB_READ_WRITE_TOKEN)
 server/
   comparison-*.js  verified snapshots, blind profiles, matched comparison and audit
@@ -49,11 +55,16 @@ server/
   marking-engine.js two blind marks, strict evidence checks and independent audit
   marking-json.js  strict JSON parser, including duplicate-key rejection
   marking-store.js private cached decisions, distributed leases and atomic quotas
+  feedback-policy.js loss attribution, quality-factor contract and validation
+  improvement-input.js canonical whole-paper evidence and deterministic aggregates
+  improvement-engine.js bounded coach plus independent evidence audit
 tests/
   run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
   check_banks.js   checks every paper: question count, 80 marks, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
+
+The current inventory has nine 80-mark papers: the seven originals have 27 questions each, the PEM trial has 33, and the DoE trial has 27. Trial source documents, attribution and marking notes are described in [`marking/README.md`](marking/README.md). The marking evaluation corpus remains 105 synthetic cases from the original seven papers; adding the trial papers does not establish their AI marking accuracy.
 
 Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/account`.
 
@@ -64,11 +75,20 @@ python3 -m http.server 8767 --directory public     # then open http://localhost:
 sh tests/run_auth_test.sh                           # API logic, no network
 npm run test:comparison                             # comparison regressions and calibration fixtures, no network
 node tests/sync_test.js                             # concurrency and account-isolation regressions
+for f in public/*.js public/marking/*.js api/*.js server/*.js scripts/*.js; do node --check "$f"; done
 node tests/check_banks.js                           # question structure and paper totals
 node tests/marking_input_test.js                     # canonical questions and diagram evidence
+node tests/deployment_bundle_test.js                 # dynamic question/rubric assets in all AI API bundles
 node tests/marking_engine_test.js                    # blind marks, audit, validation and deadlines
 node tests/marking_api_test.js                       # API integration with mocked provider
 node tests/marking_client_test.js                    # stale results, abstention and totals
+node tests/feedback_client_test.js                   # feedback display and stale coaching results
+node tests/improvement_input_test.js                 # verified evidence and objective scoring parity
+node tests/improvement_engine_test.js                # grounded patterns, bounded coach and audit
+node tests/improvement_api_test.js                   # coaching auth/cache/quota/persistence
+node tests/improvement_evaluator_test.js             # isolated live-coach evaluation controls
+node tests/marking_evaluator_test.js                 # calibration dataset and evaluation budgets
+node scripts/evaluate-marking.js --validate --split all # offline reference-set validation
 sh tests/run_marking_store_test.sh                   # mocked storage, leases, quotas and caching
 pip install playwright && playwright install chromium
 python3 tests/run_ui_test.py                        # starts its own local server, mocks APIs
@@ -84,7 +104,7 @@ Account storage uses the Blob SDK's ETag conditional writes. Login attempts rese
 
 | Name | Used by | Notes |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/compare.js` | Production only. Each AI-marked answer spends DeepSeek balance. |
+| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
 | `BLOB_READ_WRITE_TOKEN` | accounts, marking and comparison storage | Private Vercel Blob store holding hashed accounts, progress, marking results and quotas. |
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
@@ -92,6 +112,8 @@ Only the project owner needs these. Contributors do not need them: tests use moc
 The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job uses three calls. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
 
 See [AI marking design and verification](docs/AI_MARKING.md) for prompts, budgets, review states, privacy, limitations and the teacher-calibration checklist. `vercel.json` requests Fluid compute and a 300-second function limit; the deployment must support that limit. No live API calls are part of the test suite.
+
+See [the improvement coach](docs/AI_IMPROVEMENT.md) for its evidence requirements and two-call budget, and [marking calibration](docs/MARKING_CALIBRATION.md) for the assistant-labelled reference answers and opt-in direct-provider evaluation. Unit/browser tests use mocks and do not establish live marking accuracy. A local `.env.eval` file is ignored by Git; `--env-file .env.eval` safely loads its `DEEPSEEK_API_KEY` for explicitly budgeted live evaluations. Never commit credentials or paste them into an issue.
 
 ## Comparing submitted work
 
@@ -112,4 +134,3 @@ Everyone with access works directly on `main`.
 3. `git commit` and `git push`. Vercel deploys `main` to production within about a minute.
 
 See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
-

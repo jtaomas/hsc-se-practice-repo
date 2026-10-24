@@ -103,6 +103,9 @@ function citationCorrect(ref, input) {
   const feedback = part.feedback;
   const strings = [feedback.summary].concat(feedback.strengths, feedback.improve, feedback.advice);
   for (const criterion of feedback.criteria) if (criterion.id === ref.criterionId) strings.push(criterion.basis, ...criterion.evidence);
+  if (feedback.losses) for (const item of feedback.losses.items) {
+    if (item.criterionIds.includes(ref.criterionId)) strings.push(item.explanation, item.action, ...item.evidence);
+  }
   return strings.some(text => typeof text === 'string' && text.includes(ref.quote));
 }
 function score(test, report, engine) {

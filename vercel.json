@@ -4,7 +4,11 @@
   "functions": {
     "api/mark.js": {
       "maxDuration": 300,
-      "includeFiles": "public/{helpers,kit,bank*,formats,marking/*}.js"
+      "includeFiles": "public/{helpers,kit,bank*,formats,marking-config,marking/*}.js"
+    },
+    "api/improve.js": {
+      "maxDuration": 300,
+      "includeFiles": "public/{helpers,kit,bank*,formats,marking-config,marking/*}.js"
     },
     "api/compare.js": {
       "maxDuration": 300,

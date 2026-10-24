@@ -63,7 +63,7 @@ with sync_playwright() as p:
     pg.goto(U+'#/1/q/15');pg.wait_for_timeout(200)
     assert pg.get_attribute('.rta','contenteditable')=='false','submitted answer is editable through an old route'
     pg.goto(U+'#/1/q/19');pg.wait_for_timeout(200)
-    before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab',force=True) if not os.environ.get('ACE_DIR') else None
+    before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab') if not os.environ.get('ACE_DIR') else None
     if os.environ.get('ACE_DIR'):
         pg.wait_for_selector('.cedit.ace-on',timeout=15000)
         assert pg.evaluate("Object.values(ACE_ED).every(function(e){return e.getReadOnly()})"),'submitted Python editor is not read-only'

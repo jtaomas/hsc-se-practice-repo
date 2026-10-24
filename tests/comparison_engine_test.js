@@ -22,6 +22,29 @@ function input(count = 2) {
     coverage: { includedParts: 1, excludedParts: 0, totalParts: 1 } };
   }) };
 }
+function bandInput() {
+  const value = input();
+  value.participants.forEach((person, index) => {
+    const part = person.parts[0];
+    part.maxMarks = 3; part.mark = index === 0 ? 3 : 1;
+    part.criteria = [{ id: 'c1', text: '3 marks: Explains the reuse mechanism and its effect on latency.' },
+      { id: 'c2', text: '2 marks: Describes reuse with a limited effect.' }, { id: 'c3', text: '1 mark: Identifies caching.' }];
+    part.feedback.criteria = part.criteria.map(item => ({ id: item.id,
+      assessment: item.id === (index === 0 ? 'c1' : 'c3') ? 'met' : 'context', evidence: [part.answer],
+      basis: item.id === (index === 0 ? 'c1' : 'c3') ? 'This is the selected whole-answer band.' : 'This is an unselected comparison band.' }));
+    part.feedback.losses = { allocation: 'holistic', totalLost: 3 - part.mark, items: index === 0 ? [] : [{
+      category: 'insufficient_explanation', marksLost: null, criterionIds: ['c1', 'c2'], evidence: [part.answer],
+      explanation: 'The reuse mechanism is not connected to latency.', action: 'Connect cached reuse to avoiding repeated database access.'
+    }] };
+  });
+  return value;
+}
+function bandProfile(person, criterionId = 'c1') {
+  const value = profile(person), part = person.parts[0];
+  value.findings[0].evidence = [{ participantId: person.id, questionId: part.id, criterionId,
+    source: 'feedback', quote: part.feedback.losses.items[0].explanation }];
+  return value;
+}
 function citation(person, source = 'answer', question = '17.0', criterion = 'c1') {
   const part = person.parts.find(item => item.id === question);
   return { participantId: person.id, questionId: question, criterionId: criterion, source,
@@ -114,6 +137,121 @@ test('canonical input rejects unmatched opportunities, unverified sources, dupli
   for (const change of changes) { const value = input(); change(value); assert.throws(() => engine.canonicalData(value), error => error.code === 'invalid_comparison_input'); }
   const large = input(); large.statistics = { padding: 'x'.repeat(engine.LIMITS.inputBytes) };
   assert.throws(() => engine.canonicalData(large), error => error.code === 'comparison_input_too_large');
+});
+
+test('canonical loss feedback is preserved without trusting proposed scoring models or mutable references', () => {
+  const value = bandInput(), before = clone(value);
+  value.participants[1].parts[0].scoringModel = { bands: [{ id: 'c3', minMarks: 99, maxMarks: 99 }] };
+  const canonical = engine.canonicalData(value), part = canonical.participants[1].parts[0];
+  assert.deepEqual(part.feedback.losses, before.participants[1].parts[0].feedback.losses);
+  assert.deepEqual(part.scoringModel.bands, [{ id: 'c1', minMarks: 3, maxMarks: 3 }, { id: 'c2', minMarks: 2, maxMarks: 2 }, { id: 'c3', minMarks: 1, maxMarks: 1 }]);
+  part.feedback.losses.items[0].criterionIds.push('invented');
+  part.feedback.losses.items[0].evidence[0] = 'changed';
+  assert.deepEqual(value.participants[1].parts[0].feedback.losses, before.participants[1].parts[0].feedback.losses);
+  assert.equal(engine.canonicalData(input()).participants[0].parts[0].feedback.losses, undefined, 'legacy omission stays optional');
+});
+
+test('supplied losses require exact deficit accounting, bounded source evidence and the canonical scoring convention', () => {
+  const changes = [
+    loss => loss.totalLost = 1, loss => loss.allocation = 'exact', loss => loss.items = [],
+    loss => loss.items.push(clone(loss.items[0])), loss => loss.items[0].marksLost = 2,
+    loss => loss.items[0].category = 'invented', loss => loss.items[0].criterionIds = ['unknown'],
+    loss => loss.items[0].criterionIds = ['c1', 'c1'], loss => loss.items[0].evidence = ['invented quote'],
+    loss => loss.items[0].evidence = Array(7).fill('The'), loss => loss.items[0].evidence.push(loss.items[0].evidence[0]),
+    loss => loss.items[0].explanation = 'x'.repeat(601), loss => loss.items[0].action = 'x'.repeat(501),
+    loss => loss.items[0].category = 'no_response', loss => loss.extra = true
+  ];
+  for (const change of changes) {
+    const value = bandInput(); change(value.participants[1].parts[0].feedback.losses);
+    assert.throws(() => engine.canonicalData(value), error => error.code === 'invalid_comparison_input');
+  }
+  const invalid = bandInput(); invalid.participants[1].parts[0].feedback.criteria[0].assessment = 'partial';
+  assert.throws(() => engine.canonicalData(invalid), error => error.code === 'invalid_comparison_input');
+  const exact = input();
+  exact.participants.forEach(person => {
+    const part = person.parts[0]; part.maxMarks = 1; part.mark = person.id === 'p1' ? 1 : 0;
+    part.criteria[0].text = '1 mark: Explains cached reuse.';
+    part.feedback.losses = { allocation: 'exact', totalLost: 1 - part.mark, items: part.mark ? [] : [{
+      category: 'technical_error', marksLost: 1, criterionIds: ['c1'], evidence: [part.answer], explanation: 'The mechanism is incorrect.', action: 'Explain cached reuse.' }] };
+  });
+  assert.equal(engine.canonicalData(exact).participants[1].parts[0].feedback.losses.totalLost, 1);
+  exact.participants[1].parts[0].feedback.losses.items[0].marksLost = 2;
+  assert.throws(() => engine.canonicalData(exact), error => error.code === 'invalid_comparison_input');
+});
+
+test('only explicitly loss-targeted higher whole-answer bands support context shortfalls', () => {
+  const person = engine.canonicalData(bandInput()).participants[1];
+  for (const id of ['c1', 'c2']) assert.equal(engine.profileProblem(bandProfile(person, id), person), null);
+  let p = clone(person), value = bandProfile(p); delete p.parts[0].feedback.losses;
+  // Keep an otherwise valid feedback quotation after omitting loss metadata.
+  value.findings[0].evidence[0].quote = p.parts[0].feedback.criteria[0].basis;
+  assert.equal(engine.profileProblem(value, p), 'unsupported_shortfall');
+  p = clone(person); p.parts[0].feedback.losses.items[0].criterionIds = ['c2'];
+  value = bandProfile(p); value.findings[0].evidence[0].quote = p.parts[0].feedback.criteria[0].basis;
+  assert.equal(engine.profileProblem(value, p), 'unsupported_shortfall');
+  p = clone(person); p.parts[0].mark = 2; p.parts[0].feedback.losses.totalLost = 1;
+  p.parts[0].feedback.criteria[1].assessment = 'met'; p.parts[0].feedback.criteria[2].assessment = 'context';
+  p.parts[0].feedback.losses.items[0].criterionIds = ['c1', 'c2', 'c3'];
+  for (const id of ['c2', 'c3']) assert.equal(engine.profileProblem(bandProfile(p, id), p), 'unsupported_shortfall', 'earned or lower bands cannot supply shortfalls');
+  p = clone(person); p.parts[0].criteria[0].text = 'For example, explain cached reuse.';
+  assert.equal(engine.profileProblem(bandProfile(p), p), 'unsupported_shortfall', 'illustrative prose does not create a band');
+  p = clone(person); p.parts[0].criteria[1].text = '3 marks: Overlapping descriptors are not exclusive bands.';
+  assert.equal(engine.profileProblem(bandProfile(p), p), 'unsupported_shortfall', 'ambiguous bands cannot enable the exception');
+});
+
+test('loss quotations remain tied to their referenced criteria and do not multiply one fault', () => {
+  const person = engine.canonicalData(bandInput()).participants[1], value = bandProfile(person);
+  value.findings[0].evidence.push(...bandProfile(person, 'c2').findings[0].evidence);
+  assert.equal(engine.profileProblem(value, person), null, 'one gap can explain two higher descriptors');
+  const unrelated = clone(value.findings[0].evidence[0]); unrelated.criterionId = 'c3';
+  assert.equal(engine.evidenceProblem([unrelated], [person]), 'unsupported_evidence');
+  unrelated.criterionId = 'c1'; unrelated.quote = person.parts[0].feedback.losses.items[0].action;
+  assert.equal(engine.evidenceProblem([unrelated], [person]), null);
+  value.findings.push(Object.assign(clone(value.findings[0]), { id: 'f2', evidence: [value.findings[0].evidence.pop()] }));
+  assert.equal(engine.profileProblem(value, person), 'duplicate_repair');
+});
+
+test('a documented within-band gap can use the selected descriptor only below its own ceiling', () => {
+  const data = bandInput();
+  data.participants.forEach((person, index) => {
+    const part = person.parts[0]; part.maxMarks = 8; part.mark = index ? 7 : 8;
+    part.criteria = [{ id: 'c1', text: '7–8 marks: Evaluates the alternatives with a supported judgement.' },
+      { id: 'c2', text: '5–6 marks: Explains alternatives with some judgement.' }, { id: 'c3', text: '3–4 marks: Describes alternatives.' },
+      { id: 'c4', text: '1–2 marks: Identifies relevant alternatives.' }];
+    part.feedback.criteria = part.criteria.map((c, i) => ({ id: c.id, assessment: i ? 'context' : 'met', evidence: i ? [] : [part.answer], basis: i ? 'Unselected band.' : 'The response is in the top band, with scope for stronger development within it.' }));
+    part.feedback.losses.totalLost = index ? 1 : 0;
+    if (index) part.feedback.losses.items[0].criterionIds = ['c1'];
+  });
+  const person = engine.canonicalData(data).participants[1];
+  assert.equal(engine.profileProblem(bandProfile(person), person), null, '7/8 can have an explicitly documented gap within the 7–8 band');
+  let p = clone(person), value = bandProfile(p); delete p.parts[0].feedback.losses;
+  value.findings[0].evidence[0].quote = p.parts[0].feedback.criteria[0].basis;
+  assert.equal(engine.profileProblem(value, p), 'unsupported_shortfall', 'selected-band headroom alone does not diagnose a scored gap');
+  p = clone(person); p.parts[0].mark = 6; p.parts[0].feedback.losses.totalLost = 2;
+  p.parts[0].feedback.losses.items[0].criterionIds = ['c2'];
+  p.parts[0].feedback.criteria[0].assessment = 'context'; p.parts[0].feedback.criteria[1].assessment = 'met';
+  assert.equal(engine.profileProblem(bandProfile(p, 'c2'), p), 'unsupported_shortfall', 'a selected lower band at its ceiling is not a within-band shortfall');
+  p = clone(person); p.parts[0].mark = 8; p.parts[0].feedback.losses.totalLost = 0;
+  assert.equal(engine.profileProblem(bandProfile(person), p), 'unsupported_shortfall', 'full marks never acquire a scored shortfall');
+  p = clone(person); p.parts[0].criteria[0].text = 'Evaluates alternatives; this is an ordinary criterion, not an exclusive range.';
+  assert.equal(engine.profileProblem(bandProfile(p), p), 'unsupported_shortfall', 'ordinary met criteria cannot use the band exception');
+  p = clone(person); p.parts[0].feedback.losses.allocation = 'exact';
+  assert.equal(engine.profileProblem(bandProfile(p), p), 'unsupported_shortfall', 'additive allocations cannot use the band exception');
+});
+
+test('modern band feedback reaches every comparison stage and retains the original marks', async () => {
+  const m = mock({ profile: (value, request) => request.content.participant.id === 'p2' ? bandProfile(request.content.participant) : value });
+  const result = await m.run(bandInput());
+  assert.equal(result.status, 'complete'); assert.equal(m.requests.length, 4);
+  for (const request of m.requests) {
+    const participants = request.content.participant ? [request.content.participant] : request.content.originalEvidence.participants;
+    for (const participant of participants) {
+      assert.equal(participant.parts[0].mark, participant.id === 'p1' ? 3 : 1);
+      assert.equal(participant.parts[0].feedback.losses.totalLost, participant.id === 'p1' ? 0 : 2);
+      assert.equal(participant.parts[0].scoringModel.bands.length, 3);
+    }
+    assert(request.body.messages[0].content.includes('explicitly names that criterionId'));
+  }
 });
 
 test('exact original quotes, criterion IDs, participant ownership and duplicate citations are enforced', async () => {

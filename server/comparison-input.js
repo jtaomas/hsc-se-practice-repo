@@ -2,6 +2,7 @@
 // Canonical evidence and arithmetic. No browser mark, rubric or test claim is trusted.
 const marking = require('./marking-input');
 const marker = require('./marking-engine');
+const { cacheValid } = require('./improvement-input');
 const CLOSED = new Set(['mc', 'ms', 'dd', 'gd', 'mt', 'tk', 'od', 'dm']);
 const VERSION = 1;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -119,9 +120,11 @@ async function prepareExport(request, paper, getMark) {
     const digest = marking.digest({ input: prepared.input, questionVersion: prepared.questionVersion, rubricVersion: prepared.rubricVersion, model: marker.MODEL, harness: marker.HARNESS_VERSION });
     if (row.markingDigest !== digest || prepared.reviewReason) { excluded.push({ id, reason: 'stale_or_unverified_mark' }); continue; }
     const result = await getMark(digest);
-    if (!result || result.status !== 'marked' || !Number.isInteger(result.mark) || result.mark < 0 || result.mark > it.m || !result.audit || result.audit.inputDigest !== digest || result.audit.harnessVersion !== marker.HARNESS_VERSION || result.audit.questionVersion !== prepared.questionVersion || result.audit.rubricVersion !== prepared.rubricVersion) { excluded.push({ id, reason: 'unconfirmed_mark' }); continue; }
+    // Apply the same current provenance, checksum and canonical-evidence checks
+    // as the individual coach before signing an export of confirmed feedback.
+    if (!result || result.status !== 'marked' || !cacheValid(result, prepared, digest, null, marker)) { excluded.push({ id, reason: 'unconfirmed_mark' }); continue; }
     const input = prepared.input;
-    parts.push(Object.assign(base, { type: input.type, question: input.question, stimulus: input.stimulus, criteria: input.criteria, sample: input.sample, maxMarks: it.m, answer: input.answer, mark: result.mark, status: 'marked', source: 'agentic', markingDigest: digest, markingHarness: marker.HARNESS_VERSION, feedback: { summary: result.summary, strengths: result.strengths, improve: result.improve, advice: result.advice, criteria: result.criteria } }));
+    parts.push(Object.assign(base, { type: input.type, question: input.question, stimulus: input.stimulus, criteria: input.criteria, sample: input.sample, maxMarks: it.m, answer: input.answer, mark: result.mark, status: 'marked', source: 'agentic', markingDigest: digest, markingHarness: marker.HARNESS_VERSION, feedback: { summary: result.summary, strengths: result.strengths, improve: result.improve, advice: result.advice, criteria: result.criteria, losses: JSON.parse(JSON.stringify(result.losses)) } }));
   }
   if (!parts.length) throw error(409, 'no_verified_evidence', 'There are no verified responses to export. Complete agentic marking and sync your paper first.');
   return { version: VERSION, bankId: bank.id, questionSetVersion: marking.digest(bank), markingHarness: marker.HARNESS_VERSION, parts, coverage: { includedParts: parts.length, excludedParts: totalParts - parts.length, totalParts }, excluded };

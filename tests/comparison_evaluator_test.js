@@ -205,6 +205,32 @@ test('fabricated quote fails provenance and the engine profile validator', () =>
   assert(scored.summary.correctCitationRate < 1);
 });
 
+test('higher-band loss citations are evaluated with the same scoped provenance as the engine', () => {
+  const testCase = clone(fixture.cases[0]), report = syntheticReport(testCase);
+  testCase.input.participants.forEach((person, index) => {
+    const part = person.parts[0], old = part.feedback.criteria.find(item => item.assessment === 'not_met');
+    part.criteria = [{ id: 'c1', text: '2 marks: Explains correct cached reuse applied to the catalogue.' },
+      { id: 'c2', text: '1 mark: Identifies one relevant aspect of caching.' }];
+    part.feedback.criteria = [{ id: 'c1', assessment: 'context', evidence: [], basis: 'Unselected higher band.' },
+      { id: 'c2', assessment: 'met', evidence: [part.answer], basis: 'The response meets the selected band.' }];
+    part.feedback.losses = { allocation: 'holistic', totalLost: 1, items: [{
+      category: index === 0 ? 'application_gap' : 'technical_error', marksLost: null, criterionIds: ['c1'], evidence: [],
+      explanation: 'The higher band is not met: ' + old.basis, action: 'Repair the specific missing achievement in this response.'
+    }] };
+    const citation = report.profiles[index].findings[0].evidence[0];
+    citation.criterionId = 'c1'; citation.quote = part.feedback.losses.items[0].explanation;
+    assert.equal(harness.citationCorrect(citation, testCase.input), true);
+    assert.equal(harness.citationCorrect(Object.assign({}, citation, { criterionId: 'c2' }), testCase.input), false);
+  });
+  const scored = harness.score(testCase, report, engine);
+  assert.equal(scored.passed, true); assert.equal(scored.correctCitations, 2);
+  report.profiles[0].findings[0].evidence[0].quote = 'Invented higher-band loss.';
+  const invalid = harness.score(testCase, report, engine);
+  assert.equal(invalid.passed, false);
+  assert(invalid.failures.includes('citation_correctness'));
+  assert(invalid.failures.includes('profile_validation:p1:unsupported_evidence'));
+});
+
 test('valid quotation attributed to another participant still fails profile ownership', () => {
   const bundle = reports(), other = fixture.cases[0].input.participants[1].parts[0];
   firstFinding(bundle).evidence[0] = { participantId: 'p2', questionId: '1.0', criterionId: 'c1', source: 'feedback', quote: other.feedback.improve[0] };

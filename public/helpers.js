@@ -44,9 +44,11 @@ var IC={
   right:svg('0 0 8 12','<path d="M1.5 1.5 6 6l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/>','chev'),
   flag:svg('0 0 16 16','<path fill="currentColor" d="M2 1h1.7v14H2z"/><path fill="currentColor" d="M3.7 1.6h9.6l-2.5 3.6 2.5 3.6H3.7z"/>'),
   pen:svg('0 0 16 16','<path fill="currentColor" d="m10.6 1.2 4.2 4.2-6.6 6.9-3.4.5-1.9-1.9.5-3.4z"/><path fill="currentColor" d="M1 15h7v-1.6H1z"/>'),
-  font:svg('0 0 16 16','<path fill="currentColor" d="M8 1.4 1.8 14.6H4l1.2-2.8h5.6l1.2 2.8h2.2zM6 10l2-4.6L10 10z"/>'),
+  font:svg('0 0 16 16','<text x="8" y="14" text-anchor="middle" font-family="Georgia,\'Times New Roman\',serif" font-weight="700" font-size="17" fill="currentColor">A</text>'),
   contrast:svg('0 0 16 16','<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path fill="currentColor" d="M8 1.8a6.2 6.2 0 0 0 0 12.4z"/>'),
-  key:svg('0 0 16 16','<path fill="currentColor" d="M10.6 1.3a4 4 0 0 1 1.3 7.8l-.5.2-1 1.1H9.2v1.6H7.6v1.6H5.8L3 16l-2-2 5.8-5.8-.1-.6a4 4 0 0 1 3.9-6.3zm1.3 2.6a1.1 1.1 0 1 0-2.2 0 1.1 1.1 0 0 0 2.2 0z"/>'),
+  key:svg('0 0 16 16','<path fill="currentColor" fill-rule="evenodd" d="M5.4.8a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2zM4.2 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/><path fill="none" stroke="currentColor" stroke-width="2.1" d="M8.6 8.6 14.6 14.6M11.4 11.4l1.9-1.9M13.2 13.2l1.7-1.7"/>'),
+  chk:svg('0 0 14 12','<path d="m1.5 6.3 3.6 3.6L12.5 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square"/>','chk'),
+  reset:svg('0 0 16 16','<path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M8.6 1.6h5.4v5.4z"/>'),
   tick:svg('0 0 16 16','<circle cx="8" cy="8" r="8" fill="#2ecc71"/><path d="m4.3 8.4 2.5 2.6 5-5.2" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="square"/>','tick')
 };
 function mkTopics(){return ['Software Engineering Project','Programming for the Web','Secure Software Architecture','Software Automation']}

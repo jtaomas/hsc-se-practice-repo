@@ -2,7 +2,7 @@
 var FG=[['Default','#000000'],['White','#ffffff'],['Navy','#002664'],['Yellow','#ffe600'],['Green','#7CFC00']];
 var BGS=[['Default','#ffffff','#f2f2f2'],['Light yellow','#fffbd6','#f4efbb'],['Light blue','#e3f2fa','#cfe6f2'],['Light pink','#fdeaf0','#f4d3de'],['Black','#000000','#1b1b1b'],['Dark grey','#222222','#333333']];
 var FSN=['Regular','Large','Extra Large','XX Large'];
-var MENU='',CUR={b:null,n:0,rv:false},INFO=false;
+var MENU={},CPK='',CUR={b:null,n:0,rv:false},INFO=false;
 function applyTheme(){
   document.body.className='fs'+S.font;
   var r=document.documentElement.style;
@@ -10,13 +10,17 @@ function applyTheme(){
 }
 function toolsHTML(full){
   var bs=CUR.b?BS(CUR.b.id):null,fl=bs&&bs.flags[CUR.n];
-  function tb(id,ic,lab,menu,cls){return '<div class="tb"><button class="tbb'+(cls||'')+(MENU===id?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'">'+ic+'<span>'+lab+'</span>'+(menu?IC.down.replace('class="ic chev"','class="ic chev drop"'):'')+'</button>'+(MENU===id?menuHTML(id):'')+'</div>'}
-  return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'FLAGGED':'FLAG',false)+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
+  function tb(id,ic,lab,menu,cls){var open=!!MENU[id];return '<div class="tb"><button class="tbb'+(cls||'')+(open?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'"'+(menu?' aria-expanded="'+open+'"':'')+'>'+ic+'<span>'+lab+'</span>'+(menu?'<span class="drop'+(open?' open':'')+'">'+(open?IC.up:IC.down)+'</span>':'')+'</button>'+(open?menuHTML(id):'')+'</div>'}
+  return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'REMOVE FLAG':'FLAG',false,fl?' flagged':'')+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
+}
+function cpick(w,list,cur){
+  return '<div class="cpk"><button type="button" class="cpb" data-act="cpk" data-w="'+w+'" aria-label="'+(w==='fg'?'Font':'Background')+' colour, '+list[cur][0]+'"><i class="sw" style="background:'+list[cur][1]+'"></i><span class="tri">&#9660;</span></button>'+
+    (CPK===w?'<div class="pal">'+list.map(function(c,i){return '<button type="button" class="pw'+(i===cur?' sel':'')+'" data-act="'+w+'" data-v="'+i+'" title="'+c[0]+'" aria-label="'+c[0]+'" style="background:'+c[1]+'"></button>'}).join('')+'</div>':'')+'</div>';
 }
 function menuHTML(id){
-  if(id==='hl')return '<div class="ddm"><button data-act="hl" data-c="yellow"><i class="sw" style="background:#f7ee94"></i>Yellow</button><button data-act="hl" data-c="blue"><i class="sw" style="background:#b5e2f1"></i>Blue</button><button data-act="hl" data-c="red"><i class="sw" style="background:#f3aec0"></i>Red</button><button data-act="hl" data-c="none">No colour</button><div style="font-size:.8em;margin-top:4px;color:#555">Select text in the question, then pick a colour.</div></div>';
-  if(id==='fs')return '<div class="ddm">'+FSN.map(function(n,i){return '<button data-act="fs" data-v="'+i+'"'+(S.font===i?' class="sel"':'')+'>'+n+'</button>'}).join('')+'</div>';
-  if(id==='col')return '<div class="ddm"><h5>Font colour</h5>'+FG.map(function(c,i){return '<button data-act="fg" data-v="'+i+'"'+(S.fg===i?' class="sel"':'')+'><i class="sw" style="background:'+c[1]+'"></i>'+c[0]+'</button>'}).join('')+'<h5>Background colour</h5>'+BGS.map(function(c,i){return '<button data-act="bg" data-v="'+i+'"'+(S.bg===i?' class="sel"':'')+'><i class="sw" style="background:'+c[1]+'"></i>'+c[0]+'</button>'}).join('')+'<button data-act="creset"><b>Reset colours</b></button></div>';
+  if(id==='hl')return '<div class="ddm hl"><div class="ddl">Choose colour:</div><div class="sws"><button type="button" class="swb y" data-act="hl" data-c="yellow" aria-label="Yellow"></button><button type="button" class="swb b" data-act="hl" data-c="blue" aria-label="Blue"></button><button type="button" class="swb r" data-act="hl" data-c="red" aria-label="Pink"></button></div><button type="button" class="nocol" data-act="hl" data-c="none">No colour</button></div>';
+  if(id==='fs')return '<div class="ddm fs">'+FSN.map(function(n,i){var on=S.font===i;return '<button type="button" data-act="fs" data-v="'+i+'" role="menuitemradio" aria-checked="'+on+'"><span class="ck">'+(on?IC.chk:'')+'</span>'+n+'</button>'}).join('')+'</div>';
+  if(id==='col')return '<div class="ddm col"><div class="crow"><span>Font colour:</span>'+cpick('fg',FG,S.fg)+'</div><div class="crow"><span>Background colour:</span>'+cpick('bg',BGS,S.bg)+'</div><button type="button" class="rst" data-act="creset">'+IC.reset+'<span>reset to default settings</span></button></div>';
   return '';
 }
 function redrawTools(){var t=$('#tools');if(t)t.innerHTML=toolsHTML(!!CUR.b&&CUR.n>0)}
@@ -35,18 +39,43 @@ function frame(title,main,opt){
     (opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>');
 }
 function infoHTML(){
-  return '<div class="modal" data-act="closeinfo"><div class="box" role="dialog" aria-label="Information"><button class="nb red sm x" data-act="closeinfo">Close this screen ✕</button><h2>Exam information</h2>'+
-    '<h3>Reading time and working time</h3><p>The real examination gives 10 minutes of reading time, then 2 hours 20 minutes of working time. The timer here counts down the working time from the moment you press Start. It does not lock your answers when it reaches zero.</p>'+
-    '<h3>Navigation</h3><p>Use the numbered boxes to jump to any question. A green tick means the question has an answer. The flag button marks a question you want to return to. Next and Previous move one question at a time.</p>'+
-    '<h3>Toolbar</h3><p>Highlight colours selected text in the question. Font size and Colour change how the page looks. Colour has a reset option.</p>'+
-    '<h3>Word count</h3><p>Written responses show a word count under the box. The number is a guide to the expected length. The counter turns red if you go over.</p>'+
-    '<h3>Python editor</h3><p>Write code in the left pane and press Run to see the result in the black output pane. The first run downloads Python, so it needs an internet connection. Put input() values in Program input, one value per line. Use Stop to cancel a run. Programs stop automatically after 10 seconds.</p>'+
-    '<h3>Pseudocode editor</h3><p>This editor has no Run button. Indent with the Tab key. Follow the syllabus style: BEGIN, END, IF, ELSEIF, ELSE, ENDIF, WHILE, ENDWHILE, FOR, NEXT, REPEAT, UNTIL, SUBROUTINE.</p>'+
-    '<h3>SQL editor</h3><p>Run shows the rows your query returns. You may use the syllabus words (GREATER THAN, EQUALS, CONTAINS and so on). Only SELECT queries are accepted.</p>'+
-    '<h3>Drag and drop</h3><p>Drag a card into a box with the mouse or your finger. You can also click a card, then click the box. Drag a placed card to another box to swap them, or back to the list to remove it. Keyboard: Tab to a card, press Enter, then Tab to a box and press Enter.</p>'+
+  function nb(t,x,c){return '<span class="nav-elem'+(c?' '+c:'')+'">'+t+(x||'')+'</span>'}
+  function mt(ic,lab,menu,cls){return '<span class="tbb'+(cls||'')+'"><span class="tic'+(cls==='flagged'||lab==='FLAG'||lab==='REMOVE FLAG'?' flagc':'')+'">'+ic+'</span><span>'+lab+'</span>'+(menu?'<span class="drop">'+IC.down+'</span>':'')+'</span>'}
+  var tick='<span class="an">'+IC.tick+'</span>',flag='<span class="fl">'+IC.flag+'</span>';
+  var left=
+    '<h1 class="imh">Exam information</h1>'+
+    '<h3>Reading time</h3><p>This practice site gives no reading time. In the real examination you have 10 minutes of reading time first. You can move between the questions, flag them and highlight text, but you cannot answer questions or leave the exam during that time.</p>'+
+    '<h3>Working time</h3><p>Working time is 2 hours 20 minutes. In exam mode the timer counts down from the moment you start. In practice mode there is no time limit.</p>'+
+    '<h3>Permitted equipment</h3><p>In the real examination:</p><ul class="bl"><li>Pen and paper are permitted for planning. The supervisor provides the paper.</li><li>Notes, calculators and other aids are not permitted.</li></ul>'+
+    '<h3>Word count</h3><div class="wcrow"><p><b>Each short-answer response shows a word count. It is a guide to how long your answer should be.</b></p><span class="wcpill">0 / 500 words</span></div>'+
+    '<h2 class="imh2">Navigation and toolbar</h2>'+
+    '<p><b>The navigation bar</b> holds the question numbers and gives you access to this information page. Use the arrow boxes at either end to move along the numbers when they do not all fit.</p>'+
+    '<div class="mnav"><span class="nav-arr">'+IC.left+'</span>'+nb('3',tick)+nb('4')+nb('5','','cur')+nb('6',flag)+nb('7')+'<span class="nav-arr">'+IC.right+'</span></div>'+
+    '<div class="leg"><div class="lg">'+nb('6',flag)+'<span>A question you have flagged to come back to later</span></div>'+
+    '<div class="lg">'+nb('2',tick)+'<span>A question for which you have attempted all parts</span></div>'+
+    '<div class="lg">'+nb('5','','cur')+'<span>The question you are on now</span></div>'+
+    '<div class="lg">'+nb('8')+'<span>A question you have not answered yet</span></div></div>'+
+    '<p><b>The toolbar</b> sits on the right of the navigation bar.</p>'+
+    '<div class="leg tl">'+
+    '<div class="lg">'+mt(IC.flag,'FLAG')+'<span>Flags the question you are on. The button then reads REMOVE FLAG and a flag appears above the question number.</span></div>'+
+    '<div class="lg">'+mt(IC.pen,'HIGHLIGHT',true)+'<span>Select text in the question, then choose yellow, blue or pink. Choose No colour to clear every highlight on the page.</span></div>'+
+    '<div class="lg">'+mt(IC.font,'FONT SIZE',true)+'<span>Choose Regular, Large, Extra Large or XX Large text.</span></div>'+
+    '<div class="lg">'+mt(IC.contrast,'COLOUR',true)+'<span>Change the font colour and background colour. Use reset to default settings to go back to black on white.</span></div>'+
+    '<div class="lg">'+mt(IC.key,'INFO',false,' info')+'<span>Opens this page.</span></div></div>';
+  var right=
+    '<h3>Textbox tools</h3><p>The response textboxes have standard text styling buttons: bold, underline, italic, lists, indent, subscript, superscript, undo and redo. Two more buttons insert symbols:</p>'+
+    '<div class="tbt"><div><span class="tbi">&#937;</span><span>Special characters</span></div><div><span class="tbi">&#8721;</span><span>Formula symbols</span></div></div>'+
+    '<h3>Copy and paste</h3><p>Copy text with Ctrl+C (Windows) or Command+C (Mac). Paste it with Ctrl+V or Command+V. Your device may also have its own symbols palette, which you can use in the response textbox.</p>'+
+    '<h3>Sort &ndash; Drag and Drop</h3><p>Some questions ask you to place items in order or into boxes. Select an item by clicking it, then drag it to a target area, or click the target area. Drag a placed item to another box to swap them, or back to the list to remove it.</p>'+
+    '<p>With the keyboard, Tab to an item, press Enter, then Tab to a box and press Enter.</p>'+
+    '<h3>Drawing tool</h3><p>A brief demonstration of the Drawing tool is shown. Choose a shape, then click the page to place it, and type to label it. Use the connector tools to join two shapes. Reset clears the page.</p>'+
+    '<div class="dmo"><div class="dmh"><span><b>7 (b)</b> &nbsp;Sample question text appears here.</span><span class="dmb"><i class="n">Full screen</i><i class="n">Reset</i><i class="o">hide'+IC.up+'</i></span></div><div class="dmc"><div class="dmt"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="dml">Library</div></div></div>'+
+    '<h3>Code editors</h3><p><b>Python:</b> write code in the left pane and press Run to see the result in the output pane. The first run downloads Python, so you need an internet connection. Put input() values in Program input, one value per line. Use Stop to cancel a run. Programs stop after 10 seconds.</p>'+
+    '<p><b>Pseudocode:</b> there is no Run button. Indent with the Tab key and follow the syllabus style.</p>'+
+    '<p><b>SQL:</b> Run shows the rows your query returns. Reset DB clears the results. Only SELECT queries are accepted, and you may use the syllabus words such as GREATER THAN, EQUALS and CONTAINS.</p>'+
     '<h3>Zoom and slides</h3><p>The round + button on a panel opens a larger view. Close it with Close or Escape. Arrows and dots under a panel move between slides.</p>'+
-    '<h3>Drawing tool</h3><p>Choose a shape, then click the page to place it. Type into the shape. For connectors, choose the type, click one shape, then click the second. Drag the blue bar on a shape to move it. Use Delete, then click a shape or line to remove it.</p>'+
-    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, closed questions are marked automatically. Sign in to request AI marking for written, code and drawing answers. Some answers may need review and remain unscored. You can always use the sample answers and criteria to set your own marks.</p></div></div>';
+    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, closed questions are marked automatically. Sign in to request AI marking for written, code and drawing answers. Some answers may need review and remain unscored. You can always use the sample answers and criteria to set your own marks.</p>';
+  return '<div class="modal im" data-act="closeinfo"><div class="box im" role="dialog" aria-label="Exam information"><button class="nb red sm x" data-act="closeinfo">Close this screen X</button><div class="imscroll"><div class="imc"><div class="imcol">'+left+'</div><div class="imcol">'+right+'</div></div></div></div></div>';
 }
 
 /* ---------- pages ---------- */
@@ -65,14 +94,21 @@ function landingPage(b){
     '<p>Read each question carefully. Use the numbered boxes to move around and the flag to mark questions to come back to. Press INFO inside the exam for help with the tools.</p><div class="acts" style="margin-top:20px">'+acts+'</div></div></div>');
 }
 function navHTML(b,rv){
-  var bs=BS(b.id),h='<div class="nav-bar"><div class="nav-nums" id="nums">';
+  var bs=BS(b.id),h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
     if(rv){var g=0,m=0,pending=false;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m;if(!s.set)pending=true});c+=pending?'':g===m?' ok':g===0?' bad':' part'}
     h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">'+IC.tick+'</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">'+IC.flag+'</span>':'')+'</button>';
   }
-  return h+'</div><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
+  return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
 }
+function navArrows(scrollToCur){
+  var nv=$('#nums'),l=$('.nav-arr.l'),r=$('.nav-arr.r');if(!nv||!l||!r)return;
+  if(scrollToCur){var c=$('.nav-elem.cur',nv);if(c&&(c.offsetLeft<nv.scrollLeft||c.offsetLeft+c.offsetWidth>nv.scrollLeft+nv.clientWidth))nv.scrollLeft=Math.max(0,c.offsetLeft-nv.clientWidth/2)}
+  l.hidden=nv.scrollLeft<=1;r.hidden=nv.scrollLeft+nv.clientWidth>=nv.scrollWidth-1;
+}
+document.addEventListener('scroll',function(e){if(e.target&&e.target.id==='nums')navArrows(false)},true);
+window.addEventListener('resize',function(){navArrows(false)});
 function qHTML(b,n,rv){
   var q=b.qs[n-1];
   var title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
@@ -114,7 +150,7 @@ function resultsPage(b){
 /* ---------- routing ---------- */
 function render(){
   var h=location.hash.replace(/^#\/?/,'').split('/'),b=BANKS.filter(function(x){return x.id===h[0]})[0],html;
-  MENU='';xdCleanup();
+  MENU={};CPK='';xdCleanup();
   if(h[0]==='papers')html=papersPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
@@ -129,7 +165,7 @@ function render(){
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
   if(h[0]==='compare')comparisonBind();
-  if(b&&(h[1]==='q'||h[1]==='review'))afterQ();
+  if(b&&(h[1]==='q'||h[1]==='review')){afterQ();navArrows(true)}
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();
 }
@@ -166,7 +202,7 @@ function markAndShow(b){
   });
 }
 function go(n){location.hash='#/'+CUR.b.id+'/'+(CUR.rv?'review':'q')+'/'+n}
-function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc}
+function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc;navArrows(false)}
 function applyHL(c){
   var sel=getSelection();
   if(c==='none'){$$('#qarea .hl').forEach(function(s){var p=s.parentNode;while(s.firstChild)p.insertBefore(s.firstChild,s);p.removeChild(s)});return}
@@ -183,7 +219,7 @@ function applyHL(c){
 function itemOf(k){var p=k.split('.');return CUR.b.qs[+p[0]-1].it[+p[1]]}
 document.addEventListener('click',function(e){
   var el=e.target.closest('[data-act]');
-  if(MENU&&!e.target.closest('.tb')){MENU='';redrawTools()}
+  if(Object.keys(MENU).length&&!e.target.closest('.tb')){MENU={};CPK='';redrawTools()}
   if(!el)return;
   var a=el.dataset.act,d=el.dataset;
   if(a==='closeinfo'){if(e.target!==el&&el.classList.contains('modal'))return;INFO=false;var m=$('.modal');if(m)m.remove();return}
@@ -191,12 +227,14 @@ document.addEventListener('click',function(e){
   else if(a==='prev'){go(CUR.n-1)}
   else if(a==='next'){if(CUR.n>=CUR.b.qs.length)location.hash=CUR.rv?'#/'+CUR.b.id+'/results':'#/'+CUR.b.id+'/finish';else go(CUR.n+1)}
   else if(a==='flag'){var bs=BS(CUR.b.id);bs.flags[CUR.n]=!bs.flags[CUR.n];if(!bs.flags[CUR.n])delete bs.flags[CUR.n];save();redrawTools();refreshNav()}
-  else if(a==='menu'){MENU=MENU===d.m?'':d.m;redrawTools()}
-  else if(a==='hl'){applyHL(d.c);MENU='';redrawTools()}
-  else if(a==='fs'){S.font=+d.v;save();applyTheme();MENU='';redrawTools()}
-  else if(a==='fg'){S.fg=+d.v;save();applyTheme();redrawTools()}
-  else if(a==='bg'){S.bg=+d.v;save();applyTheme();redrawTools()}
-  else if(a==='creset'){S.fg=0;S.bg=0;save();applyTheme();redrawTools()}
+  else if(a==='menu'){if(MENU[d.m])delete MENU[d.m];else MENU[d.m]=true;if(d.m!=='col')CPK='';redrawTools()}
+  else if(a==='cpk'){CPK=CPK===d.w?'':d.w;redrawTools()}
+  else if(a==='navl'||a==='navr'){var nn=$('#nums');if(nn)nn.scrollBy({left:(a==='navl'?-1:1)*Math.max(120,nn.clientWidth*.8),behavior:'smooth'})}
+  else if(a==='hl'){applyHL(d.c);delete MENU.hl;redrawTools()}
+  else if(a==='fs'){S.font=+d.v;save();applyTheme();delete MENU.fs;redrawTools()}
+  else if(a==='fg'){S.fg=+d.v;CPK='';save();applyTheme();redrawTools()}
+  else if(a==='bg'){S.bg=+d.v;CPK='';save();applyTheme();redrawTools()}
+  else if(a==='creset'){S.fg=0;S.bg=0;CPK='';save();applyTheme();redrawTools()}
   else if(a==='info'){INFO=true;var w=document.createElement('div');w.innerHTML=infoHTML();document.body.appendChild(w.firstChild)}
   else if(a==='start'){var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
   else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.markedM,pending:ot.P})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}

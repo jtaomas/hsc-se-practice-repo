@@ -16,6 +16,7 @@ function xdFlush(k){
   if(prev!==nxt){bs.ans[k]={e:JSON.parse(nxt)};save()}
 }
 function xdCleanup(){
+  if(typeof aceCleanup==='function')aceCleanup();
   Object.keys(XD).forEach(function(k){try{clearTimeout(XD[k].tmr);xdFlush(k);XD[k].root.unmount()}catch(e){}});
   XD={};
 }

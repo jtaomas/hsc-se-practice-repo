@@ -52,12 +52,25 @@ function lint(dataset, engine) {
     engine.canonicalData(test.input);
     const expected = test.expected;
     assert(expected && ['complete', 'needs_review'].includes(expected.status));
+    if (expected.reviewReasons) assert(expected.status === 'needs_review' && Array.isArray(expected.reviewReasons) && expected.reviewReasons.length && expected.reviewReasons.every(reason => ['extractor_abstention', 'synthesis_abstention', 'auditor_veto'].includes(reason)), 'Expected review reasons must represent substantive abstention.');
     assert(Array.isArray(expected.errors) && Array.isArray(expected.semanticChecks));
     const keys = new Set();
     for (const item of expected.errors) {
       assert(member(test.input, item.participantId, item.questionId), 'Gold error references missing evidence.');
       assert(ERRORS.has(item.errorType), 'Gold error uses unknown taxonomy.');
       assert(!keys.has(errorKey(item)), 'Gold errors must not be duplicated.'); keys.add(errorKey(item));
+    }
+    if (expected.allowedOptionalErrors !== undefined) {
+      assert(Array.isArray(expected.allowedOptionalErrors), 'Allowed optional errors must be an array.');
+      const optionalKeys = new Set();
+      for (const item of expected.allowedOptionalErrors) {
+        assert(item && Object.keys(item).length === 3 && ['participantId', 'questionId', 'errorType'].every(key => Object.prototype.hasOwnProperty.call(item, key)), 'Optional error allowances must contain exactly participantId, questionId and errorType.');
+        assert(member(test.input, item.participantId, item.questionId), 'Allowed optional error references missing evidence.');
+        assert(ERRORS.has(item.errorType), 'Allowed optional error uses unknown taxonomy.');
+        const key = errorKey(item);
+        assert(!optionalKeys.has(key), 'Allowed optional errors must not be duplicated.'); optionalKeys.add(key);
+        assert(!keys.has(key), 'An error tuple cannot be both required scored evidence and optional advice.');
+      }
     }
     assert(Array.isArray(expected.forbidCriterionShortfalls) && expected.forbidCriterionShortfalls.every(id => test.input.participants.some(p => p.id === id)));
     assert(Array.isArray(expected.requiredFindings) && Array.isArray(expected.forbiddenText));
@@ -94,12 +107,13 @@ function citationCorrect(ref, input) {
 }
 function score(test, report, engine) {
   const failures = [], expected = test.expected, canonical = engine.canonicalData(test.input);
-  const findings = [], citations = [], predicted = new Set();
+  const findings = [], citations = [], predicted = new Set(), optionalPredicted = new Set();
   function check(ok, message) { if (!ok) failures.push(message); }
   check(report && report.status === expected.status, 'status');
   check(report && Array.isArray(report.profiles) && Array.isArray(report.comparisons), 'report_shape');
   report = report || {};
   if (report.status === 'needs_review') check(!(report.profiles || []).length && !(report.comparisons || []).length, 'review_must_withhold_findings');
+  if (expected.reviewReasons) check(report.audit && Array.isArray(report.audit.reasons) && report.audit.reasons.some(reason => expected.reviewReasons.includes(reason)), 'substantive_review_reason');
   if (report.status === 'complete') {
     const profiles = report.profiles || [];
     const synthesis = engine.synthesisProblem({ status: 'complete', summary: report.summary, comparisons: report.comparisons, uncertainties: [] }, canonical.participants, profiles);
@@ -113,7 +127,11 @@ function score(test, report, engine) {
         findings.push({ owner: profile.participantId, finding });
         for (const ref of finding.evidence || []) {
           citations.push(ref);
-          if (finding.errorType && ref.participantId === profile.participantId) predicted.add(errorKey({ participantId: profile.participantId, questionId: ref.questionId, errorType: finding.errorType }));
+          if (finding.errorType && ref.participantId === profile.participantId) {
+            const key = errorKey({ participantId: profile.participantId, questionId: ref.questionId, errorType: finding.errorType });
+            if (finding.kind === 'criterion_shortfall') predicted.add(key);
+            else if (finding.kind === 'optional_advice') optionalPredicted.add(key);
+          }
         }
         if (expected.requireActionsForErrors && finding.errorType) check(nonempty(finding.action), 'error_action_required:' + profile.participantId);
         if (expected.singleResponseOnly) check(finding.scope === 'single_response', 'unsupported_recurrence:' + profile.participantId);
@@ -129,7 +147,7 @@ function score(test, report, engine) {
   const correctCitations = citations.filter(ref => citationCorrect(ref, test.input)).length;
   check(correctCitations === citations.length, 'citation_correctness');
   for (const required of expected.requiredFindings) {
-    check(findings.some(({ owner, finding }) => owner === required.participantId && finding.errorType === required.errorType && finding.scope === required.scope && required.questionIds.every(id => (finding.evidence || []).some(ref => ref.participantId === owner && ref.questionId === id))), 'required_finding:' + required.participantId + ':' + required.errorType);
+    check(findings.some(({ owner, finding }) => owner === required.participantId && finding.kind === 'criterion_shortfall' && finding.errorType === required.errorType && finding.scope === required.scope && required.questionIds.every(id => (finding.evidence || []).some(ref => ref.participantId === owner && ref.questionId === id))), 'required_finding:' + required.participantId + ':' + required.errorType);
   }
   for (const text of expected.forbiddenText) check(!narrative(report).includes(text), 'forbidden_narrative');
   const gold = new Set(expected.errors.map(errorKey));
@@ -137,8 +155,15 @@ function score(test, report, engine) {
   const falsePositive = [...predicted].filter(key => !gold.has(key));
   const falseNegative = [...gold].filter(key => !predicted.has(key));
   check(!falsePositive.length && !falseNegative.length, 'categorical_expectations');
+  const allowed = new Set((expected.allowedOptionalErrors || []).map(errorKey));
+  const allowedOptionalErrors = [...optionalPredicted].filter(key => allowed.has(key)).sort();
+  const unexpectedOptionalErrors = [...optionalPredicted].filter(key => !allowed.has(key)).sort();
+  check(!unexpectedOptionalErrors.length, 'unexpected_optional_diagnostic');
   return { caseId: test.id, statusCorrect: report.status === expected.status, passed: failures.length === 0, failures, truePositive, falsePositive, falseNegative,
-    citationCount: citations.length, correctCitations, predictedErrors: [...predicted].sort(), manualReviewRequired: expected.semanticChecks };
+    citationCount: citations.length, correctCitations, predictedErrors: [...predicted].sort(),
+    optionalDiagnostics: { observed: optionalPredicted.size, allowed: allowedOptionalErrors.length, unexpected: unexpectedOptionalErrors.length,
+      predictedErrors: [...optionalPredicted].sort(), allowedErrors: allowedOptionalErrors, unexpectedErrors: unexpectedOptionalErrors },
+    manualReviewRequired: expected.semanticChecks };
 }
 function evaluate(dataset, selected, reports, engine) {
   assert(reports && reports.schemaVersion === 1 && Array.isArray(reports.reports), 'Saved report bundle must use schemaVersion 1 and reports:[{caseId,run,report}].');
@@ -165,9 +190,10 @@ function evaluate(dataset, selected, reports, engine) {
   }
   const tp = results.reduce((n, r) => n + r.truePositive, 0), fp = results.reduce((n, r) => n + r.falsePositive.length, 0), fn = results.reduce((n, r) => n + r.falseNegative.length, 0);
   const refs = results.reduce((n, r) => n + r.citationCount, 0), correct = results.reduce((n, r) => n + r.correctCitations, 0);
-  return { dataset: dataset.id, teacherReviewed: dataset.provenance.teacherReviewed, labelNotice: dataset.provenance.labels,
-    measured: 'Structural and provisional categorical agreement only; semantic support and teaching usefulness require the listed human checks.',
-    passed: results.every(r => r.passed), summary: { cases: results.length, passingCases: results.filter(r => r.passed).length, errorPrecision: tp + fp ? tp / (tp + fp) : null, errorRecall: tp + fn ? tp / (tp + fn) : null, correctCitationRate: refs ? correct / refs : null, truePositive: tp, falsePositive: fp, falseNegative: fn }, results };
+  const optionalDiagnostics = Object.fromEntries(['observed', 'allowed', 'unexpected'].map(key => [key, results.reduce((n, r) => n + r.optionalDiagnostics[key], 0)]));
+  return { dataset: dataset.id, scoringVersion: 2, teacherReviewed: dataset.provenance.teacherReviewed, labelNotice: dataset.provenance.labels,
+    measured: 'Structural and provisional scored-error categorical agreement only; optional diagnostics are counted separately against exact allowances; semantic support and teaching usefulness require the listed human checks.',
+    passed: results.every(r => r.passed), summary: { cases: results.length, passingCases: results.filter(r => r.passed).length, errorPrecision: tp + fp ? tp / (tp + fp) : null, errorRecall: tp + fn ? tp / (tp + fn) : null, correctCitationRate: refs ? correct / refs : null, truePositive: tp, falsePositive: fp, falseNegative: fn, optionalDiagnostics }, results };
 }
 async function main(argv) {
   const options = argumentsFor(argv);

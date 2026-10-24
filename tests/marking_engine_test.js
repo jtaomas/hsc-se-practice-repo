@@ -166,6 +166,23 @@ test('positive instruction isolation approves an untainted decision; legacy pola
   assert.deepEqual((await blocked.run()).audit.reasons, ['auditor_veto']); assert.equal(blocked.requests.length, 3);
 });
 
+test('optional advice cannot disguise the same missing scored requirement', async () => {
+  const partial = proposal(); partial.mark = 2;
+  partial.criteria[1] = { id: 'c2', assessment: 'not_met', evidence: [], basis: 'The required explanation of beta is absent.' };
+  partial.improve = ['Explain beta.']; partial.advice = ['Include beta when a question requests both concepts.'];
+  const veto = auditor(); veto.checks.adviceSeparation = 'fail';
+  veto.issues.push({ checkId: 'adviceSeparation', detail: 'The optional beta suggestion repeats the same missing scored explanation.' });
+  const mock = sequence([partial, partial, veto]), result = await mock.run();
+  assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 3);
+  assert.equal(result.audit.auditor.checks.adviceSeparation, 'fail');
+  assert(mock.requests[0].body.messages[0].content.includes('Prefer advice:[]'));
+  assert(mock.requests[2].body.messages[0].content.includes('repeats, paraphrases or generalises a scored improvement'));
+  const supplied = JSON.parse(mock.requests[2].body.messages[1].content).independentProposals;
+  assert.deepEqual(supplied[0].advice, partial.advice, 'the audit must see the original optional advice, not a silently cleaned proposal');
+  partial.advice = [];
+  assert.equal((await sequence([partial, partial, auditor()]).run()).status, 'marked', 'no optional advice is required to release a supported score');
+});
+
 test('model identity and completed finish status are required for markers and auditor', async () => {
   for (const options of [{ model: 'other-model' }, { finish: 'length' }]) {
     let mock = sequence([proposal(), () => response(proposal(), options)]), result = await mock.run();

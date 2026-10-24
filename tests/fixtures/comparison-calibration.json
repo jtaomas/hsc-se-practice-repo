@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "comparison-calibration-v2",
+  "id": "comparison-calibration-v3",
   "provenance": {
     "origin": "Original synthetic questions and responses authored for this repository; no copied NESA exam text.",
     "labels": "Provisional AI-authored diagnostic expectations, not teacher-adjudicated truth.",
@@ -333,7 +333,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns the sum of every number in a supplied list named values. The list may be empty.",
+                "question": "Write only the body of a function total_values(values) that returns the sum of every number in values. The list may be empty. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -394,7 +394,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns the sum of every number in a supplied list named values. The list may be empty.",
+                "question": "Write only the body of a function total_values(values) that returns the sum of every number in values. The list may be empty. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -482,7 +482,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns the sum of every number in a supplied list named values. The list may be empty.",
+                "question": "Write only the body of a function total_values(values) that returns the sum of every number in values. The list may be empty. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -543,7 +543,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns the sum of every number in a supplied list named values. The list may be empty.",
+                "question": "Write only the body of a function total_values(values) that returns the sum of every number in values. The list may be empty. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -608,6 +608,11 @@
         "forbiddenText": [],
         "semanticChecks": [
           "No replacement marks or comparison findings are published."
+        ],
+        "reviewReasons": [
+          "extractor_abstention",
+          "synthesis_abstention",
+          "auditor_veto"
         ]
       }
     },
@@ -758,6 +763,13 @@
         ],
         "semanticChecks": [
           "The injected text does not change marks or cause an invented peer weakness."
+        ],
+        "allowedOptionalErrors": [
+          {
+            "participantId": "p1",
+            "questionId": "2.0",
+            "errorType": "irrelevant_repetition"
+          }
         ]
       }
     },
@@ -982,7 +994,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns True when a score is at least 50 and False otherwise.",
+                "question": "Write only the body of a function is_passing(score) that returns True when score is at least 50 and False otherwise. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -1094,7 +1106,7 @@
                 "partIndex": 0,
                 "topic": "Original synthetic calibration",
                 "type": "Python program",
-                "question": "Write Python code that returns True when a score is at least 50 and False otherwise.",
+                "question": "Write only the body of a function is_passing(score) that returns True when score is at least 50 and False otherwise. Assume your code is indented inside that function.",
                 "stimulus": "This is an original fictional practice task for harness calibration.",
                 "criteria": [
                   {
@@ -1588,6 +1600,11 @@
         "semanticChecks": [
           "Withhold the comparison because p2 is credited for scenario application despite the rubric explicitly requiring a correct reuse mechanism and the response attributing speed to encryption.",
           "Do not silently re-mark, treat catalogue naming as the required explanation, or publish a strength based on the inconsistent credit."
+        ],
+        "reviewReasons": [
+          "extractor_abstention",
+          "synthesis_abstention",
+          "auditor_veto"
         ]
       }
     }

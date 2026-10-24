@@ -190,7 +190,11 @@ module.exports = async (req, res) => {
     return fail(400, 'Unknown request.');
   } catch (e) {
     if (e.status) return res.status(e.status).json(Object.assign({ error: e.message }, e.details || {}));
-    return fail(500, 'The account service had a problem. Try again in a moment.');
+    console.error('auth error:', e && (e.stack || e));
+    if (!process.env.BLOB_READ_WRITE_TOKEN) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to connect a private Blob store in Vercel and redeploy.');
+    const kind = String((e && e.name) || 'Error').slice(0, 60);
+    if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage is set up wrongly (it must be a private Blob store). Error: ' + kind + '.');
+    return fail(500, 'The account service had a problem. Try again in a moment. (Error: ' + kind + ')');
   }
 };
 

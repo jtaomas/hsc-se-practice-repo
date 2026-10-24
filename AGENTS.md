@@ -10,19 +10,26 @@ Read README.md first. Then follow these rules.
 
 ## Never do these
 - Never commit secrets, tokens, `.env` files or API keys. Never print them.
+- Do not break the live site. Every push to `main` deploys to production within about a minute, so test before you push.
 - Never call the live `/api/auth` or `/api/mark` from tests or scripts. Do not create accounts on the live site. Use the mocks in `tests/`.
 - Never store or log plain-text passwords. `api/auth.js` keeps a random salt and a scrypt hash only. Changes to that file need a passing `tests/run_auth_test.sh` and a note in the PR describing the security effect.
-- Never push to `main` or deploy to production. Open a pull request. The owner merges.
 - Do not copy real HSC or NESA exam text into the question banks. Questions here are original.
 
 ## How to add or change a question
 Banks are in `public/bank1.js` to `bank6.js`. Each question is an object with `tp` (syllabus topic), `st` (stimulus HTML), `it` (parts) built from the constructors in `helpers.js`. Closed types (`mc`, `ms`, `dd`, `mt`, `gd`, `tk`) carry the correct answer and are marked in the browser. `tx`, `py`, `ps`, `sq`, `dr` carry `model` (sample answer) and `crit` (marking criteria strings) that are sent to the AI marker. Every paper must total 80 marks across 27 questions. Look at an existing question of the same type and copy its shape.
 
-## Before opening a pull request
+## Working on main
+Everyone works directly on `main`. No pull request and no side branch is needed.
+1. Run `git pull` before you start, and again right before you push.
+2. Keep each change small and push it as soon as it works.
+3. If the push is rejected because someone else pushed first, run `git pull --rebase`, resolve any conflict, and push again.
+4. Tell the other contributors which file you are changing if it is a big edit.
+
+## Before you push
 1. `for f in public/*.js api/*.js; do node --check $f; done`
 2. `sh tests/run_auth_test.sh`
 3. Run `tests/ui_test.py` against a local server if you touched anything in `public/`.
-4. In the PR description, say what changed and how you tested it.
+4. Write a commit message that says what changed.
 
 ## Deploying
-Assistants do not deploy. Pull requests get a Vercel preview. Merging to `main` publishes.
+Pushing to `main` deploys to production through Vercel. If a push breaks the site, tell the owner. They can roll back in Vercel under Deployments.

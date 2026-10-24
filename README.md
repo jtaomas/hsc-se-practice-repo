@@ -1,6 +1,6 @@
 # HSC Software Engineering practice exams
 
-Unofficial practice site for NSW HSC Software Engineering. Six original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam. Not affiliated with NESA.
+Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam. Not affiliated with NESA.
 
 Live site: https://hsc-software-engineering-practice-andrew-b92c.vercel.app
 
@@ -23,7 +23,7 @@ public/            static site, served as-is (no build step)
   index.html       loads the scripts below IN THIS ORDER (they share globals)
   helpers.js       state S (localStorage key sehsc-nesa-v2), save(), BS(id), question constructors mc/ms/dd/mt/gd/tk/tx/py/ps/sq/dr
   kit.js           more constructors (od drag-order, dm drag-match, ft typed table) and stimulus panels (fig, files, sbs, ctbl, slides)
-  bank1..6.js      the six papers (push into BANKS)
+  bank1..7.js      the seven papers (push into BANKS)
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)

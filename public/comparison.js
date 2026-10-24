@@ -1,4 +1,4 @@
-/* ---------- Opt-in cohort comparison: sensitive evidence stays in memory ---------- */
+/* ---------- Cohort comparison: sensitive evidence stays in memory ---------- */
 var COMPARISON={subject:'',serial:0,files:[],report:null,busy:'',error:'',message:'',control:null,bankId:''};
 var COMPARISON_FILE_LIMIT=200*1024,COMPARISON_BODY_LIMIT=2*1024*1024;
 function comparisonSubject(){return JSON.stringify([S.tok||'',S.owner||'',typeof SYNC==='undefined'?0:SYNC.epoch])}
@@ -43,10 +43,8 @@ function comparisonDownload(value,name,compact){
   var url=URL.createObjectURL(new Blob([JSON.stringify(value,null,compact?0:2)],{type:'application/json'})),a=document.createElement('a');
   a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url)},1000);
 }
-function comparisonConsent(id){var el=$('#'+id);return !!el&&el.checked}
 function comparisonExport(){
   comparisonGuard();if(COMPARISON.busy)return Promise.resolve();
-  if(!comparisonConsent('comparison-export-consent')){COMPARISON.error='Confirm the sharing disclosure before exporting.';comparisonRefresh();return Promise.resolve()}
   var b=comparisonBank(),data;
   try{data=comparisonExportData(b)}catch(e){COMPARISON.error=e.message;comparisonRefresh();return Promise.resolve()}
   if(!data.payload.parts.length){COMPARISON.error='This paper has no eligible evidence. Complete current AI marking first.';comparisonRefresh();return Promise.resolve()}
@@ -84,7 +82,6 @@ function comparisonImport(files){
 function comparisonCompare(){
   comparisonGuard();if(COMPARISON.busy)return Promise.resolve();
   if(!S.tok||COMPARISON.files.length<2||COMPARISON.files.length>8){COMPARISON.error='Sign in and import evidence from 2 to 8 different people.';comparisonRefresh();return Promise.resolve()}
-  if(!comparisonConsent('comparison-run-consent')){COMPARISON.error='Confirm everyone’s permission before sending their evidence for comparison.';comparisonRefresh();return Promise.resolve()}
   var run=comparisonRun(),payload={action:'compare',exports:COMPARISON.files.map(function(entry){return entry.package})};
   COMPARISON.busy='compare';COMPARISON.error='';COMPARISON.message='Comparing verified evidence and independently checking the advice. This may take several minutes…';COMPARISON.report=null;comparisonRefresh();
   return comparisonRequest(payload,run).then(function(report){
@@ -133,11 +130,11 @@ function comparisonPage(){
   if(!signed)html+='<div class="feature"><p><a href="#/account">Sign in</a> to export your work or compare shared evidence.</p></div>';
   else{
     html+='<div class="comparison-steps"><section class="feature"><h2>1. Export your own evidence</h2><p>Select a submitted paper with current AI marking. The server verifies marks before creating a signed file valid for 7 days.</p>';
-    if(banks.length)html+='<label for="comparison-bank">Submitted paper</label><select id="comparison-bank"'+(busy?' disabled':'')+'>'+banks.map(function(bank){return '<option value="'+esc(bank.id)+'"'+(String(bank.id)===COMPARISON.bankId?' selected':'')+'>'+esc(bank.name)+'</option>'}).join('')+'</select><p>'+eligible.payload.parts.length+' parts eligible for verification. Excluded: '+excluded.diagram+' diagram parts, '+excluded.self+' self-marked parts and '+excluded.unverified+' parts without current verified AI marking. Only shared verified parts enter the comparison.</p><label class="comparison-consent"><input type="checkbox" id="comparison-export-consent"'+(busy?' disabled':'')+'> I choose to download and share my original answers and marking feedback. I understand that anyone with this file can read that work and use it for comparison.</label><button class="nb" id="comparison-export" disabled type="button">Export signed evidence</button>';
+    if(banks.length)html+='<label for="comparison-bank">Submitted paper</label><select id="comparison-bank"'+(busy?' disabled':'')+'>'+banks.map(function(bank){return '<option value="'+esc(bank.id)+'"'+(String(bank.id)===COMPARISON.bankId?' selected':'')+'>'+esc(bank.name)+'</option>'}).join('')+'</select><p>'+eligible.payload.parts.length+' parts eligible for verification. Excluded: '+excluded.diagram+' diagram parts, '+excluded.self+' self-marked parts and '+excluded.unverified+' parts without current verified AI marking. Only shared verified parts enter the comparison.</p><p class="mut">The file holds your original answers and marking feedback. Anyone you give it to can read it, so share it only with your class.</p><button class="nb" id="comparison-export"'+(busy?' disabled':'')+' type="button">Export signed evidence</button>';
     else html+='<p>No submitted papers are available. <a href="#/papers">Finish and submit a paper</a>, then complete its AI marking.</p>';
     html+='</section><section class="feature"><h2>2. Compare shared evidence</h2><p>Import one signed file from each person. Names and email addresses are not required. Labels below stay in this browser and are not sent to the AI service.</p><label for="comparison-files">Signed evidence files (JSON, up to 200 KiB each)</label><input id="comparison-files" type="file" accept=".json,application/json" multiple'+(busy?' disabled':'')+'>';
     if(COMPARISON.files.length)html+='<ul class="comparison-file-list">'+COMPARISON.files.map(function(entry,index){return '<li><label for="comparison-label-'+index+'">Participant '+(index+1)+' label</label><input id="comparison-label-'+index+'" data-comparison-label="'+index+'" value="'+esc(entry.label)+'" maxlength="40"'+(busy?' disabled':'')+'><button class="nb sm ol" data-comparison-remove="'+index+'" type="button"'+(busy?' disabled':'')+'>Remove</button></li>'}).join('')+'</ul>';
-    html+='<p>'+COMPARISON.files.length+' of 8 files loaded. This browser keeps files and reports only in memory; sign-out, account changes, refresh or Clear erase that browser copy. The service privately caches completed reports for your account.</p><label class="comparison-consent"><input type="checkbox" id="comparison-run-consent"'+(busy?' disabled':'')+'> Each person has agreed that I may send their selected original answers and marking feedback to DeepSeek for this comparison and view the resulting report.</label><div class="acts"><button class="nb" id="comparison-run" disabled type="button">Compare verified responses</button><button class="nb ol" id="comparison-clear" type="button"'+(busy?' disabled':'')+'>Clear files and report</button></div></section></div>';
+    html+='<p>'+COMPARISON.files.length+' of 8 files loaded. This browser keeps files and reports only in memory; sign-out, account changes, refresh or Clear erase that browser copy. The service privately caches completed reports for your account.</p><p class="mut">Comparing sends the selected answers and marking feedback to DeepSeek and shows you the report. This is a class activity, so no separate permission step is needed.</p><div class="acts"><button class="nb" id="comparison-run"'+(busy||COMPARISON.files.length<2?' disabled':'')+' type="button">Compare verified responses</button><button class="nb ol" id="comparison-clear" type="button"'+(busy?' disabled':'')+'>Clear files and report</button></div></section></div>';
   }
   html+='<div id="comparison-status" role="status" aria-live="polite">'+esc(COMPARISON.message)+'</div><div id="comparison-error" role="alert">'+esc(COMPARISON.error)+'</div>'+(busy?'<p><button class="nb ol" id="comparison-cancel" type="button">Cancel '+esc(COMPARISON.busy)+'</button></p>':'');
   if(COMPARISON.report)html+=comparisonReportHTML(COMPARISON.report);
@@ -147,8 +144,7 @@ function comparisonPage(){
 function comparisonBind(){
   comparisonGuard();
   function on(id,event,fn){var node=$('#'+id);if(node)node.addEventListener(event,fn)}
-  function buttons(){var exportButton=$('#comparison-export'),runButton=$('#comparison-run');if(exportButton)exportButton.disabled=!!COMPARISON.busy||!comparisonConsent('comparison-export-consent');if(runButton)runButton.disabled=!!COMPARISON.busy||COMPARISON.files.length<2||!comparisonConsent('comparison-run-consent')}
-  on('comparison-export-consent','change',buttons);on('comparison-run-consent','change',buttons);
+  function buttons(){var exportButton=$('#comparison-export'),runButton=$('#comparison-run');if(exportButton)exportButton.disabled=!!COMPARISON.busy;if(runButton)runButton.disabled=!!COMPARISON.busy||COMPARISON.files.length<2}
   on('comparison-bank','change',function(e){COMPARISON.bankId=e.target.value;COMPARISON.error='';COMPARISON.message='';comparisonRefresh()});
   on('comparison-export','click',comparisonExport);on('comparison-run','click',comparisonCompare);
   on('comparison-files','change',function(e){comparisonImport(e.target.files)});

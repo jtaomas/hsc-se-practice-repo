@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const clone=value=>JSON.parse(JSON.stringify(value));
 function client(){
-  const nodes={'#comparison-export-consent':{checked:true},'#comparison-run-consent':{checked:true}},timers=[],storage=new Map(),downloads=[];
+  const nodes={},timers=[],storage=new Map(),downloads=[];
   const c={console,AbortController,URL,Blob,location:{hash:'#/compare'},window:{addEventListener(){}},SYNC:{epoch:0},CUR:{},AIMARKING_VERSION:'test-current',
     document:{addEventListener(){},querySelector:s=>nodes[s]||null,querySelectorAll:()=>[],createElement(){return {innerHTML:'',get textContent(){return this.innerHTML.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&')}}}},
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
@@ -37,10 +37,9 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
   for(const change of [r=>delete r.stamp,r=>r.status='needs_review',r=>delete r.audit.inputDigest]){
     const c=client(),{b,bs}=fixture(c);change(bs.ai['1.1']);assert.equal(c.comparisonExportData(b).payload.parts.length,1);
   }
-  // Sign-in and per-action explicit consent are necessary, including after a retry.
+  // Sign-in is necessary. There is no separate consent step: this is a class activity.
   {
-    const c=client(),{b,bs}=fixture(c);c.nodes['#comparison-export-consent'].checked=false;await c.comparisonExport();assert.match(c.COMPARISON.error,/disclosure/);
-    c.S.tok='';assert.throws(()=>c.comparisonExportData(b),/Sign in/);assert(c.comparisonPage().includes('Sign in'));
+    const c=client(),{b,bs}=fixture(c);c.S.tok='';assert.throws(()=>c.comparisonExportData(b),/Sign in/);assert(c.comparisonPage().includes('Sign in'));
     c.S.tok='test-session';bs.done=false;assert.throws(()=>c.comparisonExportData(b),/submitted/);
   }
   // Export must persist the submitted attempt first; conflicts never create a stale sharing file.
@@ -92,12 +91,11 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const c=client();await c.comparisonImport([file(pack()),file(pack('signature-2'))]);let calls=0;c.fetch=async()=>{calls++;return reply(report('needs_review'))};await c.comparisonCompare();assert.equal(calls,1);assert.equal(c.COMPARISON.report.status,'needs_review');assert(c.comparisonReportHTML(c.COMPARISON.report).includes('AI comparison needs review'));
     c.fetch=async()=>reply({...report('needs_review'),profiles:report().profiles});await c.comparisonCompare();assert.equal(c.COMPARISON.report,null);assert.match(c.COMPARISON.error,/unverified/);
     c.fetch=async()=>reply({error:'Expired'},401);await c.comparisonCompare();assert.match(c.COMPARISON.error,/Sign in again/);
-    c.nodes['#comparison-run-consent'].checked=false;await c.comparisonCompare();assert.match(c.COMPARISON.error,/permission/);
   }
   // Cancellation, account switches and clearing prevent delayed reports from returning to the page.
   for(const mutate of [c=>c.comparisonCancel(),c=>c.comparisonReset(),c=>{c.S.tok='new-token';c.comparisonPage()},c=>{c.SYNC.epoch++;c.comparisonPage()}]){
     const c=client();await c.comparisonImport([file(pack()),file(pack('signature-2'))]);const pending=defer();let started=false;c.fetch=()=>{started=true;return pending.promise};const running=c.comparisonCompare();await until(()=>started);mutate(c);pending.resolve(reply(report()));await running;assert.equal(c.COMPARISON.report,null);
     if(!c.COMPARISON.message.includes('Cancelled'))assert.equal(c.COMPARISON.files.length,0);
   }
-  console.log('COMPARISON CLIENT OK: consent, canonical verified evidence, excluded overrides/diagrams, atomic bounded imports, private labels, stale-account guards, cancellation, escaped evidence and abstention.');
+  console.log('COMPARISON CLIENT OK: no consent step, canonical verified evidence, excluded overrides/diagrams, atomic bounded imports, private labels, stale-account guards, cancellation, escaped evidence and abstention.');
 })().catch(error=>{console.error(error);process.exitCode=1});

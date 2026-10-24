@@ -9,7 +9,7 @@ Live site: https://hsc-se-practice-repo.vercel.app
 - Exam mode (2 h 20 min countdown for full papers; 30 min for Mini Paper 1) and practice mode (no timer). Exit or submit at any question.
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
-- Papers page, My mistakes page, and opt-in **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
+- Papers page, My mistakes page, and **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
 - Evidence-linked feedback separates rubric shortfalls from 11 response-quality ratings. Lost marks are categorised where the rubric supports exact attribution; holistic shortfalls remain clearly labelled.
 - After submission, **Create my improvement plan** on the results page reviews verified feedback across the paper, identifies supported knowledge/writing patterns and gives prioritised exercises and success checks. A separate AI audit checks the plan; it never changes marks.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
@@ -124,7 +124,7 @@ See [the improvement coach](docs/AI_IMPROVEMENT.md) for its evidence requirement
 
 ## Comparing submitted work
 
-Open **Papers → Compare responses**. Each participant signs in, submits and syncs a paper, completes agentic marking, then explicitly exports their responses and feedback. The organiser imports 2–8 signed files for the same current paper and consents to send that evidence to DeepSeek. Files expire after seven days and identify accounts with opaque signatures, without exporting email addresses or session tokens. Treat the files as private student work. A downloaded copy cannot be recalled.
+Open **Papers → Compare responses**. Each participant signs in, submits and syncs a paper, completes agentic marking, then exports their responses and feedback. The organiser imports 2–8 signed files for the same current paper and consents to send that evidence to DeepSeek. Files expire after seven days and identify accounts with opaque signatures, without exporting email addresses or session tokens. Treat the files as private student work. A downloaded copy cannot be recalled.
 
 The comparison uses `deepseek-flash`, documented by DeepSeek on 24 October 2026 as DeepSeek-V4.1-Flash-1017. It runs independent participant profiles, a matched comparison, and an audit; an unsupported report is withheld for review. Totals are calculated from common verified parts only. Diagrams, self-awarded marks, legacy feedback and unconfirmed results are excluded. Style and concision coaching is separate from rubric shortfalls. Reports do not award marks, rank lasting ability or predict HSC bands.
 

@@ -44,6 +44,7 @@ function syncFail(e){
 function draftKey(owner){return KEY+':draft:'+encodeURIComponent(owner)}
 function stashDraft(){if(typeof xdCleanup==='function')xdCleanup();if(S.owner){try{localStorage.setItem(draftKey(S.owner),JSON.stringify(Object.assign(syncPayload(),{owner:S.owner,pending:S.pending,revisions:S.revisions})))}catch(e){}}}
 function replaceState(next){
+  if(typeof comparisonReset==='function')comparisonReset();
   if(typeof xdCleanup==='function')xdCleanup();
   if(typeof stopPython==='function')stopPython();
   clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();SYNC.conflicts={};

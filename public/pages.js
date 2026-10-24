@@ -118,6 +118,7 @@ function render(){
   if(h[0]==='papers')html=papersPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
+  else if(h[0]==='compare')html=comparisonPage();
   else if(!b)html=homePage();
   else if(!h[1])html=landingPage(b);
   else if(h[1]==='q')html=examPage(b,Math.min(b.qs.length,Math.max(1,+h[2]||1)),false);
@@ -127,6 +128,7 @@ function render(){
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
+  if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review'))afterQ();
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();

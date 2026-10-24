@@ -92,6 +92,9 @@ node tests/improvement_evaluator_test.js             # isolated live-coach evalu
 node tests/marking_evaluator_test.js                 # calibration dataset and evaluation budgets
 node scripts/evaluate-marking.js --validate --split all # offline reference-set validation
 sh tests/run_marking_store_test.sh                   # mocked storage, leases, quotas and caching
+node tests/marking_storage_transport_test.js          # version conflicts, compression and retry deadlines
+npm ci --ignore-scripts --no-audit --no-fund           # install the locked server SDK for the next test
+node tests/marking_blob_sdk_test.js                   # actual Blob SDK with all HTTP mocked; network disabled
 pip install playwright && playwright install chromium
 python3 tests/run_ui_test.py                        # starts its own local server, mocks APIs
 ```

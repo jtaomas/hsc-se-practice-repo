@@ -99,5 +99,9 @@ with sync_playwright() as p:
     p2.evaluate("S.tok='bad';save()");p2.evaluate("syncNow()");p2.wait_for_timeout(600)
     assert p2.evaluate("S.tok")=='' and 'Sign in again' in p2.inner_text('.acct'),p2.inner_text('.acct')
     pg.goto(U+'#/settings');pg.wait_for_timeout(300);assert 'Practice exams' in pg.inner_text('#app')
+    # Drag-match statements sit beside their drop boxes inside the question (no class clashes with other screens).
+    pg.goto(U+'#/formats/q/2');pg.wait_for_timeout(300)
+    rows=pg.evaluate("Array.from(document.querySelectorAll('.dmq-row')).map(function(r){var s=r.querySelector('.dslot').getBoundingClientRect(),t=r.querySelector('.dmq-text').getBoundingClientRect(),q=document.querySelector('#qarea').getBoundingClientRect();return [t.left>=s.right,Math.abs((t.top+t.bottom)/2-(s.top+s.bottom)/2)<20,t.top>=q.top,getComputedStyle(r.querySelector('.dmq-text')).position]})")
+    assert rows and all(r[0] and r[1] and r[2] and r[3]=='static' for r in rows),rows
     assert not logs,logs
     print('ALL OK: modes, submitted-paper lock, exact output checks, signup, login and sync')

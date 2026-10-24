@@ -1,6 +1,6 @@
 // Vercel serverless function: accounts and saved progress.
 // Passwords are never stored. Each account keeps a random salt and a scrypt hash.
-// Data lives in a private Vercel Blob store. Sessions are signed tokens that last 30 days.
+// Data lives in a private Cloudflare D1 database (server/d1-blob.js). Sessions are signed tokens that last 30 days.
 const crypto = require('crypto');
 
 const DAY = 86400000;
@@ -10,7 +10,7 @@ const MAX_FAILS = 8;
 const LOCK_MS = 15 * 60000;
 let SECRET = null;
 
-async function blob() { return import('@vercel/blob'); }
+async function blob() { return require('../server/d1-blob'); }
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const b64 = (b) => Buffer.from(b).toString('base64url');
 
@@ -237,7 +237,7 @@ module.exports = async (req, res) => {
   } catch (e) {
     if (e.status) return res.status(e.status).json(Object.assign({ error: e.message }, e.details || {}));
     console.error('auth error:', e && (e.stack || e));
-    if (!process.env.BLOB_READ_WRITE_TOKEN) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to connect a private Blob store in Vercel and redeploy.');
+    if (!(await blob()).configured()) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to add the Cloudflare D1 settings in Vercel and redeploy.');
     const kind = String((e && e.name) || 'Error').slice(0, 60);
     if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage is set up wrongly (it must be a private Blob store). Error: ' + kind + '.');
     return fail(500, 'The account service had a problem. Try again in a moment. (Error: ' + kind + ')');

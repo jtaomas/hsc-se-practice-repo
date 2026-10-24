@@ -5,7 +5,7 @@ const { error } = require('./comparison-input');
 const TTL_MS = 7 * 86400000;
 const MAX_EXPORT_BYTES = 200 * 1024;
 function createSharing(options = {}) {
-  const provider = options.blob || (() => import('@vercel/blob'));
+  const provider = options.blob || (() => require('./d1-blob'));
   const now = options.now || Date.now;
   let secretPromise;
   async function bounded(fn) {

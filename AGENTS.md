@@ -6,7 +6,7 @@ Read README.md first. Then follow these rules.
 - Plain browser JavaScript (ES5 style, `var`, `function`) in global scope. No framework, no bundler, no build step. Do not introduce one without the owner's approval.
 - Script order in `public/index.html` matters. If you add a file, add its tag in the right place.
 - Keep new code in the same style as the file you edit. Small edits beat rewrites.
-- Serverless functions in `api/` are CommonJS and load `@vercel/blob` with dynamic `import()`.
+- Serverless functions in `api/` are CommonJS. All storage goes through `server/d1-blob.js` (Cloudflare D1).
 
 ## Never do these
 - Never commit secrets, tokens, `.env` files or API keys. Never print them.

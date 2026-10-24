@@ -94,8 +94,15 @@ function syncSoon(){
   clearTimeout(SYNC.tmr);
   SYNC.tmr=setTimeout(function(){
     pushRemote().catch(syncFail);
-  },3000);
+  },20000);
 }
+/* Saves are batched (20 s) to keep storage writes low; leaving or hiding the page sends anything still waiting. */
+function flushPending(){
+  if(!S.tok||!Object.keys(S.pending||{}).length)return;
+  clearTimeout(SYNC.tmr);pushRemote().catch(syncFail);
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushPending()});
+window.addEventListener('pagehide',flushPending);
 function conflictHTML(){
   return Object.keys(SYNC.conflicts).map(function(id){var b=BANKS.filter(function(x){return x.id===id})[0];return '<div class="aib bad"><b>'+esc(b?b.name:'Paper '+id)+' changed on another device.</b><p>Your answers on this device are still saved here. Choose which complete paper to keep in your account.</p><button class="nb" data-act="acresolve" data-id="'+id+'" data-v="local">Keep this device’s paper</button> <button class="nb ol" data-act="acresolve" data-id="'+id+'" data-v="remote">Use the saved paper</button></div>'}).join('');
 }

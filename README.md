@@ -48,7 +48,7 @@ api/
   compare.js       signed evidence exports and bounded cohort comparison
   mark.js          authenticated POST: canonical input, cache, quota and marking orchestration
   improve.js       authenticated post-exam coaching using verified marking evidence
-  auth.js          POST: signup, login, load, save (needs BLOB_READ_WRITE_TOKEN)
+  auth.js          POST: signup, login, load, save (needs the three Cloudflare D1 settings below)
 server/
   comparison-*.js  verified snapshots, blind profiles, matched comparison and audit
   marking-input.js loads authoritative question banks and validates text / diagram evidence
@@ -59,7 +59,7 @@ server/
   improvement-input.js canonical whole-paper evidence and deterministic aggregates
   improvement-engine.js bounded coach plus independent evidence audit
 tests/
-  run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
+  run_auth_test.sh API test against an in-memory stand-in for the D1 storage module
   check_banks.js   checks every paper: question count, declared mini-paper or 80-mark totals, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
@@ -94,7 +94,7 @@ node scripts/evaluate-marking.js --validate --split all # offline reference-set 
 sh tests/run_marking_store_test.sh                   # mocked storage, leases, quotas and caching
 node tests/marking_storage_transport_test.js          # version conflicts, compression and retry deadlines
 npm ci --ignore-scripts --no-audit --no-fund           # install the locked server SDK for the next test
-node tests/marking_blob_sdk_test.js                   # actual Blob SDK with all HTTP mocked; network disabled
+node tests/d1_adapter_test.js                          # real D1 adapter against a fake Cloudflare endpoint (SQLite); network disabled
 pip install playwright && playwright install chromium
 python3 tests/run_ui_test.py                        # starts its own local server, mocks APIs
 ```
@@ -103,14 +103,16 @@ The static site works with the simple server. `/api/*` does not, so the account 
 
 To include the real Python worker tests, install `pyodide@0.26.4` into a temporary directory and set `PYODIDE_DIR` to its package directory when running `tests/run_ui_test.py`. It serves the runtime locally and checks infinite-loop cancellation, timeout recovery and every supplied Python model case. Set `ACE_DIR` to a local `ace-builds@1.32.9` package to exercise the real code editor. `CHROME` can specify an existing Chrome executable instead of Playwright's bundled Chromium.
 
-Account storage uses the Blob SDK's ETag conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and an ETag retry for concurrent changes to other papers. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
+Account storage (`server/d1-blob.js`, Cloudflare D1) uses etag-based conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and an ETag retry for concurrent changes to other papers. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
 
 ## Environment variables (set in Vercel, never in git)
 
 | Name | Used by | Notes |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
-| `BLOB_READ_WRITE_TOKEN` | accounts, marking and comparison storage | Private Vercel Blob store holding hashed accounts, progress, marking results and quotas. |
+| `CF_ACCOUNT_ID` | accounts, marking and comparison storage | Cloudflare account ID that owns the D1 database. |
+| `D1_DATABASE_ID` | same | ID of the D1 database (the table is created automatically). |
+| `CF_API_TOKEN` | same | Cloudflare API token with **D1 Edit** permission only. Never commit it. |
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
 
@@ -142,7 +144,7 @@ See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for ru
 
 ## Backups
 
-- On the first save of each UTC day, `api/auth.js` copies the previous progress to `backup/<id>/<day>.json` in the same private Blob store and deletes copies older than 7 days. This is one extra write per active account per day.
+- On the first save of each UTC day, `api/auth.js` copies the previous progress to `backup/<id>/<day>.json` in the same D1 database and deletes copies older than 7 days. This is one extra write per active account per day.
 - Signed-in users can list and restore those copies from the Account page. A restore first saves the current state as `before-restore-<time>`, and gives every paper a new revision so other devices see a conflict instead of overwriting it.
 - Anyone can download a backup file and restore from it on the Account page. That copy lives with the user, outside Vercel.
 - The backups live in the same store as the data, so they protect against bugs and bad overwrites, not against losing the store or hitting Hobby plan limits. Hobby includes 1 GB of storage and 2,000 write operations a month; going over blocks the store for 30 days.

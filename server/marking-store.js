@@ -15,8 +15,9 @@ const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function error(status, code, message) { const e = new Error(message); e.status = status; e.code = code; return e; }
 const conflict = e => e && (e.name === 'BlobPreconditionFailedError' || /precondition|already exists/i.test(String(e.message)));
 async function privateBlob() {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) throw error(503, 'marking_storage_unavailable', 'Private marking storage is not configured.');
-  return import('@vercel/blob');
+  const storage = require('./d1-blob');
+  if (!storage.configured()) throw error(503, 'marking_storage_unavailable', 'Private marking storage is not configured.');
+  return storage;
 }
 function failureDiagnostics(value, kind) {
   const comparison = kind === 'comparison';
@@ -58,7 +59,7 @@ function failureDiagnostics(value, kind) {
 async function authorize(headers) {
   const value = headers && headers.authorization;
   if (typeof value !== 'string' || !/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/i.test(value)) throw error(401, 'auth_required', 'Sign in to mark your answers.');
-  if (!process.env.BLOB_READ_WRITE_TOKEN) throw error(503, 'marking_storage_unavailable', 'Private marking storage is not configured.');
+  if (!require('./d1-blob').configured()) throw error(503, 'marking_storage_unavailable', 'Private marking storage is not configured.');
   let session;
   try { session = await verifySession(value.slice(7)); }
   catch (_) { throw error(503, 'marking_storage_unavailable', 'Sign-in verification is temporarily unavailable.'); }

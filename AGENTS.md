@@ -1,6 +1,6 @@
 # Instructions for AI coding assistants
 
-Read README.md first. Then follow these rules.
+Read README.md first, then `docs/HANDOFF.md` for the current state, live wiring and open decisions. Then follow these rules.
 
 ## Stack and constraints
 - Plain browser JavaScript (ES5 style, `var`, `function`) in global scope. No framework, no bundler, no build step. Do not introduce one without the owner's approval.

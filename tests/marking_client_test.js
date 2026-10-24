@@ -97,6 +97,17 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c.fetch=async()=>reply({error:'Expired'},401);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal&&/Sign in again/.test(e.message));
     for(const mark of [null,false,'2',1.5]){c.fetch=async()=>reply({...result(),mark});await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
   }
+  // "Already being marked" is not a failure: the client waits, asks again, and ends with the mark and no error.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';let calls=0;
+    c.fetch=async()=>{calls++;return calls<3?{...reply({code:'marking_busy',error:'This answer is already being marked.'},409),headers:{get:()=>'2'}}:reply(result())};
+    const run=c.runAI(b);
+    for(let i=0;i<2;i++){await until(()=>c.timers.some(t=>t.ms===2000&&!t.used));const t=c.timers.find(t=>t.ms===2000&&!t.used);t.used=true;t.fn()}
+    await run;assert.equal(calls,3);assert.equal(c.aiTodo(b).length,0);assert(!bs.aiErr['1.0']);
+    // A genuine conflict (not busy) still stops the run.
+    const d=client(),{b:b2,bs:bs2}=paper(d,[written()]);bs2.ans['1.0']='Answer';
+    d.fetch=async()=>reply({code:'other',error:'Conflict'},409);await d.runAI(b2);assert.equal(d.aiTodo(b2).length,1);assert(bs2.aiErr['1.0']);
+  }
   // Saved diagram geometry and bindings survive the request, together with its rendering.
   {
     const c=client(),it={t:'dr',q:'Draw a relationship.',m:3,model:'Two boxes',crit:['Correct endpoints']},{b,bs}=paper(c,[it]);

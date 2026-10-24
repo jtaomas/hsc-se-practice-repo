@@ -27,7 +27,7 @@ function aiCall(payload,token){
   return fetch('/api/mark',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(payload),signal:control.signal}).then(function(r){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
       j=j||{};
-      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.fatal=r.status===401||r.status===409||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
+      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.busy=j.code==='marking_busy';e.retryMs=Math.max(1,Math.min(30,+(r.headers&&r.headers.get&&r.headers.get('retry-after'))||15))*1000;e.fatal=r.status===401||(r.status===409&&!e.busy)||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
       if((j.status!=='marked'&&j.status!=='needs_review')||(j.status==='marked'&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
       return j;
     });
@@ -41,6 +41,22 @@ function aiTodo(b){
 function aiReviews(b){var count=0;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var a=aiRecord(b,qi+1,i);if(a&&a.status==='needs_review')count++})});return count}
 function aiPaperStamp(b){return JSON.stringify(b.qs.map(function(q,qi){return q.it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,qi+1,i)})}))}
 var AIRUN={};
+/* Rolling update: as each answer finishes, refresh the status panel, scores and nav without a full redraw. */
+function aiLive(b,qn){
+  if(typeof CUR==='undefined'||CUR.b!==b||!$('#app'))return;
+  var panel=$('#aib');if(panel)panel.outerHTML=aiStatusHTML(b);
+  if(!CUR.rv&&location.hash.indexOf('/results')>=0){
+    var t=document.createElement('div');t.innerHTML=resultsPage(b);
+    var feat=$('.feature',$('#app')),nf=$('.feature',t);if(feat&&nf)feat.innerHTML=nf.innerHTML;
+    var cur=$$('table.res',$('#app')),nxt=$$('table.res',t);
+    cur.forEach(function(el,i){if(nxt[i])el.innerHTML=nxt[i].innerHTML});
+    var np=$('#aib',t),op=$('#aib');if(np&&op)op.outerHTML=np.outerHTML;
+  }else if(CUR.rv&&$('#qarea')){
+    refreshNav();
+    var ae=document.activeElement;
+    if(qn===CUR.n&&!(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae&&ae.isContentEditable)){var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();window.scrollTo(0,y)}
+  }
+}
 function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt&&aiPaperStamp(b)===run.stamp}
 function runAI(b,onProg){
   var bs=BS(b.id),calls=aiTodo(b);
@@ -50,17 +66,26 @@ function runAI(b,onProg){
   var idx=0,done=0,fatal=null,total=calls.length;
   var run={state:S,paper:bs,token:S.tok,owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,attempt:String(bs.start)+'/'+String(bs.doneAt),stamp:aiPaperStamp(b)};
   AIRUN[b.id]=run;
+  run.total=total;run.done=0;run.waiting=0;
+  /* An answer that is "already being marked" (an earlier request is still running) is not a failure: wait and ask again. */
+  function attempt(p,tries){
+    return aiCall(p,run.token).catch(function(e){
+      if(!e.busy||tries>=24||!aiRunCurrent(b,run)||AIRUN[b.id]!==run)throw e;
+      run.waiting++;aiLive(b);
+      return new Promise(function(ok){setTimeout(ok,e.retryMs||15000)}).then(function(){run.waiting--;return attempt(p,tries+1)});
+    });
+  }
   function next(){
     if(idx>=calls.length||fatal||!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return Promise.resolve();
     var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
     var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
-    return prepared.then(function(p){if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return null;return aiCall(p,run.token)}).then(function(r){
+    return prepared.then(function(p){if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return null;return attempt(p,0)}).then(function(r){
       if(!r)return;
       if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run||stamp!==aiStamp(b,t[0],t[1]))return;
       if(r.status==='marked'&&(r.mark<0||r.mark>t[3].m))throw new Error('The marking service returned a mark outside the available range.');
       function strings(a){return Array.isArray(a)?a.filter(function(x){return typeof x==='string'}):[]}
       bs.ai[t[2]]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};delete bs.aiErr[t[2]];
-    }).catch(function(e){if(aiRunCurrent(b,run)&&AIRUN[b.id]===run)bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(aiRunCurrent(b,run)&&AIRUN[b.id]===run){save(b.id);onProg&&onProg(done,total,fatal)}return next()});
+    }).catch(function(e){if(aiRunCurrent(b,run)&&AIRUN[b.id]===run)bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(aiRunCurrent(b,run)&&AIRUN[b.id]===run){run.done=done;save(b.id);aiLive(b,t[0]);onProg&&onProg(done,total,fatal)}return next()});
   }
   run.promise=Promise.all([next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
   return run.promise;

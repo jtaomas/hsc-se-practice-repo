@@ -136,3 +136,6 @@ SITE=http://localhost:8767 python3 tests/ui_test.py
 ```
 
 Questions must be original. Do not copy HSC or NESA exam text.
+
+## Bullet points in a stimulus or prompt
+`bl(['first point','second point'])` returns a dot-point list styled like the HSC online exam. Use it inside a stimulus string or a question prompt.

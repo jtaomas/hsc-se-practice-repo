@@ -19,7 +19,7 @@ function aceMount(){
       if(!document.body.contains(ta)||host.dataset.ace!=='loading')return;
       var it=itemOf(k),box=document.createElement('div');
       box.className='cedit-ed';host.appendChild(box);
-      var ed=ace.edit(box,{theme:'ace/theme/monokai',mode:ACE_MODE[it.t]||'ace/mode/text',value:ta.value,fontSize:13,showPrintMargin:false,tabSize:4,useSoftTabs:true,useWorker:false,readOnly:locked,highlightActiveLine:!locked,wrap:false});
+      var ed=ace.edit(box,{theme:'ace/theme/textmate',mode:ACE_MODE[it.t]||'ace/mode/text',value:ta.value,fontSize:15,showPrintMargin:false,tabSize:4,useSoftTabs:true,useWorker:false,readOnly:locked,highlightActiveLine:!locked,wrap:false});
       ed.clearSelection();
       ed.textInput.getElement().setAttribute('aria-label',ta.getAttribute('aria-label')||'Code editor');
       var ph=ta.getAttribute('placeholder')||'';

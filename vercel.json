@@ -1,4 +1,10 @@
 {
   "outputDirectory": "public",
-  "functions": { "api/mark.js": { "maxDuration": 60 } }
+  "fluid": true,
+  "functions": {
+    "api/mark.js": {
+      "maxDuration": 300,
+      "includeFiles": "public/{helpers,kit,bank1,bank2,bank3,bank4,bank5,bank6,formats}.js"
+    }
+  }
 }

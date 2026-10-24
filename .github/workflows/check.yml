@@ -8,13 +8,20 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Syntax check
-        run: for f in public/*.js api/*.js; do node --check "$f"; done
+        run: for f in public/*.js api/*.js server/*.js; do node --check "$f"; done
       - name: Question bank check
         run: node tests/check_banks.js
       - name: Account API test (stubbed storage)
         run: sh tests/run_auth_test.sh
       - name: Progress and account isolation regression tests
         run: node tests/sync_test.js
+      - name: Marking evidence, blind assessment and API regressions (no network)
+        run: |
+          node tests/marking_input_test.js
+          node tests/marking_engine_test.js
+          node tests/marking_api_test.js
+          node tests/marking_client_test.js
+          sh tests/run_marking_store_test.sh
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install browser test dependencies

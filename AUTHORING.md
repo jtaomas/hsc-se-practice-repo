@@ -97,7 +97,7 @@ ft('Provide a set of test data ...',3,
    {widths:['22%','22%','56%']})
 ```
 
-In `rows`, a string is fixed text and `null` is a box to type in. The marker receives the table row by row with the column names, so the criteria can say "for each row".
+In `rows`, a string is fixed text and `null` is a box to type in. The server supplies the canonical column names and fixed cells separately from the student's row/column entries, so the criteria can say "for each row". Fixed question text cannot be submitted as student evidence.
 
 ## Stimulus panels
 
@@ -118,12 +118,13 @@ Images: put the file in `public/` and use `<img src="name.png" alt="...">` insid
 
 ## Adding a brand-new question type
 
-The renderer, marking, review, My mistakes and AI marking all ask a registry first, so a new type needs no edits to the core files:
+Rendering, browser scoring, review and My mistakes use a registry. Automatic AI marking also needs a server adapter so that browsers cannot choose their own rubrics:
 
 1. Add a constructor to `public/kit.js` that returns `{t:'xx', q:..., m:..., ...}`.
-2. In `public/qtypes.js`, call `regType('xx', {...})` with the hooks listed at the top of that file. A browser-marked type needs `auto:true`, `render`, `units`, `guide`, `isAns` and `compare`. An AI-marked type needs `render`, `isAns`, `payload`, `sample` and `preview`.
+2. In `public/qtypes.js`, call `regType('xx', {...})` with the hooks listed at the top of that file. A browser-marked type needs `auto:true`, `render`, `units`, `guide`, `isAns` and `compare`. An AI-marked type needs `render`, `isAns`, `sample` and `preview`.
 3. Teach `tests/check_banks.js` what a valid `xx` looks like.
-4. Add an example to `public/formats.js` and test it at `#/formats`.
+4. For an AI-marked type, add saved-answer serialization to `aiPayload` in `public/ai.js` and canonical validation/normalization to `server/marking-input.js`. The browser sends only bank/question/part identifiers and the answer, never trusted criteria, sample answers, marks or execution claims. Include any new bank/constructor files in the server loader and `vercel.json` bundle.
+5. Add an example to `public/formats.js`, validate its canonical evidence in `tests/marking_input_test.js`, and test it at `#/formats`. Check that submitted answers cannot be edited and that an uncertain result remains unscored.
 
 ## Before a pull request
 

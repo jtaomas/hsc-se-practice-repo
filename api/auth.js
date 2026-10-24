@@ -71,13 +71,13 @@ async function sign(payload) {
   return body + '.' + mac;
 }
 async function verify(token) {
-  if (!token || token.indexOf('.') < 0) return null;
+  if (typeof token !== 'string' || token.length > 4096 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const [body, mac] = token.split('.');
   const want = crypto.createHmac('sha256', await secret()).update(body).digest('base64url');
   const a = Buffer.from(mac), b = Buffer.from(want);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   let p; try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch (e) { return null; }
-  if (!p || !p.id || !p.exp || p.exp < Date.now()) return null;
+  if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.id !== 'string' || !/^[a-f0-9]{64}$/.test(p.id) || !Number.isSafeInteger(p.exp) || p.exp <= Date.now()) return null;
   return p;
 }
 function hashPw(pw, salt) {
@@ -193,3 +193,6 @@ module.exports = async (req, res) => {
     return fail(500, 'The account service had a problem. Try again in a moment.');
   }
 };
+
+// Other server handlers share the same signature and expiry validation.
+module.exports.verifySession = verify;

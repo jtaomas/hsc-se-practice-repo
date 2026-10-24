@@ -37,6 +37,9 @@ function sameRows(a,b,ord){
   if(!ord){x.sort();y.sort()}
   return x.join('|')===y.join('|');
 }
+function sameSQLResult(a,b,it){
+  return !a.error&&!b.error&&sameRows(a.rows,b.rows,it.ord)&&(!/column headings/i.test(it.q)||JSON.stringify(a.cols)===JSON.stringify(b.cols));
+}
 function resHTML(r){
   if(r.error)return '<div class="er">'+esc(r.error)+'</div>';
   if(!r.cols.length)return 'The query ran and returned no columns.';
@@ -58,13 +61,17 @@ function units(it,a){
   return [c,t];
 }
 var AUTO={mc:1,ms:1,dd:1,gd:1,mt:1,tk:1};
-function suggestion(bs,k,it){var c=bs.chk[k];return c&&c.t&&c.p===c.t?it.m:null}
 function score(b,n,i){
   var bs=BS(b.id),it=b.qs[n-1].it[i],k=n+'.'+i,a=bs.ans[k],m=it.m,g=0;
   if(it.t==='mc')g=a===it.a?1:0;
   else if(it.t==='ms'){var s=Array.isArray(a)?a:[],w=0;s.forEach(function(x){if(it.a.indexOf(x)<0)w++});it.a.forEach(function(x){if(s.indexOf(x)<0)w++});g=m===1?(w===0?1:0):Math.max(0,m-w)}
   else if(AUTO[it.t]){var u=units(it,a);g=u[0]===u[1]?m:Math.floor(m*u[0]/u[1]+1e-9)}
-  else{var sv=bs.self[k],src='self';if(sv==null){var ai=bs.ai[k];if(ai&&ai.g!=null){sv=ai.g;src='ai'}}if(sv==null){sv=suggestion(bs,k,it);src='test'}return {g:sv==null?0:sv,m:m,auto:false,set:sv!=null,src:src}}
+  else{
+    var sv=bs.self[k],src='self',ai=typeof aiRecord==='function'?aiRecord(b,n,i):null;
+    if(sv==null){src=ai&&ai.status==='needs_review'?'needs_review':'pending';if(ai&&ai.g!=null){sv=ai.g;src='ai'}}
+    if(sv==null&&!isAns(it,a)){sv=0;src='none'}
+    return {g:sv==null?0:sv,m:m,auto:false,set:sv!=null,src:src};
+  }
   return {g:g,m:m,auto:true,set:true};
 }
 function isAns(it,a){
@@ -74,24 +81,25 @@ function isAns(it,a){
   if(it.t==='ms'||it.t==='tk')return a.length>0;
   if(it.t==='dd'||it.t==='gd'||it.t==='mt')return Object.keys(a).length>0;
   if(it.t==='tx')return a.replace(/<[^>]*>/g,'').trim().length>0;
-  if(it.t==='dr')return !!(a.e&&a.e.length);
+  if(it.t==='dr')return !!(a.e&&a.e.some(function(e){return !e.isDeleted}));
   return String(a).trim().length>0;
 }
 function qAnswered(b,n){var bs=BS(b.id);return b.qs[n-1].it.some(function(it,i){return isAns(it,bs.ans[n+'.'+i])})}
 function normOut(x){return String(x).trim().split('\n').map(function(y){return y.replace(/\s+$/,'')}).join('\n')}
 function passTest(out,t){return normOut(out)===normOut(t.o)}
 function runChecks(b){
-  var bs=BS(b.id),jobs=[];
+  var bs=BS(b.id),state=S,jobs=[];
   b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){
-    var k=(qi+1)+'.'+i,a=bs.ans[k];
+    var k=(qi+1)+'.'+i,a=bs.ans[k],stamp=JSON.stringify({answer:a,item:it,db:q.db});
+    function current(){return S===state&&S.u[b.id]===bs&&stamp===JSON.stringify({answer:bs.ans[k],item:it,db:q.db})}
     if(it.t==='py'&&a&&it.tests.length){
       var p=0,problem='';
-      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){if(problem)return;return runPy(a+'\n'+(t.app||''),t.i||[]).then(function(o){if(passTest(o,t))p++}).catch(function(e){problem=e.message})})},Promise.resolve()).then(function(){if(S.u[b.id]===bs)bs.chk[k]={p:p,t:it.tests.length,error:problem}}));
+      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){if(problem||!current())return;return runPy(a+'\n'+(t.app||''),t.i||[]).then(function(o){if(passTest(o,t))p++}).catch(function(e){problem=e.message})})},Promise.resolve()).then(function(){if(current())bs.chk[k]={p:p,t:it.tests.length,error:problem}}));
     }else if(it.t==='sq'&&a&&q.db){
-      jobs.push(Promise.all([runSQL(q.db,a),runSQL(q.db,it.model)]).then(function(r){bs.chk[k]={p:(!r[0].error&&sameRows(r[0].rows,r[1].rows,it.ord))?1:0,t:1}}).catch(function(){}));
+      jobs.push(Promise.all([runSQL(q.db,a),runSQL(q.db,it.model)]).then(function(r){if(current())bs.chk[k]={p:sameSQLResult(r[0],r[1],it)?1:0,t:1,error:r[0].error||r[1].error||''}}).catch(function(e){if(current())bs.chk[k]={p:0,t:1,error:e.message||'The query check could not run.'}}));
     }
   })});
-  return Promise.all(jobs).then(function(){if(S.u[b.id]===bs)save(b.id)});
+  return Promise.all(jobs).then(function(){if(S===state&&S.u[b.id]===bs)save(b.id)});
 }
 
 /* ---------- item rendering ---------- */
@@ -157,7 +165,7 @@ function itemHTML(b,n,i,rv){
 }
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
-  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+sc.g+' / '+sc.m+'</span></h4>';
+  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+(sc.set?sc.g+' / '+sc.m:'Unscored')+'</span></h4>';
   if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
   else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
   else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}));
@@ -170,9 +178,9 @@ function guideHTML(b,n,i){
     if(QT[it.t]&&QT[it.t].sample)h+='<p><b>Sample answer:</b></p>'+QT[it.t].sample(it);
     else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
     else h+='<p><b>Sample answer:</b></p><div>'+it.model+'</div>';
-    if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>How your diagram was read for marking</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
+    if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>Drawing summary</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
     if(it.crit.length)h+='<p><b>Marking criteria</b></p>'+critList(it.crit);
-    var c=bs.chk[k];if(c)h+='<p><b>Automatic check:</b> '+(it.t==='sq'?(c.p?'your query returned the same rows as the sample query':'your query returned different rows from the sample query'):c.p+' of '+c.t+' test runs gave the expected output')+'.</p>';
+    var c=bs.chk[k];if(c)h+='<p><b>Practice check:</b> '+(it.t==='sq'?(c.p?'your query matched the sample rows and required column headings':'your query did not match the sample rows and required column headings'):c.p+' of '+c.t+' example test runs gave the expected output')+'. Example checks do not award marks.</p>';
     else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(isAns(it,a)?'running...':'no answer to check')+'</p>';
     if(c&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
     h+='<div class="smk"><span>'+(bs.ai[k]&&bs.ai[k].g!=null?'Change the mark:':'Your mark:')+'</span>';for(var j=0;j<=it.m;j++)h+='<button data-act="sm" data-k="'+k+'" data-v="'+j+'"'+(sc.set&&sc.g===j?' class="on"':'')+'>'+j+'</button>';h+='</div>';

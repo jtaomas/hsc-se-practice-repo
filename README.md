@@ -8,7 +8,7 @@ Live site: https://hsc-software-engineering-practice-andrew-b92c.vercel.app
 
 - Exam mode (2 h 20 min countdown) and practice mode (no timer). Exit or submit at any question.
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
-- Closed questions are auto-marked. Written, code and diagram answers are marked by DeepSeek via `/api/mark`. Students can override any mark.
+- Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
 - Papers page, My mistakes page.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
 - Submitted answers are read-only. Use **Start again** for another attempt.
@@ -30,6 +30,7 @@ public/            static site, served as-is (no build step)
   widgets.js       renderers and marking for each question type
   qtypes.js        plug-in question types registered with regType(); drag-and-drop engine
   xd.js            Excalidraw drawing question
+  marking-config.js shared marking-policy version for browser and server
   ai.js            builds the AI-marking request, mistakes helpers
   sync.js          account UI and progress sync (talks to /api/auth)
   pages.js         header, routes, click handlers, exam / finish / results pages
@@ -37,8 +38,13 @@ public/            static site, served as-is (no build step)
   boot.js          render()
   style.css
 api/
-  mark.js          POST: marks one answer with DeepSeek (needs DEEPSEEK_API_KEY)
+  mark.js          authenticated POST: canonical input, cache, quota and marking orchestration
   auth.js          POST: signup, login, load, save (needs BLOB_READ_WRITE_TOKEN)
+server/
+  marking-input.js loads authoritative question banks and validates text / diagram evidence
+  marking-engine.js two blind marks, strict evidence checks and independent audit
+  marking-json.js  strict JSON parser, including duplicate-key rejection
+  marking-store.js private cached decisions, distributed leases and atomic quotas
 tests/
   run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
   check_banks.js   checks every paper: 27 questions, 80 marks, well-formed questions
@@ -53,6 +59,12 @@ Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N
 python3 -m http.server 8767 --directory public     # then open http://localhost:8767
 sh tests/run_auth_test.sh                           # API logic, no network
 node tests/sync_test.js                             # concurrency and account-isolation regressions
+node tests/check_banks.js                           # question structure and paper totals
+node tests/marking_input_test.js                     # canonical questions and diagram evidence
+node tests/marking_engine_test.js                    # blind marks, audit, validation and deadlines
+node tests/marking_api_test.js                       # API integration with mocked provider
+node tests/marking_client_test.js                    # stale results, abstention and totals
+sh tests/run_marking_store_test.sh                   # mocked storage, leases, quotas and caching
 pip install playwright && playwright install chromium
 python3 tests/run_ui_test.py                        # starts its own local server, mocks APIs
 ```
@@ -68,9 +80,13 @@ Account storage uses the Blob SDK's ETag conditional writes. Login attempts rese
 | Name | Used by | Notes |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | `api/mark.js` | Production only. Each AI-marked answer spends DeepSeek balance. |
-| `BLOB_READ_WRITE_TOKEN` | `api/auth.js` | Private Vercel Blob store holding hashed accounts and progress. |
+| `BLOB_READ_WRITE_TOKEN` | `api/auth.js`, `server/marking-store.js` | Private Vercel Blob store holding hashed accounts, progress, marking results and quotas. |
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
+
+The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job uses three calls. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
+
+See [AI marking design and verification](docs/AI_MARKING.md) for prompts, budgets, review states, privacy, limitations and the teacher-calibration checklist. `vercel.json` requests Fluid compute and a 300-second function limit; the deployment must support that limit. No live API calls are part of the test suite.
 
 ## Contributing
 

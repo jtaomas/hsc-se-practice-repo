@@ -15,5 +15,6 @@ threading.Thread(target=server.serve_forever,daemon=True).start()
 os.environ['SITE']='http://127.0.0.1:'+str(server.server_port)
 try:
     runpy.run_path(str(ROOT/'tests/ui_test.py'),run_name='__main__')
+    runpy.run_path(str(ROOT/'tests/marking_ui_test.py'),run_name='__main__')
     if os.environ.get('PYODIDE_DIR'): runpy.run_path(str(ROOT/'tests/python_worker_test.py'),run_name='__main__')
 finally: server.shutdown();server.server_close()

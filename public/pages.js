@@ -46,16 +46,16 @@ function infoHTML(){
     '<h3>Drag and drop</h3><p>Drag a card into a box with the mouse or your finger. You can also click a card, then click the box. Drag a placed card to another box to swap them, or back to the list to remove it. Keyboard: Tab to a card, press Enter, then Tab to a box and press Enter.</p>'+
     '<h3>Zoom and slides</h3><p>The round + button on a panel opens a larger view. Close it with Close or Escape. Arrows and dots under a panel move between slides.</p>'+
     '<h3>Drawing tool</h3><p>Choose a shape, then click the page to place it. Type into the shape. For connectors, choose the type, click one shape, then click the second. Drag the blue bar on a shape to move it. Use Delete, then click a shape or line to remove it.</p>'+
-    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, multiple-choice, dropdown and match questions are marked for you. Python, SQL, pseudocode, drawing and written answers are shown next to a sample answer and marking criteria, and you give yourself the mark.</p></div></div>';
+    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, closed questions are marked automatically. Sign in to request AI marking for written, code and drawing answers. Some answers may need review and remain unscored. You can always use the sample answers and criteria to set your own marks.</p></div></div>';
 }
 
 /* ---------- pages ---------- */
 function homePage(){
   CUR={b:null,n:0};
-  var books=BANKS.filter(function(b){return !b.hidden}).map(function(b){var u=S.u[b.id],st=u?(u.done?'Marked':(u.start?'In progress':'Not started')):'Not started';
+  var books=BANKS.filter(function(b){return !b.hidden}).map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
     return '<a class="nb" href="#/'+b.id+'">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+st+'</small></a>'}).join('');
   return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>Six original 80-mark papers. Each has 27 questions in the same order of question types as the 2025 HSC online examination.</p><div class="bks">'+books+'</div></div>'+
-    '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode, with a 2 hour 20 minute timer, or in practice mode, with no timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you and the written, code and diagram answers are marked by AI against the marking criteria. You can change any mark. The Papers page keeps every paper, and My mistakes collects every answer that lost marks.</p><p>The questions are written for practice. They are not past HSC questions and they do not predict the real paper.</p></div></div></div>');
+    '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode, with a 2 hour 20 minute timer, or in practice mode, with no timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you. Sign in for AI marking of written, code and diagram answers against the criteria; answers that need review remain unscored. You can use the marking guides to set or change any mark. The Papers page keeps every paper, and My mistakes collects every assessed answer that lost marks.</p><p>The questions are written for practice. They are not past HSC questions and they do not predict the real paper.</p></div></div></div>');
 }
 function landingPage(b){
   CUR={b:b,n:0};var u=BS(b.id),done=u.done,started=u.start;
@@ -68,7 +68,7 @@ function navHTML(b,rv){
   var bs=BS(b.id),h='<div class="nav-bar"><div class="nav-nums" id="nums">';
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
-    if(rv){var g=0,m=0;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m});c+=g===m?' ok':g===0?' bad':' part'}
+    if(rv){var g=0,m=0,pending=false;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m;if(!s.set)pending=true});c+=pending?'':g===m?' ok':g===0?' bad':' part'}
     h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">✔</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">⚑</span>':'')+'</button>';
   }
   return h+'</div><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
@@ -94,19 +94,19 @@ function examPage(b,n,rv){
 function finishPage(b){
   CUR={b:b,n:0};var bs=BS(b.id),un=[],fl=[];
   b.qs.forEach(function(q,i){if(!qAnswered(b,i+1))un.push(i+1);if(bs.flags[i+1])fl.push(i+1)});
-  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">Finish exam</h1><div class="feature"><p><b>Unanswered:</b> '+(un.length?un.join(', '):'none')+'</p><p><b>Flagged:</b> '+(fl.length?fl.join(', '):'none')+'</p><p>You can submit now even if some questions are unanswered. Unanswered parts score zero. Your answers are saved either way, so you can also leave with Exit and come back later.</p><div class="acts"><button class="nb ol" data-act="back">Back to the exam</button><button class="nb" data-act="submit">Submit and mark</button></div></div></div>');
+  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">Finish exam</h1><div class="feature"><p><b>Unanswered:</b> '+(un.length?un.join(', '):'none')+'</p><p><b>Flagged:</b> '+(fl.length?fl.join(', '):'none')+'</p><p>You can submit now even if some questions are unanswered. Unanswered parts score zero. Your answers are saved either way, so you can also leave with Exit and come back later.</p><p>When signed in, submitting starts AI marking and sends each question, its marking guide and your answer, including any drawing, to DeepSeek. Guests can review and set their own marks.</p><div class="acts"><button class="nb ol" data-act="back">Back to the exam</button><button class="nb" data-act="submit">Submit and mark</button></div></div></div>');
 }
 function totals(b){
-  var rows=[],T=0,M=0,tp={};
-  b.qs.forEach(function(q,qi){var g=0,m=0,pend=false;q.it.forEach(function(it,i){var s=score(b,qi+1,i);g+=s.g;m+=s.m;if(!s.auto&&!s.set&&isAns(it,BS(b.id).ans[(qi+1)+'.'+i]))pend=true});
-    rows.push({n:qi+1,tp:q.tp,g:g,m:m,pend:pend});T+=g;M+=m;var t=tp[q.tp]||(tp[q.tp]={g:0,m:0});t.g+=g;t.m+=m});
-  return {rows:rows,T:T,M:M,tp:tp};
+  var rows=[],T=0,M=0,P=0,tp={};
+  b.qs.forEach(function(q,qi){var g=0,m=0,p=0;q.it.forEach(function(it,i){var s=score(b,qi+1,i);g+=s.g;m+=s.m;if(!s.set)p+=s.m});
+    rows.push({n:qi+1,tp:q.tp,g:g,m:m,markedM:m-p,pend:p>0});T+=g;M+=m;P+=p;var t=tp[q.tp]||(tp[q.tp]={g:0,m:0,pending:0});t.g+=g;t.m+=m;t.pending+=p});
+  return {rows:rows,T:T,M:M,P:P,markedM:M-P,tp:tp};
 }
 function resultsPage(b){
   CUR={b:b,n:0};var r=totals(b),pend=r.rows.filter(function(x){return x.pend}).length;
-  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature"><div class="big">'+r.T+' / '+r.M+'</div><p>'+Math.round(100*r.T/r.M)+'%'+(pend?'. <b>'+pend+' answer'+(pend>1?'s':'')+' not marked yet</b> (shown as "Mark it" below).':'')+'</p></div>'+aiStatusHTML(b)+
-    '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k];return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+t.m+'</td><td><div class="tbar"><i style="width:'+Math.round(100*t.g/t.m)+'%"></i></div></td></tr>'}).join('')+'</table>'+
-    '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Mark</th><th></th></tr>'+r.rows.map(function(x){var c=x.g===x.m?'ok':x.g===0?'bad':'part';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+x.g+' / '+x.m+(x.pend?' <span class="pill part">Mark it</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
+  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature"><div class="big">'+r.T+' / '+r.markedM+'</div><p>'+(r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
+    '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Assessed marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k],m=t.m-t.pending;return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+m+(t.pending?' ('+t.pending+' unscored)':'')+'</td><td><div class="tbar"><i style="width:'+(m?Math.round(100*t.g/m):0)+'%"></i></div></td></tr>'}).join('')+'</table>'+
+    '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend?'part':x.g===x.m?'ok':x.g===0?'bad':'part';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
     '<div class="acts"><a class="nb" href="#/'+b.id+'/review/1" style="text-decoration:none">Review all questions</a><a class="nb ol" href="#/mistakes/'+b.id+'" style="text-decoration:none">Review my mistakes</a><a class="nb ol" href="#/papers" style="text-decoration:none">All papers</a></div></div>';
   return frame(b.name+' Software Engineering',h);
 }
@@ -134,24 +134,32 @@ function render(){
 function afterQ(){
   var b=CUR.b,n=CUR.n,q=b.qs[n-1],rv=CUR.rv;
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
-  if(rv&&BS(b.id).done&&(!BS(b.id).checked||aiTodo(b).length))ensureMarked(b).then(function(){if(location.hash.indexOf('review/'+n)<0||CUR.n!==n||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,true);afterQDraw();window.scrollTo(0,y);refreshNav()});
+  var state=S,bs=BS(b.id);
+  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b).then(function(){if(S!==state||S.u[b.id]!==bs||CUR.b!==b||location.hash.indexOf('review/'+n)<0||CUR.n!==n||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,true);afterQDraw();window.scrollTo(0,y);refreshNav()});
 }
 function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)})}
 function ensureMarked(b){
-  var bs=BS(b.id);
-  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S.u[b.id]===bs){bs.checked=1;save(b.id)}});
-  return p.then(function(){if(S.u[b.id]===bs)return runAI(b)});
+  var bs=BS(b.id),state=S;
+  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S===state&&S.u[b.id]===bs){bs.checked=1;save(b.id)}});
+  return p.then(function(){if(S===state&&S.u[b.id]===bs&&S.tok){var task=runAI(b),panel=CUR.b===b?$('#aib'):null;if(panel)panel.outerHTML=aiStatusHTML(b);return task}});
 }
 function aiStatusHTML(b){
-  var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]});
-  if(AIRUN[b.id]||(!errs.length&&aiTodo(b).length))return '<div class="aib" id="aib"><b>AI marking is running.</b> Written, code and diagram answers are being marked against the criteria. This takes under a minute.</div>';
+  var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),todo=aiTodo(b).length;
+  if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and set your own marks.</div>';
+  if(aiRunCurrent(b,AIRUN[b.id]))return '<div class="aib" id="aib"><b>AI marking is running.</b> Each answer is assessed against the criteria. Some answers may need review; marking can take several minutes.</div>';
   if(errs.length)return '<div class="aib bad" id="aib"><b>AI marking did not finish for '+errs.length+' answer'+(errs.length>1?'s':'')+'.</b> '+esc(bs.aiErr[errs[0]])+'<br><button class="nb sm" data-act="airetry" style="margin-top:8px">Try again</button></div>';
+  if(todo)return '<div class="aib" id="aib"><b>'+todo+' answer'+(todo>1?'s':'')+' awaiting AI marking.</b> <button class="nb sm" data-act="airetry">Mark with AI</button></div>';
+  if(reviews)return '<div class="aib bad" id="aib"><b>'+reviews+' answer'+(reviews>1?'s':'')+' need review.</b> No AI mark was awarded for these answers. Open the questions to review the criteria and set a mark yourself or with a teacher.</div>';
   return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback. You can change a mark there.</div>';
 }
 function markAndShow(b){
+  var state=S,bs=BS(b.id);
   ensureMarked(b).then(function(){
-    if(location.hash.indexOf('/results')<0||CUR.b!==b)return;
-    var y=window.scrollY;$('#app').innerHTML=resultsPage(b);window.scrollTo(0,y);
+    if(S!==state||S.u[b.id]!==bs||CUR.b!==b)return;
+    var y=window.scrollY;
+    if(CUR.rv&&$('#qarea')){xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();refreshNav()}
+    else if(location.hash.indexOf('/results')>=0)$('#app').innerHTML=resultsPage(b);
+    window.scrollTo(0,y);
   });
 }
 function go(n){location.hash='#/'+CUR.b.id+'/'+(CUR.rv?'review':'q')+'/'+n}
@@ -188,7 +196,7 @@ document.addEventListener('click',function(e){
   else if(a==='creset'){S.fg=0;S.bg=0;save();applyTheme();redrawTools()}
   else if(a==='info'){INFO=true;var w=document.createElement('div');w.innerHTML=infoHTML();document.body.appendChild(w.firstChild)}
   else if(a==='start'){var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
-  else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.M})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}
+  else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.markedM,pending:ot.P})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen'}
@@ -197,6 +205,7 @@ document.addEventListener('click',function(e){
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
   else if(a==='airetry'){var rb=CUR.b;if(rb){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
+  else if(a==='airemark'){var mb=CUR.b,old=mb&&BS(mb.id).ai[d.k];if(mb&&S.tok&&old&&!old.stamp&&!old.status){delete BS(mb.id).ai[d.k];delete BS(mb.id).aiErr[d.k];save(mb.id);markAndShow(mb)}}
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();

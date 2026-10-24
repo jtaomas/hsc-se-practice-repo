@@ -69,7 +69,7 @@ qs.push(Q(SEP,'A store keeps the names of 20 items in the array <b>Items</b>. Th
     IF found = FALSE THEN
         Display "Not found"
     ENDIF
-END FindItem`,['1 mark: reads the target and loops through all 20 positions.','1 mark: compares each item with the target and displays only the first match.','1 mark: displays "Not found" only when no match was found.'])],{two:true}));
+END FindItem`,['1 mark: reads the target and uses a FOR loop to search up to 20 positions; stopping after the first match is accepted.','1 mark: compares each item with the target and displays only the first match.','1 mark: displays "Not found" only when no match was found.'])],{two:true}));
 qs.push(Q(SSA,'',[
  tx('Describe a buffer overflow and ONE way to prevent it.',3,55,'A buffer overflow happens when a program writes more data into a block of memory than it was set up to hold, so the extra data overwrites nearby memory. An attacker can use this to crash the program or run their own code. It can be prevented by checking the length of input before copying it, or by using languages and functions that check memory limits.',['3 marks: describes how excess data overwrites memory, the possible effect, and one prevention method.','2 marks: describes the overflow with limited effect or prevention.','1 mark: identifies a buffer overflow.'])]));
 qs.push(Q(SEP,'A program reads whole numbers entered by the user until the user enters 0. The 0 is not part of the data. At least one number is entered before the 0. For the numbers 3, 9, 4 and 0 the output is:<br><b>Sum: 16<br>Largest: 9</b>',[

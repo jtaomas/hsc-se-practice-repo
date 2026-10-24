@@ -1,0 +1,4 @@
+{
+  "outputDirectory": "public",
+  "functions": { "api/mark.js": { "maxDuration": 60 } }
+}

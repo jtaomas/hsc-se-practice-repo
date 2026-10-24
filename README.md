@@ -2,7 +2,7 @@
 
 Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam. Not affiliated with NESA.
 
-Live site: https://hsc-software-engineering-practice-andrew-b92c.vercel.app
+Live site: https://hsc-se-practice-repo.vercel.app
 
 ## What it does
 

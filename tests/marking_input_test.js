@@ -26,13 +26,13 @@ let count = 0;
 const directory = path.join(__dirname, '../public');
 const browser = vm.createContext({ localStorage: { getItem: () => null } });
 const scripts = [...fs.readFileSync(path.join(directory, 'index.html'), 'utf8').matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
-  .map(match => match[1]).filter(file => /^(helpers|kit|bank\d+|formats)\.js$/.test(file));
+  .map(match => match[1]).filter(file => /^(helpers|kit|marking\/[a-z0-9]+|bank\d+|formats)\.js$/.test(file));
 scripts.forEach(file => vm.runInContext(fs.readFileSync(path.join(directory, file), 'utf8'), browser, { filename: file, timeout: 1000 }));
 const browserBanks = JSON.parse(JSON.stringify(browser.BANKS));
 assert.deepEqual(loadBanks().map(bank => bank.id).sort(), browserBanks.map(bank => bank.id).sort(), 'Server and browser must load the same bank IDs');
 const closed = new Set(['mc', 'ms', 'dd', 'mt', 'gd', 'tk', 'od', 'dm']);
 for (const bank of loadBanks().filter(bank => !bank.hidden)) {
-  assert.equal(bank.qs.length, 27, bank.id + ' question count');
+  assert.equal(bank.qs.length, bank.questions || 27, bank.id + ' question count');
   assert.equal(bank.qs.reduce((s, q) => s + q.m, 0), 80);
   bank.qs.forEach((q, n) => q.it.forEach((it, i) => {
     if (closed.has(it.t)) return;
@@ -44,7 +44,8 @@ for (const bank of loadBanks().filter(bank => !bank.hidden)) {
     const actual = prepare({ bankId: bank.id, questionNumber: n + 1, partIndex: i, answer });
     assert.equal(actual.input.maxMarks, it.m);
     assert.equal(actual.input.criteria.length, it.crit.length);
-    assert.equal(actual.reviewReason, null);
+    // a question with a raster image cannot be seen by the marker, so it must be sent to review
+    if (/<img\b/i.test(q.st)) assert.match(actual.reviewReason, /image/); else assert.equal(actual.reviewReason, null);
     count++;
   }));
 }

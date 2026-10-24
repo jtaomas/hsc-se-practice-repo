@@ -21,7 +21,7 @@ BANKS.push({id:'7',name:'Bank 7',sub:'Short description',qs:qs});
 - `opt.two:true` puts the stimulus in a left column that scrolls on its own, with the parts on the right. Most longer HSC questions use this layout.
 - `opt.db:{Table:{c:[columns],r:[rows]}}` gives SQL parts a database. The tables are shown under the stimulus.
 - `P('(a)', part)` labels a part. Multi-part questions get "hide" toggles automatically.
-- A visible paper must have **27 questions and 80 marks**. Add `hidden:true` to the bank object for a demo or draft that should stay off the paper lists (it still opens at `#/<id>`).
+- A visible paper must have **27 questions and 80 marks**. A paper converted from a school trial exam can set `questions:N` on the bank object for its own question count (80 marks still applies), and `trial:true` and `credit:'...'` for the attribution line shown on its paper page. Add `hidden:true` to the bank object for a demo or draft that should stay off the paper lists (it still opens at `#/<id>`).
 
 ## Question formats
 
@@ -139,3 +139,7 @@ Questions must be original. Do not copy HSC or NESA exam text.
 
 ## Bullet points in a stimulus or prompt
 `bl(['first point','second point'])` returns a dot-point list styled like the HSC online exam. Use it inside a stimulus string or a question prompt.
+
+## Papers with official marking criteria
+
+The converted trial papers keep their criteria and sample answers in `public/marking/` (see `marking/README.md`), and the bank reads them with `critOf(MARKING.paper.entries[key])` so the question and the marking material stay separate.

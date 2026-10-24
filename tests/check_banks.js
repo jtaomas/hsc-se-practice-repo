@@ -1,5 +1,6 @@
 // Checks every paper in public/ for mistakes before a pull request.
 // Loads the same scripts the page loads (helpers, kit, banks) in a sandbox,
+// (and the marking-criteria files in public/marking/) in a sandbox,
 // then checks totals and the shape of every question. Run: node tests/check_banks.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const pub = path.join(__dirname, '..', 'public');
@@ -10,7 +11,7 @@ vm.createContext(ctx);
 // helpers and kit define the constructors; any file that calls BANKS.push is a paper
 for (const f of scripts) {
   const src = fs.readFileSync(path.join(pub, f), 'utf8');
-  if (f === 'helpers.js' || f === 'kit.js' || src.includes('BANKS.push')) vm.runInContext(src, ctx, { filename: f });
+  if (f === 'helpers.js' || f === 'kit.js' || f.startsWith('marking/') || src.includes('BANKS.push')) vm.runInContext(src, ctx, { filename: f });
 }
 
 const errs = [], warn = [];
@@ -59,7 +60,8 @@ for (const b of banks) {
     q.it.forEach((it, i) => check(q.it.length > 1 ? `${where} part ${it.lb || i + 1}` : where, it, q));
   });
   if (!b.hidden) {
-    if (b.qs.length !== 27) errs.push(`${b.name}: has ${b.qs.length} questions, needs 27`);
+    const need = b.questions || 27;
+    if (b.qs.length !== need) errs.push(`${b.name}: has ${b.qs.length} questions, needs ${need}`);
     if (marks !== 80) errs.push(`${b.name}: totals ${marks} marks, needs 80`);
   }
   console.log(`${b.name}${b.hidden ? ' (hidden demo)' : ''}: ${b.qs.length} questions, ${marks} marks`);

@@ -13,7 +13,8 @@ Read README.md first. Then follow these rules.
 - Do not break the live site. Every push to `main` deploys to production within about a minute, so test before you push.
 - Never call the live `/api/auth` or `/api/mark` from tests or scripts. Do not create accounts on the live site. Use the mocks in `tests/`.
 - Never store or log plain-text passwords. `api/auth.js` keeps a random salt and a scrypt hash only. Changes to that file need a passing `tests/run_auth_test.sh` and a note in the PR describing the security effect.
-- Do not copy real HSC or NESA exam text into the question banks. Questions here are original.
+- Do not copy real HSC or NESA exam text into the question banks. Questions here are original. The one exception is the school trial papers that the owner supplied and asked to have converted (PEM 2026 Trial in `bank8.js` and NSW DoE 2026 Trial in `bank9.js`). Do not add other published papers without the owner's say-so and a licence that allows it.
+- Marking criteria for those two papers live in `public/marking/` and `marking/`. Read `marking/README.md` before changing how they are marked.
 
 ## How to add or change a question
 Read AUTHORING.md: it lists every constructor and stimulus panel, with examples. `public/formats.js` (open `#/formats`) is a working demo of each format.

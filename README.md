@@ -1,6 +1,6 @@
 # HSC Software Engineering practice exams
 
-Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam. Not affiliated with NESA.
+Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam, plus two school trial papers (PEM 2026 and NSW DoE 2026) converted to the same format. Not affiliated with NESA.
 
 Live site: https://hsc-se-practice-repo.vercel.app
 
@@ -51,7 +51,7 @@ server/
   marking-store.js private cached decisions, distributed leases and atomic quotas
 tests/
   run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
-  check_banks.js   checks every paper: 27 questions, 80 marks, well-formed questions
+  check_banks.js   checks every paper: question count, 80 marks, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
 

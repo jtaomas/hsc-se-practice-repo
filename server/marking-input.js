@@ -26,7 +26,7 @@ function loadBanks() {
     // Discover only deployed source files, never a filename supplied by a request.
     const files = fs.readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isFile() && /^bank\d+\.js$/.test(entry.name))
       .map(entry => entry.name).sort((a, b) => { const x = BigInt(a.slice(4, -3)), y = BigInt(b.slice(4, -3)); return x < y ? -1 : x > y ? 1 : a.localeCompare(b); });
-    for (const file of ['helpers.js', 'kit.js', ...files, 'formats.js']) {
+    for (const file of ['helpers.js', 'kit.js', 'marking/marking.js', 'marking/pem2026.js', 'marking/doe2026.js', ...files, 'formats.js']) {
       vm.runInContext(fs.readFileSync(path.join(directory, file), 'utf8'), context, { filename: file, timeout: 1000 });
     }
     banks = JSON.parse(JSON.stringify(context.BANKS));

@@ -256,6 +256,10 @@ document.addEventListener('click',function(e){
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();
   else if(a==='acsync')syncNow();
+  else if(a==='bkdownload')bkDownload();
+  else if(a==='bkupload'){var bf=$('#bkfile');if(bf){bf.value='';bf.onchange=function(){bkReadFile(bf.files[0])};bf.click()}}
+  else if(a==='bklist')bkLoadList();
+  else if(a==='bkrestore')bkRestore(d.name);
   else if(a==='acresolve')resolveSync(d.id,d.v);
   else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,true);afterQDraw();window.scrollTo(0,y);refreshNav()}
 });

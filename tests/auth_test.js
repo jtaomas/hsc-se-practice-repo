@@ -60,6 +60,47 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal(JSON.stringify((await call({action:'load'},tok)).j),beforeInvalid,'invalid keys modified progress');
   assert.equal((await call({action:'save',data:{u:{}}},tok)).c,409);
   assert.equal((await save(tok,{big:'x'.repeat(3600000)},[],{})).c,413);
+  // Daily backups: the first save of a day copies the earlier state, later saves the same day do not.
+  const day=new Date().toISOString().slice(0,10);
+  const backupKeys=()=>[...globalThis.__M.keys()].filter(k=>k.startsWith('backup/'));
+  const pk='progress/'+JSON.parse(Buffer.from(tok.split('.')[0],'base64url')).id+'.json';
+  const setDay=v=>{const d=JSON.parse(globalThis.__M.get(pk));d._backupDay=v;globalThis.__M.set(pk,JSON.stringify(d))};
+  setDay('2000-01-01'); // pretend the last save was on an earlier day
+  r=await call({action:'load'},tok);
+  const preState=r.j.data.u['10'].ans['1.0'];
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Backup test A'}}}},['10'],r.j.revisions)).c,200);
+  assert.equal(backupKeys().length,1,'first save of the day must write one backup');
+  assert(backupKeys()[0].endsWith('/'+day+'.json'));
+  r=await call({action:'load'},tok);
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Backup test B'}}}},['10'],r.j.revisions)).c,200);
+  assert.equal(backupKeys().length,1,'later saves the same day must not write more backups');
+  assert.equal(JSON.parse(globalThis.__M.get(backupKeys()[0])).u['10'].ans['1.0'],preState,'backup holds the state before the day began');
+  assert(!JSON.stringify((await call({action:'load'},tok)).j).includes('_backupDay'),'internal field leaked to the client');
+  assert.equal((await call({action:'backups'})).c,401);
+  r=await call({action:'backups'},tok);
+  assert.deepEqual(r.j.backups,[day]);
+  assert.equal((await call({action:'restore',name:'../../users/x'},tok)).c,400);
+  assert.equal((await call({action:'restore',name:'2020-01-01'},tok)).c,404);
+  // Another account cannot see or restore this account's backups.
+  const intruder=(await call({action:'signup',email:'intruder@example.test',password:'intruder-test-pass'})).j.token;
+  assert.deepEqual((await call({action:'backups'},intruder)).j.backups,[]);
+  assert.equal((await call({action:'restore',name:day},intruder)).c,404);
+  // Old backups are pruned, and a restore keeps a safety copy and forces other devices to reconcile.
+  globalThis.__M.set('backup/'+JSON.parse(Buffer.from(tok.split('.')[0],'base64url')).id+'/'+new Date(Date.now()-9*864e5).toISOString().slice(0,10)+'.json','{}');
+  r=await call({action:'load'},tok);
+  const beforeRestore=r.j.revisions;
+  r=await call({action:'restore',name:day},tok);
+  assert.equal(r.c,200);assert.equal(r.j.data.u['10'].ans['1.0'],preState,'restore did not bring back the saved state');
+  assert(backupKeys().some(k=>/before-restore-\d{13}\.json$/.test(k)),'restore must keep a safety copy');
+  assert.notEqual(r.j.revisions['10'],beforeRestore['10'],'restore must change revisions so stale devices see a conflict');
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'stale device'}}}},['10'],beforeRestore)).c,409);
+  // A backup failure must never fail the save itself.
+  r=await call({action:'load'},tok);
+  globalThis.__blobBeforePut=async(path)=>{if(path.startsWith('backup/'))throw new Error('backup storage down')};
+  setDay('2000-01-01');
+  const bare=await call({action:'load'},tok);
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'after backup failure'}}}},['10'],bare.j.revisions)).c,200);
+  globalThis.__blobBeforePut=null;
   // Two independent function instances share the storage, not an in-memory lock.
   const entry=require.resolve(process.argv[2]||'./auth.js');delete require.cache[entry];const other=require(entry);
   const login={action:'login',email:'parallel@example.test',password:'wrong-test-password'};

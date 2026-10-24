@@ -139,3 +139,10 @@ Everyone with access works directly on `main`.
 3. `git commit` and `git push`. Vercel deploys `main` to production within about a minute.
 
 See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
+
+## Backups
+
+- On the first save of each UTC day, `api/auth.js` copies the previous progress to `backup/<id>/<day>.json` in the same private Blob store and deletes copies older than 7 days. This is one extra write per active account per day.
+- Signed-in users can list and restore those copies from the Account page. A restore first saves the current state as `before-restore-<time>`, and gives every paper a new revision so other devices see a conflict instead of overwriting it.
+- Anyone can download a backup file and restore from it on the Account page. That copy lives with the user, outside Vercel.
+- The backups live in the same store as the data, so they protect against bugs and bad overwrites, not against losing the store or hitting Hobby plan limits. Hobby includes 1 GB of storage and 2,000 write operations a month; going over blocks the store for 30 days.

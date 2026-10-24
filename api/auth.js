@@ -42,11 +42,27 @@ async function updateRecord(path, change) {
   }
   const e = new Error('The account is busy. Try again in a moment.'); e.status = 503; throw e;
 }
+// Daily backups. The first save of each UTC day first copies the previous state to
+// backup/<id>/<day>.json. This costs one extra write per active account per day, and the
+// day is remembered inside the progress record so normal saves cost nothing extra.
+const BACKUP_DAYS = 7;
+const BACKUP_NAME = /^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/;
+const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+async function writeBackup(id, name, text) {
+  const { put } = await blob();
+  try { await put('backup/' + id + '/' + name + '.json', text, { access: 'private', addRandomSuffix: false, allowOverwrite: false, contentType: 'application/json' }); }
+  catch (e) { if (!exists(e)) throw e; }
+}
+async function pruneBackups(id) {
+  const old = [];
+  for (let n = BACKUP_DAYS + 1; n <= BACKUP_DAYS + 14; n++) old.push('backup/' + id + '/' + dayOf(Date.now() - n * DAY) + '.json');
+  try { const { del } = await blob(); await del(old); } catch (e) { console.error('backup prune error:', e && e.message); }
+}
 function progressView(data) {
   data = data || {};
   const revisions = Object.assign({}, data._revisions || {});
   Object.keys(data.u || {}).forEach(id => { if (!revisions[id]) revisions[id] = sha(JSON.stringify(data.u[id])); });
-  const clean = Object.assign({}, data); delete clean._revisions;
+  const clean = Object.assign({}, data); delete clean._revisions; delete clean._backupDay;
   return { data: clean, revisions };
 }
 function mergeHistory(a, b) {
@@ -163,7 +179,10 @@ module.exports = async (req, res) => {
       if (!Array.isArray(p.changes) || !p.revisions || p.changes.some(id => typeof id !== 'string' || !/^(?:[1-9]|10)$/.test(id))) {
         return fail(409, 'Reload this page to use the updated progress-saving system.');
       }
+      const today = dayOf(Date.now());
+      let snapshot = null;
       const saved = await updateRecord(ppath, current => {
+        snapshot = current && current._backupDay !== today ? JSON.stringify(current) : null;
         const view = progressView(current), data = view.data, revisions = view.revisions;
         const clashes = p.changes.filter(id => (p.revisions[id] || null) !== (revisions[id] || null));
         if (clashes.length) {
@@ -179,13 +198,40 @@ module.exports = async (req, res) => {
         if ((incoming.ts || 0) >= (data.ts || 0)) {
           ['ts', 'font', 'fg', 'bg'].forEach(k => { data[k] = incoming[k] || 0; });
         }
-        data.v = 2; data._revisions = revisions;
+        data.v = 2; data._revisions = revisions; data._backupDay = today;
         if (Buffer.byteLength(JSON.stringify(data)) > MAX_PROGRESS) {
           const e = new Error('Your saved progress is too large to store.'); e.status = 413; throw e;
         }
         return data;
       });
+      if (snapshot) {
+        try { await writeBackup(sess.id, today, snapshot); await pruneBackups(sess.id); }
+        catch (e) { console.error('backup error:', e && (e.stack || e)); }
+      }
       return res.status(200).json(Object.assign({ ok: true, at: Date.now() }, progressView(saved)));
+    }
+    if (p.action === 'backups') {
+      const { list } = await blob();
+      const found = await list({ prefix: 'backup/' + sess.id + '/' });
+      const names = (found.blobs || []).map(b => String(b.pathname).slice(('backup/' + sess.id + '/').length).replace(/\.json$/, '')).filter(n => BACKUP_NAME.test(n)).sort().reverse();
+      return res.status(200).json({ backups: names });
+    }
+    if (p.action === 'restore') {
+      if (typeof p.name !== 'string' || !BACKUP_NAME.test(p.name)) return fail(400, 'Choose a backup from the list.');
+      const snap = await readJSON('backup/' + sess.id + '/' + p.name + '.json');
+      if (!snap) return fail(404, 'That backup no longer exists.');
+      const now = await readJSON(ppath);
+      if (now) await writeBackup(sess.id, 'before-restore-' + Date.now(), JSON.stringify(now));
+      const restored = await updateRecord(ppath, current => {
+        const data = progressView(snap).data, revisions = {};
+        const ids = new Set([...Object.keys(data.u || {}), ...Object.keys((current && current.u) || {}), ...Object.keys((current && current._revisions) || {})]);
+        ids.forEach(id => { revisions[id] = crypto.randomBytes(16).toString('hex'); });
+        data.u = data.u || {};
+        data.hist = mergeHistory(data.hist, current && current.hist);
+        data.v = 2; data._revisions = revisions; data._backupDay = dayOf(Date.now());
+        return data;
+      });
+      return res.status(200).json(Object.assign({ ok: true, restored: p.name }, progressView(restored)));
     }
     return fail(400, 'Unknown request.');
   } catch (e) {

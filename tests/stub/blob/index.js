@@ -17,3 +17,10 @@ export async function put(path, value, options) {
   data.set(path, value); versions.set(path, 'v' + (++version));
   return { pathname: path, etag: versions.get(path) };
 }
+export async function list(options) {
+  const prefix = (options && options.prefix) || '';
+  return { blobs: [...data.keys()].filter(k => k.startsWith(prefix)).map(pathname => ({ pathname })), hasMore: false };
+}
+export async function del(paths) {
+  for (const p of [].concat(paths)) { data.delete(p); versions.delete(p); }
+}

@@ -106,13 +106,62 @@ function resolveSync(id,choice){
   S.revisions[id]=c.revision;delete SYNC.conflicts[id];persist();render();
   if(!Object.keys(SYNC.conflicts).length)syncNow();
 }
+/* ---------- Backups: a file you keep, and daily copies on the server ---------- */
+var BK={list:null,msg:'',busy:false};
+function bkSet(m){BK.msg=m;var e=$('#bkmsg');if(e)e.textContent=m}
+function bkLabel(n){return /^before-restore-/.test(n)?'Saved just before a restore ('+new Date(+n.slice(15)).toLocaleString()+')':'Start of '+n}
+function backupHTML(){
+  var h='<h3 class="pt" style="margin-top:22px">Backups</h3><p>A backup file is a copy of all your papers and marks that you keep yourself. The site also keeps a copy of your progress from the start of each of the last 7 days that you saved.</p>'+
+    '<div class="acts"><button class="nb ol" data-act="bkdownload">Download a backup file</button><button class="nb ol" data-act="bkupload">Restore from a backup file</button>'+
+    (S.tok?'<button class="nb ol" data-act="bklist">Show daily backups</button>':'')+'</div>'+
+    '<input type="file" id="bkfile" accept=".json,application/json" hidden>'+'<div class="acmsg" id="bkmsg" role="status">'+esc(BK.msg)+'</div>';
+  if(S.tok&&BK.list)h+=BK.list.length?'<div class="bklist">'+BK.list.map(function(n){return '<div class="aib"><b>'+esc(bkLabel(n))+'</b> <button class="nb ol" data-act="bkrestore" data-name="'+esc(n)+'">Restore this backup</button></div>'}).join('')+'</div>':'<p>No daily backups yet. The first one is made the next day you save.</p>';
+  return h;
+}
+function bkDownload(){
+  var file={kind:'sehsc-backup',v:1,email:S.ae||'',at:new Date().toISOString(),data:syncPayload()};
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(file)],{type:'application/json'}));
+  a.download='hsc-se-backup-'+file.at.slice(0,10)+'.json';document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);bkSet('Backup file downloaded.');
+}
+function bkReadFile(f){
+  if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var file;try{file=JSON.parse(rd.result)}catch(e){return bkSet('That file is not a backup file.')}
+    if(!file||file.kind!=='sehsc-backup'||!file.data||typeof file.data.u!=='object'||file.data.u===null)return bkSet('That file is not a backup file.');
+    var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|10)$/.test(id)});
+    if(!ids.length)return bkSet('That backup has no papers in it.');
+    if(!confirm('Restore '+ids.length+' paper'+(ids.length===1?'':'s')+' from this backup? Papers in the file replace the same papers here. Other papers are not touched.'))return;
+    ids.forEach(function(id){S.u[id]=file.data.u[id];S.pending[id]=(S.pending[id]||0)+1;delete SYNC.conflicts[id]});
+    (file.data.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
+    persist();bkSet('Restored '+ids.length+' paper'+(ids.length===1?'':'s')+' from the backup file.');
+    if(S.tok)syncSoon();
+  };
+  rd.readAsText(f);
+}
+function bkLoadList(){
+  if(BK.busy)return;BK.busy=true;bkSet('Loading...');
+  api('backups').then(function(r){BK.list=r.backups||[];BK.busy=false;BK.msg='';render()}).catch(function(e){BK.busy=false;bkSet(e.message)});
+}
+function bkRestore(name){
+  if(BK.busy)return;
+  if(!confirm('Restore your account to this backup? Your current progress is kept as a "before restore" backup first.'))return;
+  var epoch=SYNC.epoch;BK.busy=true;bkSet('Restoring...');
+  SYNC.queue.catch(function(){}).then(function(){return api('restore',{name:name})}).then(function(r){
+    checkSession(epoch);
+    S.pending={};S.u=(r.data&&r.data.u)||{};S.revisions=r.revisions||{};SYNC.conflicts={};
+    (r.data&&r.data.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
+    persist();BK.busy=false;BK.list=null;BK.msg='Restored. Your papers now match that backup.';render();
+  }).catch(function(e){BK.busy=false;if(!e.stale)bkSet(e.message)});
+}
 function accountPage(){
   CUR={b:null,n:0};
   var body;
   if(S.tok&&S.ae){
     body='<h2 class="pt">Your account</h2><p>Signed in as <b>'+esc(S.ae)+'</b>.</p><p id="syncst">'+syncStatusHTML()+'</p>'+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
-      conflictHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
+      conflictHTML()+backupHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
   }else{
     var up=ACC.mode==='up';
     body='<h2 class="pt">'+(up?'Create an account':'Sign in')+'</h2>'+

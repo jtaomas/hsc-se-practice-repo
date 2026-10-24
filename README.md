@@ -103,7 +103,7 @@ The static site works with the simple server. `/api/*` does not, so the account 
 
 To include the real Python worker tests, install `pyodide@0.26.4` into a temporary directory and set `PYODIDE_DIR` to its package directory when running `tests/run_ui_test.py`. It serves the runtime locally and checks infinite-loop cancellation, timeout recovery and every supplied Python model case. Set `ACE_DIR` to a local `ace-builds@1.32.9` package to exercise the real code editor. `CHROME` can specify an existing Chrome executable instead of Playwright's bundled Chromium.
 
-Account storage uses the Blob SDK's ETag conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and an ETag retry for concurrent changes to other papers. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
+Account storage uses the Blob SDK's ETag conditional writes with uncached identity reads. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and a bounded ETag retry for concurrent changes to other papers. The browser bounds account requests, including response-body reads, and preserves pending local work on timeout. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
 
 ## Environment variables (set in Vercel, never in git)
 

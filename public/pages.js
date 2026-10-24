@@ -177,14 +177,40 @@ function afterQ(){
   var b=CUR.b,n=CUR.n,q=b.qs[n-1],rv=CUR.rv;
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
   aceMount();
-  var state=S,bs=BS(b.id);
-  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b).then(function(){if(S!==state||S.u[b.id]!==bs||CUR.b!==b||location.hash.indexOf('review/'+n)<0||CUR.n!==n||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,true);afterQDraw();window.scrollTo(0,y);refreshNav()});
+  var bs=BS(b.id);
+  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b);
 }
 function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount()}
+function refreshMarking(b,context){
+  if(!aiRunCurrent(b,context)||CUR.b!==b)return;
+  var h=location.hash.replace(/^#\//,'').split('/'),y=window.scrollY;
+  if(h[0]!==String(b.id))return;
+  if(h[1]==='review'&&CUR.rv&&+h[2]===CUR.n&&$('#qarea')){xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();refreshNav()}
+  else if(h[1]==='results'&&$('#app'))$('#app').innerHTML=resultsPage(b);
+  else return;
+  window.scrollTo(0,y);
+}
+var CHECKRUN={};
+function ensureLocalChecks(b,context){
+  var bs=context.paper,old=CHECKRUN[b.id];
+  if(bs.checked)return Promise.resolve();
+  if(aiRunCurrent(b,old))return old.promise;
+  var run=aiContext(b);CHECKRUN[b.id]=run;
+  run.promise=Promise.resolve().then(function(){if(aiRunCurrent(b,run))return runChecks(b)}).then(function(){
+    if(aiRunCurrent(b,run)){bs.checked=1;save(b.id);refreshMarking(b,run)}
+  }).then(function(){if(CHECKRUN[b.id]===run)delete CHECKRUN[b.id]},function(){
+    // Local execution checks are advisory and must not block AI marking.
+    if(CHECKRUN[b.id]===run)delete CHECKRUN[b.id];
+  });
+  return run.promise;
+}
 function ensureMarked(b){
-  var bs=BS(b.id),state=S;
-  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S===state&&S.u[b.id]===bs){bs.checked=1;save(b.id)}});
-  return p.then(function(){if(S===state&&S.u[b.id]===bs&&S.tok){var task=runAI(b),panel=CUR.b===b?$('#aib'):null;if(panel)panel.outerHTML=aiStatusHTML(b);return task}});
+  var context=aiContext(b);
+  // Start marking before loading Python/SQL runtimes; neither task depends on the other.
+  var task=S.tok?runAI(b,function(){refreshMarking(b,context)}):null;
+  var checks=ensureLocalChecks(b,context),panel=CUR.b===b?$('#aib'):null;
+  if(panel&&aiRunCurrent(b,context))panel.outerHTML=aiStatusHTML(b);
+  return (task||checks).then(function(){refreshMarking(b,context)});
 }
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),todo=aiTodo(b).length;
@@ -196,14 +222,7 @@ function aiStatusHTML(b){
   return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback. You can change a mark there.</div>';
 }
 function markAndShow(b){
-  var state=S,bs=BS(b.id);
-  ensureMarked(b).then(function(){
-    if(S!==state||S.u[b.id]!==bs||CUR.b!==b)return;
-    var y=window.scrollY;
-    if(CUR.rv&&$('#qarea')){xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();refreshNav()}
-    else if(location.hash.indexOf('/results')>=0)$('#app').innerHTML=resultsPage(b);
-    window.scrollTo(0,y);
-  });
+  return ensureMarked(b);
 }
 function go(n){location.hash='#/'+CUR.b.id+'/'+(CUR.rv?'review':'q')+'/'+n}
 function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc;navArrows(false)}
@@ -250,7 +269,7 @@ document.addEventListener('click',function(e){
   else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
-  else if(a==='airetry'){var rb=CUR.b;if(rb){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
+  else if(a==='airetry'){var rb=CUR.b;if(rb&&!aiRunCurrent(rb,AIRUN[rb.id])){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
   else if(a==='airemark'){var mb=CUR.b,old=mb&&BS(mb.id).ai[d.k];if(mb&&S.tok&&old&&!old.stamp&&!old.status){delete BS(mb.id).ai[d.k];delete BS(mb.id).aiErr[d.k];save(mb.id);markAndShow(mb)}}
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
   else if(a==='acgo')acGo();

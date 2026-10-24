@@ -71,7 +71,7 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal(parallel.filter(x=>x.c===429).length,8);
   assert.equal((await call({action:'login',email:login.email,password:'correct-test-password'})).c,429);
   globalThis.__blobFailWrites=true;
-  assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'synthetic-test-value'})).c,500,'storage failure must fail closed');
+  assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'synthetic-test-value'})).c,503,'storage failure must fail closed');
   globalThis.__blobFailWrites=false;
   console.log('auth OK: signatures, atomic lockout, concurrent saves, mini-paper sync, conflicts, invalid paper keys, deletion and legacy-client safety');
 })().catch(e=>{console.error('FAIL',e);process.exit(1)});

@@ -10,6 +10,8 @@ const LEASE = /^[a-f0-9]{32}$/;
 const STORAGE_TIMEOUT_MS = 5000;
 const CHANGE_TIMEOUT_MS = 10000;
 const CHANGE_ATTEMPTS = 16;
+const PRECONNECT_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED']);
+const TRANSPORT_CODES = new Set([...PRECONNECT_CODES, 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'ECONNRESET', 'ETIMEDOUT', 'unknown']);
 const FAILURE_CODES = new Set(['marking_timeout', 'provider_response_too_large', 'provider_response_unreadable', 'provider_cancelled', 'provider_rate_limit', 'provider_auth', 'provider_balance', 'provider_error', 'provider_envelope', 'provider_unavailable', 'marking_request_too_large', 'invalid_result', 'no_key', 'marking_storage_unavailable', 'marking_storage_busy', 'marking_storage_timeout', 'marking_storage_version', 'marking_lease_lost', 'marking_unavailable']);
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function error(status, code, message) { const e = new Error(message); e.status = status; e.code = code; return e; }
@@ -34,6 +36,7 @@ function failureDiagnostics(value, kind) {
   const audit = value.audit;
   if (audit && typeof audit === 'object' && !Array.isArray(audit)) {
     clean.audit = { usage: usage(audit.usage), calls: [] };
+    if (Number.isInteger(audit.networkAttempts) && audit.networkAttempts >= 0 && audit.networkAttempts <= (comparison ? 10 : 4)) clean.audit.networkAttempts = audit.networkAttempts;
     if (number(audit.durationMs)) clean.audit.durationMs = audit.durationMs;
     if (audit.requestedModel != null) clean.audit.requestedModel = model(audit.requestedModel);
     if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, comparison ? 10 : 3).map(model);
@@ -47,6 +50,11 @@ function failureDiagnostics(value, kind) {
       if (call.requestedModel != null) out.requestedModel = model(call.requestedModel);
       if (call.returnedModel != null) out.returnedModel = model(call.returnedModel);
       if (failureCodes.has(call.errorCode)) out.errorCode = call.errorCode;
+      if ([1, 2].includes(call.attemptCount)) out.attemptCount = call.attemptCount;
+      if (PRECONNECT_CODES.has(call.retryCause)) out.retryCause = call.retryCause;
+      if (TRANSPORT_CODES.has(call.transportCode)) out.transportCode = call.transportCode;
+      if (['before_headers', 'body'].includes(call.transportPhase)) out.transportPhase = call.transportPhase;
+      if (Number.isInteger(call.responseStatus) && call.responseStatus >= 100 && call.responseStatus <= 599) out.responseStatus = call.responseStatus;
       if (['stop', 'length', 'tool_calls', 'function_call', 'content_filter'].includes(call.finishReason)) out.finishReason = call.finishReason;
       clean.audit.calls.push(out);
     }

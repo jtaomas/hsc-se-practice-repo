@@ -229,6 +229,14 @@ async function run(options, dependencies = {}) {
       const { item, repetition, prepared } = job, initial = deterministicResult(prepared), began = Date.now();
       function jobFetch(url, request) {
         const generated = JSON.parse(request.body).max_tokens;
+        // A connection-only recovery may need a fourth physical request. Use
+        // only spare explicit budget, never another active job's reservation.
+        // Normal cases still reserve three; neither CLI ceiling is increased.
+        if (reservation && reservation.calls === 0 && reservation.sent === 3 && integer(generated, 1, engine.LIMITS.maxTokens) &&
+            bounded.state.calls + pendingCalls + 1 <= options.maxCalls &&
+            bounded.state.reservedOutputTokens + pendingOutputTokens + generated <= options.maxOutputTokens) {
+          reservation.calls++; pendingCalls++; reservation.outputTokens += generated; pendingOutputTokens += generated;
+        }
         if (!reservation || reservation.calls < 1 || !integer(generated, 1, engine.LIMITS.maxTokens) || generated > reservation.outputTokens) {
           throw Object.assign(new Error('Evaluation job reservation exhausted.'), { status: 429, code: 'evaluation_budget' });
         }

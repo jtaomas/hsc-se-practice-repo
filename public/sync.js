@@ -26,14 +26,51 @@ function mergeRemote(r,revisions){
   if((r.ts||0)>(S.ts||0)){S.font=r.font||0;S.fg=r.fg||0;S.bg=r.bg||0}
   persist();
 }
+function syncObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
+function syncSame(a,b){
+  if(a===b)return true;
+  if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+  var keys=Object.keys(a);
+  return keys.length===Object.keys(b).length&&keys.every(function(k){return Object.prototype.hasOwnProperty.call(b,k)&&syncSame(a[k],b[k])});
+}
+function syncEnvelope(j){
+  if(!syncObject(j)||!syncObject(j.data)||!syncObject(j.revisions))return false;
+  var u=j.data.u,hist=j.data.hist;
+  if(u!==undefined&&!syncObject(u))return false;
+  if(hist!==undefined&&(!Array.isArray(hist)||!hist.every(syncObject)))return false;
+  if(!Object.keys(j.revisions).every(function(id){return /^[1-9]\d*$/.test(id)&&typeof j.revisions[id]==='string'&&j.revisions[id].length>0&&j.revisions[id].length<=128}))return false;
+  return Object.keys(u||{}).every(function(id){return /^[1-9]\d*$/.test(id)&&syncObject(u[id])&&typeof j.revisions[id]==='string'});
+}
+function syncReply(action,j,sent){
+  if(!syncObject(j)||j.error!==undefined)return false;
+  if(action==='signup'||action==='login')return typeof j.token==='string'&&j.token.length>0&&j.token.length<=4096&&typeof j.email==='string'&&j.email.length>0&&j.email.length<=120;
+  if(!syncEnvelope(j))return false;
+  if(action==='load')return true;
+  if(action!=='save'||j.ok!==true||!syncObject(j.data.u)||!Array.isArray(sent.changes))return false;
+  return sent.changes.every(function(id){
+    var paper=sent.data&&sent.data.u&&sent.data.u[id],revision=j.revisions[id];
+    return typeof revision==='string'&&revision!==(sent.revisions||{})[id]&&(paper?syncSame(paper,j.data.u[id]):!Object.prototype.hasOwnProperty.call(j.data.u,id));
+  });
+}
 function api(action,body,token){
   var h={'content-type':'application/json'};token=token===undefined?S.tok:token;if(token)h.authorization='Bearer '+token;
-  return fetch('/api/auth',{method:'POST',headers:h,body:JSON.stringify(Object.assign({action:action},body||{}))}).then(function(r){
-    return r.json().catch(function(){return {error:'The account service sent an unreadable reply.'}}).then(function(j){
-      if(!r.ok){var e=new Error(j.error||'Request failed ('+r.status+')');e.status=r.status;e.details=j;throw e}
+  // Compare save acknowledgements with the exact submitted snapshot, including
+  // when the user edits their local draft while the request is in flight.
+  var encoded=JSON.stringify(Object.assign({action:action},body||{})),sent=JSON.parse(encoded);
+  var control=new AbortController(),timer;
+  function timedOut(){return new Error('The account request timed out. Your progress is still saved in this browser. Try saving again.')}
+  var request=Promise.resolve().then(function(){return fetch('/api/auth',{method:'POST',headers:h,body:encoded,signal:control.signal})}).then(function(r){
+    return r.json().catch(function(){var e=new Error('The account service sent an unreadable reply. Your progress is still saved in this browser.');if(!r.ok)e.status=r.status;throw e}).then(function(j){
+      if(!r.ok){var e=new Error(syncObject(j)&&typeof j.error==='string'?j.error:'Request failed ('+r.status+')');e.status=r.status;
+        if(syncObject(j)&&j.code==='progress_conflict'&&syncEnvelope(j)&&Array.isArray(j.conflicts)&&j.conflicts.length&&j.conflicts.every(function(id){return typeof id==='string'&&/^[1-9]\d*$/.test(id)}))e.details=j;
+        throw e}
+      if(!syncReply(action,j,sent))throw new Error('The account service sent an invalid reply. Your progress is still saved in this browser.');
       return j;
     });
   });
+  // Bound both response headers and the body. Racing also stops the queue when
+  // a transport ignores abort; a late response cannot apply saved revisions.
+  return Promise.race([request,new Promise(function(_,reject){timer=setTimeout(function(){control.abort();reject(timedOut())},45000)})]).then(function(r){clearTimeout(timer);control.abort();return r},function(e){clearTimeout(timer);control.abort();if(e.name==='AbortError')throw timedOut();throw e});
 }
 function syncFail(e){
   if(e.stale)return;

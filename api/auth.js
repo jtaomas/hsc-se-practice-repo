@@ -2,45 +2,94 @@
 // Passwords are never stored. Each account keeps a random salt and a scrypt hash.
 // Data lives in a private Vercel Blob store. Sessions are signed tokens that last 30 days.
 const crypto = require('crypto');
+const { performance } = require('node:perf_hooks');
 
 const DAY = 86400000;
 const SESSION_MS = 30 * DAY;
 const MAX_PROGRESS = 3500000;
 const MAX_FAILS = 8;
 const LOCK_MS = 15 * 60000;
+const STORAGE_TIMEOUT_MS = 5000;
+const UPDATE_TIMEOUT_MS = 10000;
+const UPDATE_ATTEMPTS = 16;
 let SECRET = null;
 
 async function blob() { return import('@vercel/blob'); }
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const b64 = (b) => Buffer.from(b).toString('base64url');
 
-async function readRecord(path) {
-  const { get } = await blob();
-  const r = await get(path, { access: 'private', useCache: false });
-  if (!r || r.statusCode !== 200 || !r.stream) return null;
-  const chunks = [];
-  for await (const c of r.stream) chunks.push(Buffer.from(c));
-  return { data: JSON.parse(Buffer.concat(chunks).toString('utf8')), etag: r.blob.etag };
+function storageError(code, message) {
+  const e = new Error(message); e.status = 503; e.code = code; e.details = { code }; return e;
+}
+function storageBusy() { return storageError('account_storage_busy', 'The account is busy. Try again in a moment.'); }
+async function bounded(operation, deadline = Infinity) {
+  const controller = new AbortController(), end = Math.min(performance.now() + STORAGE_TIMEOUT_MS, deadline);
+  const timeout = () => end === deadline ? storageBusy() : storageError('account_storage_timeout', 'Account storage exceeded its time limit. Your progress is still saved in this browser.');
+  const expired = () => { if (controller.signal.aborted || performance.now() >= end) throw timeout(); };
+  let timer;
+  try {
+    expired();
+    return await Promise.race([
+      Promise.resolve().then(() => operation(controller.signal, expired)),
+      new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(timeout()); }, Math.max(0, end - performance.now())); })
+    ]);
+  } finally { clearTimeout(timer); controller.abort(); }
+}
+async function readRecord(path, deadline, requireVersion) {
+  try {
+    return await bounded(async (signal, expired) => {
+      const { get } = await blob(); expired();
+      const r = await get(path, { access: 'private', useCache: false, headers: { 'Accept-Encoding': 'identity' }, abortSignal: signal }); expired();
+      if (!r || r.statusCode === 404) return null;
+      if (r.statusCode !== 200 || !r.stream) throw new Error('Invalid stored record');
+      const etag = r.blob && r.blob.etag;
+      // A conditional update must use the exact strong version of the bytes read.
+      // Never strip W/ or substitute the version of a later metadata request.
+      if (requireVersion && (typeof etag !== 'string' || !etag || etag.startsWith('W/'))) throw storageError('account_storage_version', 'Account storage could not verify the saved record. Please try again shortly.');
+      const chunks = []; let bytes = 0;
+      for await (const c of r.stream) { expired(); const chunk = Buffer.from(c); bytes += chunk.length; if (bytes > MAX_PROGRESS) throw new Error('Stored record too large'); chunks.push(chunk); }
+      expired();
+      const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid stored record');
+      return { data, etag };
+    }, deadline);
+  } catch (e) {
+    if (typeof e.code === 'string' && e.code.startsWith('account_storage_')) throw e;
+    throw storageError('account_storage_unavailable', 'Account storage is temporarily unavailable. Please try again shortly.');
+  }
 }
 async function readJSON(path) { const r = await readRecord(path); return r && r.data; }
-async function writeJSON(path, data, overwrite, etag) {
-  const { put } = await blob();
-  const options = { access: 'private', addRandomSuffix: false, allowOverwrite: !!overwrite, contentType: 'application/json' };
-  if (etag) options.ifMatch = etag;
-  return put(path, JSON.stringify(data), options);
+async function writeJSON(path, data, overwrite, etag, deadline) {
+  try {
+    return await bounded(async (signal, expired) => {
+      const { put } = await blob(); expired();
+      const options = { access: 'private', addRandomSuffix: false, allowOverwrite: !!overwrite, contentType: 'application/json', abortSignal: signal };
+      if (etag) options.ifMatch = etag;
+      const result = await put(path, JSON.stringify(data), options); expired(); return result;
+    }, deadline);
+  } catch (e) {
+    if (conflict(e) || (typeof e.code === 'string' && e.code.startsWith('account_storage_'))) throw e;
+    throw storageError('account_storage_unavailable', 'Account storage is temporarily unavailable. Please try again shortly.');
+  }
 }
 const exists = (e) => /already exists/i.test(String((e && e.message) || e));
 const conflict = (e) => e && (e.name === 'BlobPreconditionFailedError' || /precondition/i.test(e.message)) || exists(e);
 async function updateRecord(path, change) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const r = await readRecord(path);
-    if (r && !r.etag) throw new Error('Storage did not provide a version.');
+  const deadline = performance.now() + UPDATE_TIMEOUT_MS;
+  for (let attempt = 0; attempt < UPDATE_ATTEMPTS; attempt++) {
+    if (performance.now() >= deadline) throw storageBusy();
+    const r = await readRecord(path, deadline, true);
     const next = change(r && r.data);
     if (next === null) return r && r.data;
-    try { await writeJSON(path, next, !!r, r && r.etag); return next; }
+    try { await writeJSON(path, next, !!r, r && r.etag, deadline); return next; }
     catch (e) { if (!conflict(e)) throw e; }
+    if (attempt + 1 === UPDATE_ATTEMPTS) break;
+    const cap = Math.min(500, 50 * Math.pow(2, attempt));
+    const delay = Math.min(Math.floor(cap / 2 + Math.random() * cap / 2), deadline - performance.now());
+    if (delay <= 0) throw storageBusy();
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
-  const e = new Error('The account is busy. Try again in a moment.'); e.status = 503; throw e;
+  throw storageBusy();
 }
 function progressView(data) {
   data = data || {};

@@ -14,7 +14,7 @@ def auth(r):
     tok=h.get('authorization','').replace('Bearer ','')
     if not tok.startswith('T:') : return out(401,{'error':'Your sign-in has expired. Sign in again.'})
     revisions=store.setdefault('revisions',{}).setdefault(tok,{})
-    if a=='load': return out(200,{'email':tok[2:],'data':store['prog'].get(tok),'revisions':revisions})
+    if a=='load': return out(200,{'email':tok[2:],'data':store['prog'].get(tok,{}),'revisions':revisions})
     if a=='save':
         current=store['prog'].setdefault(tok,{'u':{},'hist':[]})
         clashes=[i for i in p['changes'] if p['revisions'].get(i)!=revisions.get(i)]

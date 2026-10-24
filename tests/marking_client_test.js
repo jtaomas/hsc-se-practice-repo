@@ -34,6 +34,10 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.equal(c.score(b,1,0).g,2);assert.equal(c.score(b,1,0).src,'ai');
     const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
     assert(html.includes('Further advice (not a mark deduction)'));assert(html.includes('Criterion evidence'));assert(html.includes('partial'));assert(html.includes('A link is missing.'));assert(html.includes('deepseek-flash'));assert(html.includes('r1'));
+    function feedback(){return c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0))}
+    bs.ai['1.0'].audit.durationMs=90123;assert(feedback().includes('Model assessment time: 90.1 seconds (excludes browser queue and transfer time)'));
+    bs.ai['1.0'].audit.durationMs=0;assert(feedback().includes('Model assessment time: 0 seconds'));
+    for(const duration of [undefined,null,'123',-1,Infinity,NaN,300001]){bs.ai['1.0'].audit.durationMs=duration;assert(!feedback().includes('Model assessment time:'))}
     c.AIMARKING_VERSION='new-harness';assert.equal(c.aiRecord(b,1,0),null);c.AIMARKING_VERSION='test-v2';assert(c.aiRecord(b,1,0));
     b.qs[0].it[0].crit=['A corrected rubric.'];assert.equal(c.aiRecord(b,1,0),null);assert.equal(c.aiTodo(b).length,1);assert.equal(c.score(b,1,0).set,false);
   }
@@ -82,20 +86,90 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const latest=c.AIRUN['1'];first.resolve(reply(result(1)));await one;assert.equal(c.AIRUN['1'],latest);assert.equal(bs.ai['1.0'],undefined);
     second.resolve(reply(result(3)));await two;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIRUN['1'],undefined);
   }
-  // At most two answer requests are active. Concurrent callers share a batch.
+  // At most three answer requests are active. Concurrent callers share a batch.
   {
     const c=client(),{b,bs}=paper(c,[written(),written(),written(),written(),written()]);Object.keys(b.qs[0].it).forEach(i=>bs.ans['1.'+i]='Answer '+i);
     const pending=[];let active=0,peak=0;c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(x=>{active--;return x})};
-    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===2);assert.equal(peak,2);
+    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===3);assert.equal(peak,3);
     for(let i=0;i<5;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}
-    await run;assert.equal(peak,2);assert.equal(c.aiTodo(b).length,0);
+    await run;assert.equal(peak,3);assert.equal(c.aiTodo(b).length,0);
   }
   // Transport failures are retryable. A 401 stops the queue and explains sign-in; null/boolean marks fail validation.
   {
     const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';let calls=0;c.fetch=async()=>{calls++;return calls===1?reply({error:'Unavailable'},503):reply(result())};
-    await c.runAI(b);assert.equal(c.aiTodo(b).length,1);assert(bs.aiErr['1.0']);await c.runAI(b);assert.equal(c.aiTodo(b).length,0);
+    await c.runAI(b);assert.equal(c.aiTodo(b).length,1);assert(bs.aiErr['1.0']);await c.runAI(b);assert.equal(calls,1,'saved failures must wait for an explicit retry');
+    bs.aiErr={};await c.runAI(b);assert.equal(c.aiTodo(b).length,0);
     c.fetch=async()=>reply({error:'Expired'},401);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal&&/Sign in again/.test(e.message));
     for(const mark of [null,false,'2',1.5]){c.fetch=async()=>reply({...result(),mark});await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
+  }
+  // A busy answer does not stop unrelated answers or retry automatically on page re-entry.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const requests=[];c.fetch=async(_,r)=>{const part=JSON.parse(r.body).partIndex;requests.push(part);return part===0?reply({error:'This answer is already being marked.',code:'marking_busy'},409):reply(result())};
+    await c.runAI(b);assert.deepEqual(requests,[0,1,2,3,4]);assert.equal(Object.keys(bs.ai).length,4);assert.match(bs.aiErr['1.0'],/already being marked/);
+    await c.ensureMarked(b);assert.equal(requests.length,5,'navigation must not retry the busy answer');assert.equal(c.aiTodo(b).length,1);
+    c.fetch=async()=>reply({error:'A different conflict',code:'other_conflict'},409);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal===true);
+  }
+  // Completed answers render while other requests are pending; final render clears the running status.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.checked=1;
+    const pending=[],frames=[],app={set innerHTML(value){frames.push(value)}};c.$=s=>s==='#app'?app:null;c.window.scrollY=47;c.window.scrollTo=(x,y)=>assert.equal(y,47);c.CUR.rv=false;
+    c.resultsPage=()=>JSON.stringify({marks:Object.keys(bs.ai).length,running:!!c.AIRUN[b.id]});
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===3);
+    pending[0].resolve(reply(result()));await until(()=>frames.length>0);assert.deepEqual(JSON.parse(frames[0]),{marks:1,running:true});assert.equal(c.aiTodo(b).length,3);
+    for(let i=1;i<4;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await run;
+    assert.deepEqual(JSON.parse(frames.at(-1)),{marks:4,running:false});
+  }
+  // Global auth/quota/conflict failures still stop dispatching queued answers; in-flight results are retained.
+  for(const status of [401,429,409]){
+    const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.runAI(b);await until(()=>pending.length===3);
+    pending[0].resolve(reply({error:'Global failure',code:'global_failure'},status));await until(()=>!!bs.aiErr['1.0']);
+    const block=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));assert(block.includes('when the batch finishes'));assert(!block.includes('data-act="airetry"'));
+    pending[1].resolve(reply(result()));pending[2].resolve(reply(result()));await run;assert.equal(pending.length,3);assert.equal(Object.keys(bs.ai).length,2);
+    assert(c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('data-act="airetry"'));
+  }
+  // Progress can follow navigation between review questions, but never redraw an unrelated route/account/attempt.
+  for(const mutate of [
+    c=>{c.location.hash='#/account'},
+    c=>{c.location.hash='#/2/results'},
+    c=>{c.CUR={b:null,n:0}},
+    c=>{c.S.tok='another-session'},
+    c=>{c.S.owner='another@example.test'},
+    c=>{c.SYNC.epoch++},
+    (c,b,bs)=>{bs.doneAt++},
+    c=>{c.S={...c.S,u:{}}}
+  ]){
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';bs.checked=1;const pending=defer();let started=false,renders=0;
+    c.$=s=>s==='#app'?{set innerHTML(_){renders++}}:null;c.resultsPage=()=>'';c.window.scrollTo=()=>{};c.CUR.rv=false;
+    c.fetch=()=>{started=true;return pending.promise};const run=c.markAndShow(b);await until(()=>started);mutate(c,b,bs);pending.resolve(reply(result()));await run;assert.equal(renders,0);
+  }
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='First';bs.ans['2.0']='Second';bs.checked=1;
+    c.location.hash='#/1/review/1';const pending=[];let visible='',draws=0;c.$=s=>s==='#qarea'?{set innerHTML(value){visible=value}}:null;
+    c.qHTML=(_,n)=>'Review '+n;c.afterQDraw=()=>{draws++};c.refreshNav=()=>{};c.xdCleanup=()=>{};c.window.scrollTo=()=>{};
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===2);
+    c.location.hash='#/1/review/2';c.CUR.n=2;pending[0].resolve(reply(result()));await until(()=>draws>0);assert.equal(visible,'Review 2');
+    pending[1].resolve(reply(result()));await run;assert.equal(visible,'Review 2');
+  }
+  // Local runtime work is deduplicated and cannot delay AI dispatch, completion, or released marks.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';const checks=defer();let checkCalls=0,requests=0;
+    c.runChecks=()=>{checkCalls++;return checks.promise};c.fetch=async()=>{requests++;return reply(result())};
+    const first=c.ensureMarked(b),second=c.ensureMarked(b);await until(()=>requests===1&&checkCalls===1);await Promise.all([first,second]);
+    assert.equal(bs.checked,undefined);assert.equal(c.score(b,1,0).g,2);assert(c.CHECKRUN[b.id]);checks.resolve();await until(()=>bs.checked===1);await until(()=>!c.CHECKRUN[b.id]);
+  }
+  // Failure or a stale local-check completion cannot suppress a mark or flag a replacement attempt checked.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';c.runChecks=()=>Promise.reject(new Error('Runtime did not load'));c.fetch=async()=>reply(result());
+    await c.ensureMarked(b);await until(()=>!c.CHECKRUN[b.id]);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.checked,undefined);
+    const checks=defer();let started=false;c.runChecks=()=>{started=true;return checks.promise};await c.ensureMarked(b);await until(()=>started);bs.doneAt++;checks.resolve();await until(()=>!c.CHECKRUN[b.id]);assert.equal(bs.checked,undefined);
+  }
+  // A broken progress display must not cancel queued answers or erase confirmed results.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0,warnings=0;
+    c.console={...console,warn(){warnings++}};c.fetch=async()=>{calls++;return reply(result())};await c.runAI(b,()=>{throw new Error('DOM changed')});
+    assert.equal(calls,4);assert.equal(Object.keys(bs.ai).length,4);assert.equal(warnings,4);assert.equal(c.AIRUN[b.id],undefined);
   }
   // Saved diagram geometry and bindings survive the request, together with its rendering.
   {

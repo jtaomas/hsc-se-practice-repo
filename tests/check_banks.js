@@ -60,9 +60,10 @@ for (const b of banks) {
     q.it.forEach((it, i) => check(q.it.length > 1 ? `${where} part ${it.lb || i + 1}` : where, it, q));
   });
   if (!b.hidden) {
-    const need = b.questions || 27;
+    if (b.mini && (!isInt(b.questions) || !isInt(b.marks) || !isInt(b.duration) || b.duration % 60 !== 0)) errs.push(`${b.name}: mini papers need positive integer questions, marks and duration (whole minutes in seconds)`);
+    const need = b.questions || 27, expectedMarks = b.mini ? b.marks : 80;
     if (b.qs.length !== need) errs.push(`${b.name}: has ${b.qs.length} questions, needs ${need}`);
-    if (marks !== 80) errs.push(`${b.name}: totals ${marks} marks, needs 80`);
+    if (marks !== expectedMarks) errs.push(`${b.name}: totals ${marks} marks, needs ${expectedMarks}`);
   }
   console.log(`${b.name}${b.hidden ? ' (hidden demo)' : ''}: ${b.qs.length} questions, ${marks} marks`);
 }

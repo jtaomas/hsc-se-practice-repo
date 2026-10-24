@@ -21,7 +21,9 @@ BANKS.push({id:'7',name:'Bank 7',sub:'Short description',qs:qs});
 - `opt.two:true` puts the stimulus in a left column that scrolls on its own, with the parts on the right. Most longer HSC questions use this layout.
 - `opt.db:{Table:{c:[columns],r:[rows]}}` gives SQL parts a database. The tables are shown under the stimulus.
 - `P('(a)', part)` labels a part. Multi-part questions get "hide" toggles automatically.
-- A visible paper must have **27 questions and 80 marks**. A paper converted from a school trial exam can set `questions:N` on the bank object for its own question count (80 marks still applies), and `trial:true` and `credit:'...'` for the attribution line shown on its paper page. Add `hidden:true` to the bank object for a demo or draft that should stay off the paper lists (it still opens at `#/<id>`).
+- A full-length original paper must have **27 questions and 80 marks**. A paper converted from a school trial exam can set `questions:N` on the bank object for its own question count (80 marks still applies), and `trial:true` and `credit:'...'` for the attribution line shown on its paper page. Add `hidden:true` to the bank object for a demo or draft that should stay off the paper lists (it still opens at `#/<id>`).
+
+A deliberately shorter practice paper may set `mini:true`, `questions:N`, `marks:M` and `duration:S` (working time in seconds, in whole minutes). Use a clear mini-paper name and a short description. The validator checks these declared counts and marks; full-length papers still require 80 marks. Mini Paper 1 (`bank10.js`) is the requested three-question, 15-mark, 30-minute example.
 
 ## Question formats
 

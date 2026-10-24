@@ -1,12 +1,12 @@
 # HSC Software Engineering practice exams
 
-Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam, plus two school trial papers (PEM 2026 and NSW DoE 2026) converted to the same format. Not affiliated with NESA.
+Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam, plus two school trial papers (PEM 2026 and NSW DoE 2026) converted to the same format, and a three-question mini paper. Not affiliated with NESA.
 
 Live site: https://hsc-se-practice-repo.vercel.app
 
 ## What it does
 
-- Exam mode (2 h 20 min countdown) and practice mode (no timer). Exit or submit at any question.
+- Exam mode (2 h 20 min countdown for full papers; 30 min for Mini Paper 1) and practice mode (no timer). Exit or submit at any question.
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
 - Papers page, My mistakes page, and opt-in **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
@@ -28,7 +28,7 @@ public/            static site, served as-is (no build step)
   marking/marking.js shared registry and criterion formatter
   marking/pem2026.js PEM trial marking entries (loaded before banks)
   marking/doe2026.js DoE trial marking entries (loaded before banks)
-  bank1..9.js      seven original papers and two converted trials (push into BANKS)
+  bank1..10.js     seven full original papers, two converted trials and a mini paper (push into BANKS)
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)
@@ -60,11 +60,13 @@ server/
   improvement-engine.js bounded coach plus independent evidence audit
 tests/
   run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
-  check_banks.js   checks every paper: question count, 80 marks, well-formed questions
+  check_banks.js   checks every paper: question count, declared mini-paper or 80-mark totals, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
 
-The current inventory has nine 80-mark papers: the seven originals have 27 questions each, the PEM trial has 33, and the DoE trial has 27. Trial source documents, attribution and marking notes are described in [`marking/README.md`](marking/README.md). The marking evaluation corpus remains 105 synthetic cases from the original seven papers; adding the trial papers does not establish their AI marking accuracy.
+Mini Paper 1 (`#/10`) contains exactly three original questions worth 5 marks each (15 marks total), with sample answers and marking criteria. Allow 30 minutes in exam mode, or use untimed practice. It is a short practice set, not a full HSC examination.
+
+The inventory also has nine 80-mark papers: the seven originals have 27 questions each, the PEM trial has 33, and the DoE trial has 27. Trial source documents, attribution and marking notes are described in [`marking/README.md`](marking/README.md). The marking evaluation corpus remains 105 synthetic cases from the original seven papers; adding the trial papers does not establish their AI marking accuracy.
 
 Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/account`.
 

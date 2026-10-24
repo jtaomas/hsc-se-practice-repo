@@ -75,6 +75,43 @@ with sync_playwright() as p:
     assert pg.evaluate("passTest('10\\n',{o:'10'})") is True
     pg.goto(U+'#/2');pg.click('[data-mode=exam]');pg.wait_for_timeout(1500)
     tm=pg.inner_text('#tmr');assert re.match(r'2:19:5\d|2:20:00',tm),tm
+    # A mini paper keeps its own length and timer through navigation, submission and review.
+    pg.goto(U+'#/');pg.wait_for_selector('.bks a[href="#/10"]')
+    assert 'Mini Paper 1' in pg.inner_text('.bks a[href="#/10"]')
+    pg.goto(U+'#/papers');pg.wait_for_selector('a[href="#/10"]')
+    assert 'Mini Paper 1' in pg.inner_text('.plist')
+    pg.click('a[href="#/10"]');pg.wait_for_selector('[data-mode=exam]')
+    details=pg.evaluate("Object.fromEntries(Array.from(document.querySelectorAll('.kv > b')).map(function(e){return [e.textContent,e.nextElementSibling.textContent]}))")
+    assert details['Questions']=='3' and details['Total marks']=='15',details
+    assert '30 minutes' in details['Exam mode'],details
+    pg.click('[data-mode=exam]');pg.wait_for_selector('#tmr')
+    tm=pg.inner_text('#tmr');assert re.fullmatch(r'0:30:00|0:29:5\d',tm),tm
+    assert pg.locator('#nums [data-act=go]').count()==3
+    pg.click('[data-act=info]');pg.wait_for_selector('[role=dialog]')
+    assert '30 minutes' in pg.inner_text('[role=dialog]')
+    pg.click('button[data-act=closeinfo]')
+    for number in [2,3]:
+        pg.click('[data-act=next]');pg.wait_for_function('CUR.n === '+str(number))
+        assert pg.inner_text('#hq')=='Question '+str(number)+' (5 marks)'
+    assert pg.inner_text('[data-act=next]')=='Finish exam'
+    pg.click('[data-act=next]');pg.wait_for_function("location.hash === '#/10/finish'")
+    assert '1, 2, 3' in pg.inner_text('.feature')
+    pg.goto(U+'#/10');pg.wait_for_selector('[data-act=restart]')
+    pg.once('dialog',lambda dialog:dialog.accept());pg.click('[data-act=restart]')
+    pg.click('[data-mode=practice]');pg.wait_for_selector('.hxb[href="#/10/finish"]')
+    assert 'Practice mode' in pg.inner_text('.hdr') and pg.query_selector('#tmr') is None
+    pg.click('.hxb[href="#/10/finish"]');pg.click('[data-act=submit]')
+    pg.wait_for_function("location.hash === '#/10/results' && document.querySelector('.big') && document.querySelector('.big').textContent === '0 / 15'")
+    for number in [1,2,3]:
+        pg.goto(U+'#/10/review/'+str(number));pg.wait_for_selector('.guide')
+        assert 'Sample answer:' in pg.inner_text('.guide') and 'Marking criteria' in pg.inner_text('.guide')
+        criteria=pg.evaluate("CUR.b.qs[CUR.n-1].it[0].crit")
+        assert criteria and pg.locator('.guide > ul > li').all_text_contents()==criteria
+        if number<3:
+            assert pg.get_attribute('.rta','contenteditable')=='false'
+        else:
+            assert pg.locator('textarea[data-code]').get_attribute('readonly') is not None
+    assert pg.inner_text('[data-act=next]')=='Back to results'
     pg.goto(U+'#/account');pg.wait_for_timeout(300)
     assert 'education email' in pg.inner_text('.feature')
     pg.click('[data-act=acmode]');pg.fill('#acemail','stu@student.det.nsw.edu.au');pg.fill('#acpw','password123');pg.fill('#acpw2','different1');pg.click('[data-act=acgo]');pg.wait_for_timeout(300)
@@ -104,4 +141,4 @@ with sync_playwright() as p:
     rows=pg.evaluate("Array.from(document.querySelectorAll('.dmq-row')).map(function(r){var s=r.querySelector('.dslot').getBoundingClientRect(),t=r.querySelector('.dmq-text').getBoundingClientRect(),q=document.querySelector('#qarea').getBoundingClientRect();return [t.left>=s.right,Math.abs((t.top+t.bottom)/2-(s.top+s.bottom)/2)<20,t.top>=q.top,getComputedStyle(r.querySelector('.dmq-text')).position]})")
     assert rows and all(r[0] and r[1] and r[2] and r[3]=='static' for r in rows),rows
     assert not logs,logs
-    print('ALL OK: modes, submitted-paper lock, exact output checks, signup, login and sync')
+    print('ALL OK: full and mini paper modes, mini paper navigation/marking guides, submitted-paper lock, exact output checks, signup, login and sync')

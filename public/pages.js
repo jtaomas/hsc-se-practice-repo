@@ -25,14 +25,16 @@ function menuHTML(id){
 }
 function redrawTools(){var t=$('#tools');if(t)t.innerHTML=toolsHTML(!!CUR.b&&CUR.n>0)}
 function fmtT(s){if(s<=0)return 'Time up';var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=Math.floor(s%60);return h+':'+(m<10?'0':'')+m+':'+(x<10?'0':'')+x}
-function tick(){var t=$('#tmr');if(!t||!CUR.b)return;var bs=BS(CUR.b.id);if(!bs.start){t.textContent='2:20:00';return}t.textContent=fmtT(140*60-Math.floor((Date.now()-bs.start)/1000))}
+function paperDuration(b){return b&&b.duration?b.duration:140*60}
+function paperTime(b){var minutes=paperDuration(b)/60,h=Math.floor(minutes/60),m=minutes%60;return (h?h+' hour'+(h===1?'':'s')+(m?' ':''):'')+(m?m+' minute'+(m===1?'':'s'):'')}
+function tick(){var t=$('#tmr');if(!t||!CUR.b)return;var bs=BS(CUR.b.id);t.textContent=fmtT(paperDuration(CUR.b)-(bs.start?Math.floor((Date.now()-bs.start)/1000):0))}
 setInterval(tick,1000);
 
 /* ---------- page frames ---------- */
 function frame(title,main,opt){
   opt=opt||{};
   var right;
-  if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">2:20:00</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
+  if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
   else right='<nav class="hn"><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
@@ -45,7 +47,7 @@ function infoHTML(){
   var left=
     '<h1 class="imh">Exam information</h1>'+
     '<h3>Reading time</h3><p>This practice site gives no reading time. In the real examination you have 10 minutes of reading time first. You can move between the questions, flag them and highlight text, but you cannot answer questions or leave the exam during that time.</p>'+
-    '<h3>Working time</h3><p>Working time is 2 hours 20 minutes. In exam mode the timer counts down from the moment you start. In practice mode there is no time limit.</p>'+
+    '<h3>Working time</h3><p>Working time for this paper is '+paperTime(CUR.b)+'. In exam mode the timer counts down from the moment you start. In practice mode there is no time limit.</p>'+
     '<h3>Permitted equipment</h3><p>In the real examination:</p><ul class="bl"><li>Pen and paper are permitted for planning. The supervisor provides the paper.</li><li>Notes, calculators and other aids are not permitted.</li></ul>'+
     '<h3>Word count</h3><div class="wcrow"><p><b>Each short-answer response shows a word count. It is a guide to how long your answer should be.</b></p><span class="wcpill">0 / 500 words</span></div>'+
     '<h2 class="imh2">Navigation and toolbar</h2>'+
@@ -81,16 +83,17 @@ function infoHTML(){
 /* ---------- pages ---------- */
 function homePage(){
   CUR={b:null,n:0};
-  var books=BANKS.filter(function(b){return !b.hidden}).map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
+  var visible=BANKS.filter(function(b){return !b.hidden}),full=visible.filter(function(b){return !b.mini}).length,mini=visible.length-full;
+  var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
     return '<a class="nb" href="#/'+b.id+'">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+st+'</small></a>'}).join('');
-  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>'+(['No','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten'][BANKS.filter(function(b){return !b.hidden}).length]||BANKS.filter(function(b){return !b.hidden}).length)+' 80-mark papers. The original papers have 27 questions in the same order of question types as the 2025 HSC online examination. Papers marked as trial papers are school trial examinations converted question for question into the online format, and keep their own question counts.</p><div class="bks">'+books+'</div></div>'+
-    '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode, with a 2 hour 20 minute timer, or in practice mode, with no timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you. Sign in for AI marking of written, code and diagram answers against the criteria; answers that need review remain unscored. You can use the marking guides to set or change any mark. The Papers page keeps every paper, and My mistakes collects every assessed answer that lost marks.</p><p>The original questions are written for practice. They are not past HSC questions and they do not predict the real paper. The trial papers are credited on their own paper pages.</p></div></div></div>');
+  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. The full-length original papers have 27 questions in the same order of question types as the 2025 HSC online examination. Papers marked as trial papers are school trial examinations converted question for question into the online format, and keep their own question counts.</p><div class="bks">'+books+'</div></div>'+
+    '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode with the working time shown on its opening page, or in practice mode with no timer. Full-length papers allow 2 hours 20 minutes; mini papers have a shorter timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you. Sign in for AI marking of written, code and diagram answers against the criteria; answers that need review remain unscored. You can use the marking guides to set or change any mark. The Papers page keeps every paper, and My mistakes collects every assessed answer that lost marks.</p><p>The original questions are written for practice. They are not past HSC questions and they do not predict the real paper. The trial papers are credited on their own paper pages.</p></div></div></div>');
 }
 function landingPage(b){
   CUR={b:b,n:0};var u=BS(b.id),done=u.done,started=u.start;
   var acts=done?'<a class="nb" href="#/'+b.id+'/results">View results</a><a class="nb ol" href="#/'+b.id+'/review/1">Review answers</a><button class="nb ol" data-act="restart">Start again</button>'
     :started?'<a class="nb" href="#/'+b.id+'/q/'+(u.cur||1)+'">Continue '+(u.mode==='practice'?'practice':'exam')+'</a><button class="nb ol" data-act="restart">Start again</button>':'<button class="nb" data-act="start" data-mode="exam">Start exam mode (timed)</button><button class="nb ol" data-act="start" data-mode="practice">Start practice mode (no timer)</button>';
-  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">'+esc(b.name)+': '+esc(b.sub)+'</h1><div class="feature"><div class="kv"><b>Exam mode</b><span>2 hours 20 minutes on a countdown timer. The timer keeps running if you leave and come back.</span><b>Practice mode</b><span>No timer. Take as long as you like.</span><b>Total marks</b><span>'+b.qs.reduce(function(s,q){return s+q.m},0)+'</span><b>Questions</b><span>'+b.qs.length+'</span><b>Equipment</b><span>No notes or calculator. Your answers save as you go. You can leave at any point with Exit, and submit at any point with Submit exam.</span></div>'+
+  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">'+esc(b.name)+': '+esc(b.sub)+'</h1><div class="feature"><div class="kv"><b>Exam mode</b><span>'+paperTime(b)+' on a countdown timer. The timer keeps running if you leave and come back.</span><b>Practice mode</b><span>No timer. Take as long as you like.</span><b>Total marks</b><span>'+b.qs.reduce(function(s,q){return s+q.m},0)+'</span><b>Questions</b><span>'+b.qs.length+'</span><b>Equipment</b><span>No notes or calculator. Your answers save as you go. You can leave at any point with Exit, and submit at any point with Submit exam.</span></div>'+
     ''+(b.credit?'<p class="mut">'+esc(b.credit)+'</p>':'')+'<p>Read each question carefully. Use the numbered boxes to move around and the flag to mark questions to come back to. Press INFO inside the exam for help with the tools.</p><div class="acts" style="margin-top:20px">'+acts+'</div></div></div>');
 }
 function navHTML(b,rv){

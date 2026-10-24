@@ -30,7 +30,7 @@ function optimal(it) {
 }
 (async () => {
   const cache = new Map(), options = { store: { getCached: async (_id, digest) => cache.get(digest) || null }, sessionId: 'test' };
-  for (const bank of banks) { const out = await tools.prepare(blank(bank), options); assert.equal(out.coverage.totalMaxMarks, 80); assert.equal(out.coverage.pendingMaxMarks, 0); assert.equal(out.coverage.knownMark, 0); assert.equal(out.lossSummary.categories.find(c => c.category === 'no_response').exactMarksLost, 80); assert(out.quality.every(q => q.rating === null)); }
+  for (const bank of banks) { const marks = bank.mini ? bank.marks : 80; const out = await tools.prepare(blank(bank), options); assert.equal(out.coverage.totalMaxMarks, marks); assert.equal(out.coverage.pendingMaxMarks, 0); assert.equal(out.coverage.knownMark, 0); assert.equal(out.lossSummary.categories.find(c => c.category === 'no_response').exactMarksLost, marks); assert(out.quality.every(q => q.rating === null)); }
   const payload = blank(), entry = payload.answers.find(a => a.questionNumber === 18 && a.partIndex === 0); entry.answer = 'Hashing is one way.';
   let out = await tools.prepare(payload, options); assert.equal(out.parts.find(p => p.partId === '18.0').mark, null); assert.equal(out.coverage.pendingMaxMarks, 3);
   const r = record(entry); cache.set(r.inputDigest, r.result);

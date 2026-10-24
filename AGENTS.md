@@ -18,7 +18,7 @@ Read README.md first. Then follow these rules.
 
 ## How to add or change a question
 Read AUTHORING.md: it lists every constructor and stimulus panel, with examples. `public/formats.js` (open `#/formats`) is a working demo of each format.
-Banks are in `public/bank1.js` to `bank6.js`. Each question is an object with `tp` (syllabus topic), `st` (stimulus HTML), `it` (parts) built from the constructors in `helpers.js`. Closed types (`mc`, `ms`, `dd`, `mt`, `gd`, `tk`, `od`, `dm`) carry the correct answer and are marked in the browser. `tx`, `py`, `ps`, `sq`, `dr`, `ft` carry `model` (sample answer) and `crit` (marking criteria strings) that are sent to the AI marker. Every paper must total 80 marks across 27 questions. Look at an existing question of the same type and copy its shape.
+Banks are in `public/bank1.js` to `bank10.js`. Each question is an object with `tp` (syllabus topic), `st` (stimulus HTML), `it` (parts) built from the constructors in `helpers.js`. Closed types (`mc`, `ms`, `dd`, `mt`, `gd`, `tk`, `od`, `dm`) carry the correct answer and are marked in the browser. `tx`, `py`, `ps`, `sq`, `dr`, `ft` carry `model` (sample answer) and `crit` (marking criteria strings) that are sent to the AI marker. Full-length original papers total 80 marks across 27 questions. Explicitly requested mini papers use the `mini`, `questions`, `marks` and `duration` metadata described in AUTHORING.md; Mini Paper 1 has three questions and 15 marks. Look at an existing question of the same type and copy its shape.
 
 ## Working on main
 Everyone works directly on `main`. No pull request and no side branch is needed.
@@ -29,7 +29,7 @@ Everyone works directly on `main`. No pull request and no side branch is needed.
 
 ## Before you push
 1. `for f in public/*.js api/*.js; do node --check $f; done`
-2. `node tests/check_banks.js` (27 questions and 80 marks per paper, and every question well formed)
+2. `node tests/check_banks.js` (full-length or declared mini-paper totals, and every question well formed)
 3. `sh tests/run_auth_test.sh`
 4. Run `tests/ui_test.py` against a local server if you touched anything in `public/`.
 5. In the PR description, say what changed and how you tested it.

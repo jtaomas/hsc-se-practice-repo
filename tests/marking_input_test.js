@@ -33,7 +33,7 @@ assert.deepEqual(loadBanks().map(bank => bank.id).sort(), browserBanks.map(bank 
 const closed = new Set(['mc', 'ms', 'dd', 'mt', 'gd', 'tk', 'od', 'dm']);
 for (const bank of loadBanks().filter(bank => !bank.hidden)) {
   assert.equal(bank.qs.length, bank.questions || 27, bank.id + ' question count');
-  assert.equal(bank.qs.reduce((s, q) => s + q.m, 0), 80);
+  assert.equal(bank.qs.reduce((s, q) => s + q.m, 0), bank.mini ? bank.marks : 80);
   bank.qs.forEach((q, n) => q.it.forEach((it, i) => {
     if (closed.has(it.t)) return;
     let answer = it.t === 'dr' ? { elements: [] } : it.model;

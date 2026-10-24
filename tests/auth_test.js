@@ -41,6 +41,23 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   const beforeDelete=r.j.revisions;
   assert.equal((await save(tok,{u:{}},['1'],beforeDelete)).c,200);
   assert.equal((await save(tok,{u:{'1':{ans:{}}}},['1'],beforeDelete)).c,409);
+  // The three-question mini paper saves independently and keeps the same conflict protection.
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Mini paper response'}}}},['10'],{})).c,200);
+  r=await call({action:'load'},tok);
+  assert.equal(r.j.data.u['10'].ans['1.0'],'Mini paper response');
+  assert.equal(r.j.data.u['2'].ans['1.0'],1,'saving the mini paper lost another paper');
+  const miniRevisions=r.j.revisions;
+  assert.equal((await save(tok,{u:{'10':{ans:{'1.0':'Updated mini paper response'}}}},['10'],miniRevisions)).c,200);
+  const staleMini=await save(tok,{u:{'10':{ans:{'1.0':'Stale mini paper response'}}}},['10'],miniRevisions);
+  assert.equal(staleMini.c,409);assert.equal(staleMini.j.code,'progress_conflict');
+  assert.deepEqual(staleMini.j.conflicts,['10']);
+  r=await call({action:'load'},tok);
+  assert.equal(r.j.data.u['10'].ans['1.0'],'Updated mini paper response');
+  const beforeInvalid=JSON.stringify(r.j);
+  for(const invalid of ['0','11','01','../10','__proto__','constructor','prototype',10,['10'],null,{}]) {
+    assert.equal((await save(tok,{u:{}},[invalid],r.j.revisions)).c,409,'invalid paper key accepted: '+JSON.stringify(invalid));
+  }
+  assert.equal(JSON.stringify((await call({action:'load'},tok)).j),beforeInvalid,'invalid keys modified progress');
   assert.equal((await call({action:'save',data:{u:{}}},tok)).c,409);
   assert.equal((await save(tok,{big:'x'.repeat(3600000)},[],{})).c,413);
   // Two independent function instances share the storage, not an in-memory lock.
@@ -56,5 +73,5 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   globalThis.__blobFailWrites=true;
   assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'synthetic-test-value'})).c,500,'storage failure must fail closed');
   globalThis.__blobFailWrites=false;
-  console.log('auth OK: signatures, atomic lockout, concurrent saves, conflicts, deletion and legacy-client safety');
+  console.log('auth OK: signatures, atomic lockout, concurrent saves, mini-paper sync, conflicts, invalid paper keys, deletion and legacy-client safety');
 })().catch(e=>{console.error('FAIL',e);process.exit(1)});

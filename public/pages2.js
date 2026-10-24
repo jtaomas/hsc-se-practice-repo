@@ -8,14 +8,14 @@ function aiState(b){
 }
 function papersPage(){
   CUR={b:null,n:0};
-  var rows=BANKS.map(function(b){
+  var rows=BANKS.filter(function(b){return !b.hidden}).map(function(b){
     var u=S.u[b.id],st=u?(u.done?'Marked':(u.start?'In progress':'Not started')):'Not started',sc='',acts='<a class="nb sm" href="#/'+b.id+'">'+(u&&u.start&&!u.done?'Continue':'Open')+'</a>';
     if(u&&u.done){var t=totals(b);sc='<b>'+t.T+' / '+t.M+'</b> <span class="mut">('+Math.round(100*t.T/t.M)+'%)</span>';
       acts='<a class="nb sm" href="#/'+b.id+'/review/1">View paper and marking</a><a class="nb sm ol" href="#/'+b.id+'/results">Results</a><a class="nb sm ol" href="#/mistakes/'+b.id+'">Mistakes</a>'}
     return '<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub)+'</div></td><td>'+st+(u&&u.done?'<div class="mut">'+fmtD(u.doneAt)+'</div>':'')+'</td><td>'+sc+(u&&u.done?'<div class="mut">'+aiState(b)+'</div>':'')+'</td><td class="ra">'+acts+'</td></tr>';
   }).join('');
   var hist=S.hist.slice().sort(function(a,b){return b.at-a.at});
-  var done=BANKS.filter(function(b){return S.u[b.id]&&S.u[b.id].done}).length;
+  var done=BANKS.filter(function(b){return !b.hidden&&S.u[b.id]&&S.u[b.id].done}).length;
   return frame('Papers','<div class="pg"><h1 class="pt">All papers</h1><div class="feature"><p>Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria. '+done+' of '+BANKS.length+' papers finished.</p>'+
     '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Mark</th><th></th></tr>'+rows+'</table></div></div>'+
     (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Mark</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+' ('+Math.round(100*h.T/h.M)+'%)</td></tr>'}).join('')+'</table></div>':'')+'</div>');
@@ -25,6 +25,7 @@ function ansPreview(m){
   if(AUTO[it.t])return closedCompare(it,a);
   var ai=bs.ai[k],h='';
   if(!isAns(it,a))h+='<p class="mut">You did not answer this part.</p>';
+  else if(QT[it.t]&&QT[it.t].preview)h+=QT[it.t].preview(it,a);
   else if(it.t==='tx')h+='<div class="yans">'+a+'</div>';
   else if(it.t==='dr')h+='<pre class="yans">'+esc(xdText(a.e))+'</pre>';
   else h+='<pre class="yans">'+esc(String(a))+'</pre>';
@@ -32,7 +33,7 @@ function ansPreview(m){
     h+='<div class="aib"><h5>AI marking <span class="sc">'+ai.g+' / '+it.m+'</span></h5>'+(ai.fb.summary?'<p>'+esc(ai.fb.summary)+'</p>':'')+
       (ai.fb.improve&&ai.fb.improve.length?'<p><b>How to gain more marks</b></p><ul>'+ai.fb.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+'</div>';
   }else if(isAns(it,a))h+='<p class="mut">This answer has not been marked by AI yet. Open the paper in review to start marking.</p>';
-  h+='<details class="xdd"><summary>Sample answer</summary>'+(it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
+  h+='<details class="xdd"><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
 function mistakesPage(){
@@ -41,7 +42,7 @@ function mistakesPage(){
     return (!MF.bank||m.b.id===MF.bank)&&(!MF.topic||m.q.tp===MF.topic)&&(!MF.kind||itemClass(m.it)===MF.kind)});
   var lost=list.reduce(function(s,m){return s+(m.s.m-m.s.g)},0);
   function sel(name,val,opts){return '<select data-mf="'+name+'" aria-label="'+name+'">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
-  var f='<div class="mfilter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.map(function(b){return [b.id,b.name]})))+
+  var f='<div class="mfilter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden}).map(function(b){return [b.id,b.name]})))+
     sel('topic',MF.topic,[['','All topics']].concat(mkTopics().map(function(t){return [t,t]})))+
     sel('kind',MF.kind,[['','All question types'],['closed','Multiple choice, dropdown and match'],['written','Written'],['code','Python, pseudocode and SQL'],['diagram','Diagram']])+'</div>';
   var cards=list.map(function(m){

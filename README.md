@@ -22,10 +22,13 @@ Live site: https://hsc-software-engineering-practice-andrew-b92c.vercel.app
 public/            static site, served as-is (no build step)
   index.html       loads the scripts below IN THIS ORDER (they share globals)
   helpers.js       state S (localStorage key sehsc-nesa-v2), save(), BS(id), question constructors mc/ms/dd/mt/gd/tk/tx/py/ps/sq/dr
+  kit.js           more constructors (od drag-order, dm drag-match, ft typed table) and stimulus panels (fig, files, sbs, ctbl, slides)
   bank1..6.js      the six papers (push into BANKS)
+  formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)
   widgets.js       renderers and marking for each question type
+  qtypes.js        plug-in question types registered with regType(); drag-and-drop engine
   xd.js            Excalidraw drawing question
   ai.js            builds the AI-marking request, mistakes helpers
   sync.js          account UI and progress sync (talks to /api/auth)
@@ -38,6 +41,7 @@ api/
   auth.js          POST: signup, login, load, save (needs BLOB_READ_WRITE_TOKEN)
 tests/
   run_auth_test.sh API test against an in-memory stand-in for Vercel Blob
+  check_banks.js   checks every paper: 27 questions, 80 marks, well-formed questions
   ui_test.py       Playwright test of modes, exit/submit, signup, login, sync (mocked /api/auth)
 ```
 
@@ -76,6 +80,6 @@ Everyone with access works directly on `main`.
 2. Make the change and run the tests above.
 3. `git commit` and `git push`. Vercel deploys `main` to production within about a minute.
 
-See `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
+See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
 
 Access check: edited by Claude on 2026-10-24.

@@ -7,7 +7,8 @@ function plain(html){
 function dbPlain(db){return Object.keys(db).map(function(n){var t=db[n];return 'Table '+n+'\n'+t.c.join(' | ')+'\n'+t.r.map(function(r){return r.join(' | ')}).join('\n')}).join('\n\n')}
 var KIND={tx:'written response',py:'Python program',ps:'pseudocode algorithm',sq:'SQL query',dr:'diagram'};
 function aiPayload(b,n,i){
-  var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],c=bs.chk[k];
+  var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],c=bs.chk[k],qt=QT[it.t];
+  if(qt&&qt.payload)return qt.payload(it,a,{stimulus:plain(q.st)+(q.db?'\n\n'+dbPlain(q.db):''),question:(it.lb?it.lb+' ':'')+plain(it.q),max:it.m,criteria:it.crit||[],wordLimit:it.w||null});
   var p={type:KIND[it.t],stimulus:plain(q.st)+(q.db?'\n\n'+dbPlain(q.db):''),question:(it.lb?it.lb+' ':'')+plain(it.q),max:it.m,criteria:it.crit||[],
     sample:it.t==='tx'?plain(it.model):it.model,answer:it.t==='tx'?plain(a):it.t==='dr'?xdText(a&&a.e):String(a||''),wordLimit:it.w||null};
   if(c)p.tests=it.t==='sq'?(c.p?'The query returned the same rows as the sample query.':'The query returned different rows from the sample query.'):c.p+' of '+c.t+' automatic test runs gave the expected output.';
@@ -63,7 +64,8 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
 function closedCompare(it,a){
   var rows=[];
   function add(l,y,c,ok){rows.push({l:l,y:y,c:c,ok:ok})}
-  if(it.t==='mc')add('',a==null?'No answer':it.o[a],it.o[it.a],a===it.a);
+  if(QT[it.t]&&QT[it.t].compare)QT[it.t].compare(it,a).forEach(function(r){add(r[0],r[1],r[2],r[3])});
+  else if(it.t==='mc')add('',a==null?'No answer':it.o[a],it.o[it.a],a===it.a);
   else if(it.t==='ms'){var s=Array.isArray(a)?a:[];add('',s.map(function(j){return it.o[j]}).join('; ')||'No answer',it.a.map(function(j){return it.o[j]}).join('; '),s.length===it.a.length&&it.a.every(function(j){return s.indexOf(j)>=0}))}
   else if(it.t==='dd'){it.b.forEach(function(bl,u){var v=a?a[u]:undefined;add('Dropdown '+(u+1),v==null?'No answer':bl[0][v],bl[0][bl[1]],v===bl[1])})}
   else if(it.t==='gd'){it.r.forEach(function(row,r){row.forEach(function(c,ci){if(typeof c==='string')return;var v=a?a[r+','+ci]:undefined;add(plain(row[0])+' ('+plain(it.h[ci])+')',v==null?'No answer':c[0][v],c[0][c[1]],v===c[1])})})}
@@ -74,7 +76,7 @@ function closedCompare(it,a){
 }
 function mistakeList(){
   var out=[];
-  BANKS.forEach(function(b){var u=S.u[b.id];if(!u||!u.done)return;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var s=score(b,qi+1,i);if(s.g<s.m)out.push({b:b,n:qi+1,i:i,q:q,it:it,s:s})})})});
+  BANKS.forEach(function(b){var u=S.u[b.id];if(!u||!u.done||b.hidden)return;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var s=score(b,qi+1,i);if(s.g<s.m)out.push({b:b,n:qi+1,i:i,q:q,it:it,s:s})})})});
   return out;
 }
-function itemClass(it){return AUTO[it.t]?'closed':it.t==='tx'?'written':it.t==='dr'?'diagram':'code'}
+function itemClass(it){return AUTO[it.t]?'closed':QT[it.t]&&QT[it.t].cls?QT[it.t].cls:it.t==='tx'?'written':it.t==='dr'?'diagram':'code'}

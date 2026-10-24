@@ -44,7 +44,6 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - **Files:** `api/class.js`, `server/class-store.js`, `server/class-synthesis.js`, `server/syllabus-context.js`, `public/classview.js`. Tests: `tests/class_test.js`, `tests/class_ui_test.py`, signup cases in `tests/auth_test.js`.
 - **Legacy:** `#/compare` (signed export files) and the earlier per-account class-code feature in `server/comparison-sharing.js` still exist but are no longer linked from the nav. Leave or remove them in a later clean-up; do not mix them with the new class.
 - **Not done:** the existing marking engine (`api/mark.js`) does not yet receive the syllabus text. The owner asked that AI marking always has the syllabus. Adding it means bumping the marking harness version and re-checking the marking tests and cached marks, so it was left for a deliberate change.
-- **Known red test:** `node tests/marking_evaluator_test.js` and `improvement_evaluator_test.js` fail with "canonical question/rubric changed" for bank 1 cases. Cause: commit `1435303` edited bank question text, which changes the question digest the labelled fixtures pin. Fixing it needs the cases to be independently relabelled (see `tests/fixtures/marking-calibration.json`); do not just overwrite the hashes. These banks are archived.
 
 ## Changes made in this session, newest first
 

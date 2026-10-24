@@ -118,7 +118,7 @@ with sync_playwright() as p:
     assert 'education email' in pg.inner_text('.feature')
     pg.click('[data-act=acmode]');pg.fill('#acemail','stu@student.det.nsw.edu.au');pg.fill('#acpw','password123');pg.fill('#acpw2','different1');pg.click('[data-act=acgo]');pg.wait_for_timeout(300)
     assert 'do not match' in pg.inner_text('#accmsg')
-    pg.fill('#acpw2','password123');pg.click('[data-act=acgo]');pg.wait_for_timeout(1500)
+    pg.fill('#acpw2','password123');pg.fill('#acname','Stu Dent');pg.click('[data-act=acgo]');pg.wait_for_timeout(1500)
     assert pg.evaluate('S.tok')=='T:stu@student.det.nsw.edu.au'
     assert 'stu@student' in pg.inner_text('.acct'),pg.inner_text('.acct')
     assert 'password123' not in pg.evaluate("localStorage.getItem('sehsc-nesa-v2')")
@@ -126,7 +126,7 @@ with sync_playwright() as p:
     saved=store['prog'].get('T:stu@student.det.nsw.edu.au');assert saved,'no progress saved'
     assert saved['u']['1']['done'] is True and '2' in saved['u']
     ctx2=b.new_context(viewport={"width":1440,"height":900});p2=ctx2.new_page();p2.route("https://fonts.g*/**",lambda r:r.abort());p2.route("**/api/auth",auth)
-    p2.goto(U+'#/account');p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','xxxxxxxx1');p2.fill('#acpw2','xxxxxxxx1');p2.click('[data-act=acgo]');p2.wait_for_timeout(500)
+    p2.goto(U+'#/account');p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','xxxxxxxx1');p2.fill('#acpw2','xxxxxxxx1');p2.fill('#acname','Other Stu');p2.click('[data-act=acgo]');p2.wait_for_timeout(500)
     assert 'already exists' in p2.inner_text('#accmsg')
     p2.click('[data-act=acmode]');p2.fill('#acemail','stu@student.det.nsw.edu.au');p2.fill('#acpw','wrongwrong');p2.press('#acpw','Enter');p2.wait_for_timeout(500)
     assert 'not correct' in p2.inner_text('#accmsg'),p2.inner_text('#accmsg')

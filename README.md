@@ -9,7 +9,8 @@ Live site: https://hsc-se-practice-repo.vercel.app
 - Exam mode (2 h 20 min countdown for full papers; 30 min for Mini Paper 1) and practice mode (no timer). Exit or submit at any question.
 - Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Unconfirmed answers remain unscored for review. Students can set their own marks.
-- Papers page, My mistakes page, and **Compare responses**. Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
+- **Class page** (`#/class`): everyone who joins with the class code sees classmates' submitted written answers by name, and can run an AI analysis that pulls the best syllabus-aligned points into one combined answer. See `docs/HANDOFF.md`.
+- Papers page, My mistakes page, and the older file-based **Compare responses** (now unlinked). Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
 - Evidence-linked feedback separates rubric shortfalls from 11 response-quality ratings. Lost marks are categorised where the rubric supports exact attribution; holistic shortfalls remain clearly labelled.
 - After submission, **Create my improvement plan** on the results page reviews verified feedback across the paper, identifies supported knowledge/writing patterns and gives prioritised exercises and success checks. A separate AI audit checks the plan; it never changes marks.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
@@ -68,7 +69,7 @@ Mini Paper 1 (`#/10`) contains exactly three original questions worth 5 marks ea
 
 The inventory also has nine 80-mark papers: the seven originals have 27 questions each, the PEM trial has 33, and the DoE trial has 27. Trial source documents, attribution and marking notes are described in [`marking/README.md`](marking/README.md). The marking evaluation corpus remains 105 synthetic cases from the original seven papers; adding the trial papers does not establish their AI marking accuracy.
 
-Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/account`.
+Routes are hash based: `#/`, `#/N`, `#/N/q/n`, `#/N/finish`, `#/N/results`, `#/N/review/n`, `#/papers`, `#/mistakes[/N]`, `#/compare`, `#/class`, `#/account`.
 
 ## Run and test locally
 
@@ -109,7 +110,8 @@ Account storage (`server/d1-blob.js`, Cloudflare D1) uses etag-based conditional
 
 | Name | Used by | Notes |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
+| `CLASS_CODE` | `api/class.js`, `api/auth.js` | The one class code students use to join the class. Set in Vercel, never commit it. |
+| `DEEPSEEK_API_KEY` | `api/mark.js`, `api/improve.js`, `api/compare.js`, `api/class.js` | Server-side only. New marking, improvement and comparison jobs spend DeepSeek balance. Explicit local evaluations can load a separate ignored `.env.eval` file. |
 | `CF_ACCOUNT_ID` | accounts, marking and comparison storage | Cloudflare account ID that owns the D1 database. |
 | `D1_DATABASE_ID` | same | ID of the D1 database (the table is created automatically). |
 | `CF_API_TOKEN` | same | Cloudflare API token with **D1 Edit** permission only. Never commit it. |

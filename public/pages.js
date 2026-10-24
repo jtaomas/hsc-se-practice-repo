@@ -35,7 +35,7 @@ function frame(title,main,opt){
   opt=opt||{};
   var right;
   if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
-  else right='<nav class="hn"><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
+  else right='<nav class="hn"><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
     (opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>');
@@ -160,6 +160,7 @@ function render(){
   if(h[0]==='papers')html=papersPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
+  else if(h[0]==='class')html=classPage(h[1]||'');
   else if(h[0]==='compare')html=comparisonPage();
   else if(!b)html=homePage();
   else if(!h[1])html=landingPage(b);
@@ -170,6 +171,7 @@ function render(){
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
+  if(h[0]==='class')classBind();
   if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review')){afterQ();navArrows(true)}
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);

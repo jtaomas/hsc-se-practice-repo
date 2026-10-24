@@ -119,16 +119,27 @@ module.exports = async (req, res) => {
       const id = sha(email);
       const path = 'users/' + id + '.json';
       if (p.action === 'signup') {
+        // Name is shown to classmates. A class code joins the class straight away; a wrong code stops sign-up before anything is created.
+        const classCode = String(p.classCode || '').trim();
+        const classes = classCode || p.name ? require('../server/class-store') : null;
+        const name = p.name != null && String(p.name).trim() ? classes.cleanName(p.name) : '';
+        if (classCode) {
+          if (!name) return fail(400, 'Enter your name to join the class.');
+          await classes.createClassStore().checkCode(classCode);
+        }
         const salt = crypto.randomBytes(16);
         const hash = await hashPw(pw, salt);
         try {
-          await writeJSON(path, { email, salt: salt.toString('hex'), hash: hash.toString('hex'), created: Date.now(), fails: 0, lock: 0 }, false);
+          await writeJSON(path, Object.assign({ email, salt: salt.toString('hex'), hash: hash.toString('hex'), created: Date.now(), fails: 0, lock: 0 }, name ? { name } : {}), false);
         } catch (e) {
           if (exists(e)) return fail(409, 'An account with this email already exists. Sign in instead.');
           throw e;
         }
+        let joined = false, joinError = '';
+        // The account already exists, so a failed join must not look like a failed sign-up: report it and let them join from the Class page.
+        if (classCode) { try { await classes.createClassStore().join(id, name, classCode); joined = true; } catch (e) { joinError = e && e.status ? e.message : 'Could not join the class just now. Join from the Class page.'; } }
         const token = await sign({ id, email, exp: Date.now() + SESSION_MS });
-        return res.status(200).json({ token, email });
+        return res.status(200).json(Object.assign({ token, email, name, joined }, joinError ? { joinError } : {}));
       }
       const ticket = crypto.randomBytes(16).toString('hex');
       // Reserve a slot before hashing, so parallel requests cannot all pass the limit.

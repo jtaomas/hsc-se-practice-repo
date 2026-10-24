@@ -111,6 +111,15 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal(parallel.filter(x=>x.c===401).length,8);
   assert.equal(parallel.filter(x=>x.c===429).length,8);
   assert.equal((await call({action:'login',email:login.email,password:'correct-test-password'})).c,429);
+  // Sign-up with a name and class code: wrong code stops the sign-up, right code joins the class.
+  process.env.CLASS_CODE='Blue-River-2026';
+  assert.equal((await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'Sam',classCode:'nope'})).c,400);
+  assert.equal((await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'S',classCode:'Blue-River-2026'})).c,400);
+  r=await call({action:'signup',email:'n1@example.test',password:'correct-test-password',name:'Sam Lee',classCode:'blue-river-2026'});
+  assert.equal(r.c,200);assert.equal(r.j.joined,true);assert.equal(r.j.name,'Sam Lee');
+  assert([...globalThis.__M.keys()].some(k=>k.startsWith('class/members/')),'member record written');
+  r=await call({action:'signup',email:'n2@example.test',password:'correct-test-password'});
+  assert.equal(r.c,200);assert.equal(r.j.joined,false);
   globalThis.__blobFailWrites=true;
   assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'synthetic-test-value'})).c,500,'storage failure must fail closed');
   globalThis.__blobFailWrites=false;

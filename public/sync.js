@@ -169,14 +169,7 @@ function accountPage(){
   if(S.tok&&S.ae){
     body='<h2 class="pt">Your account</h2><p>Signed in as <b>'+esc(S.ae)+'</b>.</p><p id="syncst">'+syncStatusHTML()+'</p>'+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
-      '<div class="feature" style="margin-top:20px;background:#fff;border:1px solid #d0d0d0;border-radius:4px;padding:14px">'+
-      '<h3 style="margin:0 0 6px">Class code (optional)</h3>'+
-      '<p>Enter a shared class code (e.g. <b>12SE2026</b>) to compare verified submitted responses automatically with your classmates.</p>'+
-      '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">'+
-      '<input id="ac-classcode" value="'+esc(S.classCode||'')+'" placeholder="e.g. 12SE2026" maxlength="20" style="max-width:200px;text-transform:uppercase;padding:6px 10px">'+
-      '<button class="nb sm" data-act="acclasscode" type="button">Set class code</button>'+
-      (S.classCode?'<button class="nb sm ol" data-act="acclasscodeclear" type="button">Clear</button>':'')+
-      '</div></div>'+
+      '<p class="note"><a href="#/class">Class page</a>: join your class with the class code and see classmates\' answers.</p>'+
       conflictHTML()+backupHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
   }else{
     var up=ACC.mode==='up';
@@ -185,6 +178,8 @@ function accountPage(){
       '<form class="acform" onsubmit="return false"><label for="acemail">Email</label><input id="acemail" type="email" autocomplete="username" placeholder="name@student.det.nsw.edu.au">'+
       '<label for="acpw">Password</label><input id="acpw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="At least 8 characters">'+
       (up?'<label for="acpw2">Confirm password</label><input id="acpw2" type="password" autocomplete="new-password">':'')+
+      (up?'<label for="acname">Your name</label><input id="acname" autocomplete="name" maxlength="40" placeholder="Shown to classmates next to your answers">'+
+        '<label for="acclass">Class code (optional)</label><input id="acclass" autocomplete="off" maxlength="60" placeholder="Ask your teacher. You can add it later on the Class page.">':'')+
       '<div class="acmsg" id="accmsg" role="alert">'+esc(ACC.msg)+'</div>'+
       '<div class="acts"><button class="nb" data-act="acgo" type="button">'+(up?'Create account':'Sign in')+'</button>'+
       '<button class="nb ol" data-act="acmode" data-v="'+(up?'in':'up')+'" type="button">'+(up?'I already have an account':'Create an account')+'</button></div></form>'+
@@ -200,8 +195,14 @@ function acGo(){
   if(!em||!pw)return acSet('Enter your email and password.');
   if(up&&pw!==(($('#acpw2')||{}).value||''))return acSet('The two passwords do not match.');
   var epoch=SYNC.epoch;ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
-  api(up?'signup':'login',{email:em,password:pw}).then(function(r){
-    checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';
+  var extra={};
+  if(up){
+    var nm=(($('#acname')||{}).value||'').trim(),cc=(($('#acclass')||{}).value||'').trim();
+    if(nm.length<2)return acSet('Enter your name (2 to 40 characters). Classmates see it next to your answers.');
+    extra.name=nm;if(cc)extra.classCode=cc;
+  }
+  api(up?'signup':'login',Object.assign({email:em,password:pw},extra)).then(function(r){
+    checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';if(r.joinError)ACC.notice=r.joinError;
     return syncNow().then(function(){location.hash='#/'});
   }).catch(function(e){ACC.busy=false;acSet(e.message)});
 }

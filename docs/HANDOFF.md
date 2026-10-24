@@ -31,6 +31,21 @@ Verified by tests (all pass at `f001457`): auth, marking store, comparison, sync
 
 **Not verified:** a real sign-up on the live site writing to the real D1 database. Ask the owner to create a test account and check the D1 Overview page in Cloudflare (Total queries above 0, one table). If sign-up shows "Account storage is not connected", a variable is missing or misspelled in Vercel. Variables only take effect after a new deployment.
 
+## Class page (automatic sharing) added 25 October
+
+Replaces the old opt-in file comparison for day-to-day use. There is no consent step: everyone who joins the class sees each other's **submitted written answers** (types `tx`, `py`, `ps`, `sq`) with names. Multiple choice, tables and diagrams are not shared. Unsubmitted work never leaves its owner (`paper.done` must be true).
+
+- **Setup the owner must do:** add the Vercel environment variable `CLASS_CODE` (long random phrase, 10+ characters, never in chat or GitHub), then redeploy. Share it with the class. Without it the Class page says the class is not set up and sign-up with a code fails with `class_not_configured`.
+- **Joining:** sign-up asks for a name (required) and a class code (optional). Existing accounts join from `#/class` with name and code. Wrong codes are counted per hour for the whole site (60 an hour, then locked for the hour). Max 200 members.
+- **Visibility:** after you submit a paper its class answers show. A switch on the page (stored only in the browser) shows them earlier. Both are client-side choices; the server returns submitted answers to any member.
+- **AI analysis:** `POST /api/class {action:'analyse'}`. One DeepSeek call per question part (`server/class-synthesis.js`) with the syllabus and NESA key word glossary (`server/syllabus-context.js`) always in the prompt. It returns the directing word, main points (each tagged yes/partly/no for answering the question, who made it, syllabus link, verbatim quotes that the server checks against the real answers), what the class missed, and one combined best answer. Target length is about 32 words a mark up to 3 marks and 45 a mark above that. The printed word guides are not used because the owner says they run short. Needs 2 or more submitted answers. Results are cached class-wide by a digest of the question and answers, so unchanged answers cost no extra call.
+- **Limits:** 30 analyses per student and 150 for the site each UTC day (`QUOTA` in `server/class-store.js`).
+- **Data in D1:** `class/members/<id>.json`, `class/attempts/<hour>.json`, `class/quota/<day>/<id|site>.json`, `class/synth/<digest>.json`. Answers themselves are read from each member's existing `progress/<id>.json`.
+- **Files:** `api/class.js`, `server/class-store.js`, `server/class-synthesis.js`, `server/syllabus-context.js`, `public/classview.js`. Tests: `tests/class_test.js`, `tests/class_ui_test.py`, signup cases in `tests/auth_test.js`.
+- **Legacy:** `#/compare` (signed export files) and the earlier per-account class-code feature in `server/comparison-sharing.js` still exist but are no longer linked from the nav. Leave or remove them in a later clean-up; do not mix them with the new class.
+- **Not done:** the existing marking engine (`api/mark.js`) does not yet receive the syllabus text. The owner asked that AI marking always has the syllabus. Adding it means bumping the marking harness version and re-checking the marking tests and cached marks, so it was left for a deliberate change.
+- **Known red test:** `node tests/marking_evaluator_test.js` and `improvement_evaluator_test.js` fail with "canonical question/rubric changed" for bank 1 cases. Cause: commit `1435303` edited bank question text, which changes the question digest the labelled fixtures pin. Fixing it needs the cases to be independently relabelled (see `tests/fixtures/marking-calibration.json`); do not just overwrite the hashes. These banks are archived.
+
 ## Changes made in this session, newest first
 
 - Class code response sharing and daily save caps implemented: students can enter a class code to share and compare responses directly without downloading files. Daily save cap of 150 saves per account in `api/auth.js` protects D1 storage. See rollback instructions below.

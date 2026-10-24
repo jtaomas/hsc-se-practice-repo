@@ -6,7 +6,11 @@ function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAl
 var S=null;
 try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0;
-function save(){S.ts=Date.now();try{if(typeof CUR!=='undefined'&&CUR.b&&S.u[CUR.b.id])S.u[CUR.b.id].upd=S.ts}catch(e){}try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syncSoon==='function')syncSoon()}
+S.owner=S.owner||S.ae||'';S.revisions=S.revisions||{};
+// Legacy drafts have no cloud revision: preserve them until the user resolves any conflict.
+if(!S.pending){S.pending={};Object.keys(S.u).forEach(function(id){S.pending[id]=1})}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(id){S.ts=Date.now();id=id||(typeof CUR!=='undefined'&&CUR.b?CUR.b.id:null);if(id){if(S.u[id])S.u[id].upd=S.ts;S.pending[id]=(S.pending[id]||0)+1}persist();if(typeof syncSoon==='function')syncSoon()}
 function BS(id){var u=S.u[id];if(!u)u=S.u[id]={ans:{},flags:{},self:{},chk:{},ai:{},start:0,done:false};if(!u.ai)u.ai={};if(!u.aiErr)u.aiErr={};return u}
 
 /* ---------- question constructors (used by the bank files) ---------- */

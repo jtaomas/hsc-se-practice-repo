@@ -1,19 +1,8 @@
 /* ---------- engines (loaded on first use) ---------- */
-var PYBASE=window.PYBASE||'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 var SQLSRC=window.SQLSRC||'https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-asm.js';
-var PYP=null,SQLP=null;
+var SQLP=null;
 function loadScript(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('Could not load '+src))};document.head.appendChild(s)})}
-function loadPy(){if(!PYP)PYP=loadScript(PYBASE+'pyodide.js').then(function(){return loadPyodide({indexURL:PYBASE})}).catch(function(e){PYP=null;throw e});return PYP}
 function loadSQL(){if(!SQLP)SQLP=(typeof initSqlJs==='function'?Promise.resolve():loadScript(SQLSRC)).then(function(){return initSqlJs()}).catch(function(e){SQLP=null;throw e});return SQLP}
-function runPy(src,inputs,interactive){
-  return loadPy().then(function(py){
-    var out='',q=(inputs||[]).slice();
-    py.setStdout({batched:function(s){out+=s+'\n'}});py.setStderr({batched:function(s){out+=s+'\n'}});
-    py.setStdin({stdin:function(){if(q.length)return q.shift();if(interactive){var v=prompt('Python input:');return v===null?null:v}return null}});
-    try{py.runPython(src,{globals:py.globals.get('dict')()})}catch(e){var m=String(e.message||e).trim().split('\n');out+=m.slice(-3).join('\n')+'\n'}
-    return out;
-  });
-}
 function sqlType(v){return typeof v==='number'?(v%1?'REAL':'INTEGER'):'TEXT'}
 function mkDB(SQL,db){
   var d=new SQL.Database();
@@ -84,19 +73,19 @@ function isAns(it,a){
 }
 function qAnswered(b,n){var bs=BS(b.id);return b.qs[n-1].it.some(function(it,i){return isAns(it,bs.ans[n+'.'+i])})}
 function normOut(x){return String(x).trim().split('\n').map(function(y){return y.replace(/\s+$/,'')}).join('\n')}
-function passTest(out,t){return normOut(out).slice(-normOut(t.o).length)===normOut(t.o)&&(t.exact?normOut(out)===normOut(t.o):true)}
+function passTest(out,t){return normOut(out)===normOut(t.o)}
 function runChecks(b){
   var bs=BS(b.id),jobs=[];
   b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){
     var k=(qi+1)+'.'+i,a=bs.ans[k];
     if(it.t==='py'&&a&&it.tests.length){
-      var p=0;
-      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){return runPy(a+'\n'+(t.app||''),t.i||[],false).then(function(o){if(passTest(o,t))p++})})},Promise.resolve()).then(function(){bs.chk[k]={p:p,t:it.tests.length}}).catch(function(){}));
+      var p=0,problem='';
+      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){if(problem)return;return runPy(a+'\n'+(t.app||''),t.i||[]).then(function(o){if(passTest(o,t))p++}).catch(function(e){problem=e.message})})},Promise.resolve()).then(function(){if(S.u[b.id]===bs)bs.chk[k]={p:p,t:it.tests.length,error:problem}}));
     }else if(it.t==='sq'&&a&&q.db){
       jobs.push(Promise.all([runSQL(q.db,a),runSQL(q.db,it.model)]).then(function(r){bs.chk[k]={p:(!r[0].error&&sameRows(r[0].rows,r[1].rows,it.ord))?1:0,t:1}}).catch(function(){}));
     }
   })});
-  return Promise.all(jobs).then(save);
+  return Promise.all(jobs).then(function(){if(S.u[b.id]===bs)save(b.id)});
 }
 
 /* ---------- item rendering ---------- */
@@ -110,7 +99,8 @@ function codeBox(it,k,a,ro,label){
   var ph=it.t==='py'?'# Input code':it.t==='sq'?'-- Input query':'// Input pseudocode';
   var val=a!=null?a:(it.start||'');
   return '<div class="cbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns">'+
-    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='sq'?'':'')+'</div></div>'+
+    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+'</div></div>'+
+    (it.t==='py'&&!ro?'<label class="pyinput">Program input (one value per line)<textarea data-pyinput="'+k+'" aria-label="Program input" rows="2" placeholder="Enter input() values here before running"></textarea></label>':'')+
     '<div class="split'+(hasRun?'':' one')+'"><div class="ace"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
     (hasRun?'<div class="out ph" id="o'+k+'"># Output</div>':'')+'</div></div>';
 }
@@ -174,9 +164,9 @@ function guideHTML(b,n,i){
     if(it.crit.length)h+='<p><b>Marking criteria</b></p>'+critList(it.crit);
     var c=bs.chk[k];if(c)h+='<p><b>Automatic check:</b> '+(it.t==='sq'?(c.p?'your query returned the same rows as the sample query':'your query returned different rows from the sample query'):c.p+' of '+c.t+' test runs gave the expected output')+'.</p>';
     else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(isAns(it,a)?'running...':'no answer to check')+'</p>';
+    if(c&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
     h+='<div class="smk"><span>'+(bs.ai[k]&&bs.ai[k].g!=null?'Change the mark:':'Your mark:')+'</span>';for(var j=0;j<=it.m;j++)h+='<button data-act="sm" data-k="'+k+'" data-v="'+j+'"'+(sc.set&&sc.g===j?' class="on"':'')+'>'+j+'</button>';h+='</div>';
   }
   if(it.why)h+='<p style="margin-top:8px">'+it.why+'</p>';
   return h+'</div>';
 }
-

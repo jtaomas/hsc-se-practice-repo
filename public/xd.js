@@ -11,7 +11,7 @@ function loadXD(){
   return XDP;
 }
 function xdFlush(k){
-  var st=XD[k];if(!st||st.ro||!st.api||!CUR.b)return;
+  var st=XD[k];if(!st||st.ro||!st.api||!CUR.b||BS(CUR.b.id).done)return;
   var live=st.api.getSceneElements().filter(function(e){return !e.isDeleted}),bs=BS(CUR.b.id),cur=bs.ans[k],prev=cur&&cur.e?JSON.stringify(cur.e):'[]',nxt=JSON.stringify(live);
   if(prev!==nxt){bs.ans[k]={e:JSON.parse(nxt)};save()}
 }

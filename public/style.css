@@ -219,3 +219,6 @@ table.plist td.ra .nb{margin:2px 0 2px 6px}
 .acform label{font-weight:700;margin-top:8px}
 .acform input{font:inherit;padding:9px 10px;border:1px solid #6b7280;border-radius:4px}
 .acmsg{min-height:1.4em;color:#b81237;font-weight:600;margin-top:6px}
+
+.pyinput{display:block;padding:10px 14px;font-size:.9em;background:var(--ibg)}
+.pyinput textarea{display:block;width:100%;box-sizing:border-box;margin-top:6px;font:inherit;padding:6px}

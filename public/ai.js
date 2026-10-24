@@ -30,18 +30,20 @@ var AIRUN={};
 function runAI(b,onProg){
   var bs=BS(b.id),todo=aiTodo(b),calls=[];
   todo.forEach(function(t){if(!isAns(t[3],bs.ans[t[2]])){bs.ai[t[2]]={g:0,none:1,fb:{summary:'No answer was given for this part.',strengths:[],improve:[]},ts:Date.now()};delete bs.aiErr[t[2]]}else calls.push(t)});
-  save();
+  save(b.id);
   if(!calls.length){onProg&&onProg(0,0,null);return Promise.resolve()}
   if(AIRUN[b.id])return AIRUN[b.id];
   var idx=0,done=0,fatal=null,total=calls.length;
   function next(){
-    if(idx>=calls.length||fatal)return Promise.resolve();
+    if(idx>=calls.length||fatal||S.u[b.id]!==bs)return Promise.resolve();
     var t=calls[idx++];
     return aiCall(aiPayload(b,t[0],t[1])).then(function(r){
+      if(S.u[b.id]!==bs)return;
       bs.ai[t[2]]={g:Math.max(0,Math.min(t[3].m,Math.round(+r.mark))),fb:{summary:r.summary||'',strengths:r.strengths||[],improve:r.improve||[]},ts:Date.now()};delete bs.aiErr[t[2]];
-    }).catch(function(e){bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;save();onProg&&onProg(done,total,fatal);return next()});
+    }).catch(function(e){if(S.u[b.id]===bs)bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(S.u[b.id]===bs)save(b.id);onProg&&onProg(done,total,fatal);return next()});
   }
-  AIRUN[b.id]=Promise.all([next(),next(),next()]).then(function(){delete AIRUN[b.id];return fatal});
+  var run=Promise.all([next(),next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
+  AIRUN[b.id]=run;
   return AIRUN[b.id];
 }
 function aiBlock(b,n,i,it,bs,k,a,sc){

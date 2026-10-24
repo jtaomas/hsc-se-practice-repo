@@ -40,7 +40,7 @@ function infoHTML(){
     '<h3>Navigation</h3><p>Use the numbered boxes to jump to any question. A green tick means the question has an answer. The flag button marks a question you want to return to. Next and Previous move one question at a time.</p>'+
     '<h3>Toolbar</h3><p>Highlight colours selected text in the question. Font size and Colour change how the page looks. Colour has a reset option.</p>'+
     '<h3>Word count</h3><p>Written responses show a word count under the box. The number is a guide to the expected length. The counter turns red if you go over.</p>'+
-    '<h3>Python editor</h3><p>Write code in the left pane and press Run to see the result in the black output pane. The first run downloads Python (about 10 MB), so it needs an internet connection. If your program calls input(), the browser asks for each value.</p>'+
+    '<h3>Python editor</h3><p>Write code in the left pane and press Run to see the result in the black output pane. The first run downloads Python, so it needs an internet connection. Put input() values in Program input, one value per line. Use Stop to cancel a run. Programs stop automatically after 10 seconds.</p>'+
     '<h3>Pseudocode editor</h3><p>This editor has no Run button. Indent with the Tab key. Follow the syllabus style: BEGIN, END, IF, ELSEIF, ELSE, ENDIF, WHILE, ENDWHILE, FOR, NEXT, REPEAT, UNTIL, SUBROUTINE.</p>'+
     '<h3>SQL editor</h3><p>Run shows the rows your query returns. You may use the syllabus words (GREATER THAN, EQUALS, CONTAINS and so on). Only SELECT queries are accepted.</p>'+
     '<h3>Drawing tool</h3><p>Choose a shape, then click the page to place it. Type into the shape. For connectors, choose the type, click one shape, then click the second. Drag the blue bar on a shape to move it. Use Delete, then click a shape or line to remove it.</p>'+
@@ -83,9 +83,10 @@ function qHTML(b,n,rv){
   return '<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
 }
 function examPage(b,n,rv){
+  rv=rv||BS(b.id).done;
   CUR={b:b,n:n,rv:rv};var bs=BS(b.id);
   if(!rv&&!bs.start){bs.start=Date.now()}
-  if(!rv){bs.cur=n}save();
+  if(!rv){bs.cur=n;save()}
   return frame((rv?'Review: ':'')+b.name+' Software Engineering','<main class="ex" id="qarea">'+qHTML(b,n,rv)+'</main>'+(INFO?infoHTML():''),{nav:navHTML(b,rv),timer:!rv,mode:bs.mode,bid:b.id,bar:true});
 }
 function finishPage(b){
@@ -136,8 +137,8 @@ function afterQ(){
 function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)})}
 function ensureMarked(b){
   var bs=BS(b.id);
-  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){bs.checked=1;save()});
-  return p.then(function(){return runAI(b)});
+  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S.u[b.id]===bs){bs.checked=1;save(b.id)}});
+  return p.then(function(){if(S.u[b.id]===bs)return runAI(b)});
 }
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]});
@@ -189,7 +190,8 @@ document.addEventListener('click',function(e){
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen'}
-  else if(a==='run')doRun(d.k);
+  else if(a==='run'){if(CUR.b&&!BS(CUR.b.id).done)doRun(d.k)}
+  else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
   else if(a==='airetry'){var rb=CUR.b;if(rb){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
@@ -197,16 +199,18 @@ document.addEventListener('click',function(e){
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();
   else if(a==='acsync')syncNow();
+  else if(a==='acresolve')resolveSync(d.id,d.v);
   else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,true);afterQDraw();window.scrollTo(0,y);refreshNav()}
 });
 document.addEventListener('mousedown',function(e){if(e.target.closest('[data-act="rt"]'))e.preventDefault()});
 function saveRte(ed){
+  if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   var k=ed.dataset.k,it=itemOf(k),bs=BS(CUR.b.id);bs.ans[k]=ed.innerHTML;save();
   var w=wcount(ed.innerHTML),c=document.getElementById('wc'+k);if(c){c.textContent=w+' / '+it.w+' words';c.classList.toggle('over',w>it.w)}
   refreshNav();
 }
 document.addEventListener('input',function(e){
-  var t=e.target;if(!CUR.b)return;
+  var t=e.target;if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   if(t.classList&&t.classList.contains('rta'))saveRte(t);
   else if(t.dataset&&t.dataset.code){
     BS(CUR.b.id).ans[t.dataset.k]=t.value;save();var g=document.getElementById('g'+t.dataset.k);if(g){g.textContent=gutNums(t.value);g.scrollTop=t.scrollTop}refreshNav();
@@ -215,13 +219,13 @@ document.addEventListener('input',function(e){
 document.addEventListener('scroll',function(e){var t=e.target;if(t&&t.dataset&&t.dataset.code){var g=document.getElementById('g'+t.dataset.k);if(g)g.scrollTop=t.scrollTop}},true);
 document.addEventListener('keydown',function(e){
   var t=e.target;
-  if(t.dataset&&t.dataset.code&&e.key==='Tab'){e.preventDefault();var s=t.selectionStart;t.value=t.value.slice(0,s)+'    '+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;t.dispatchEvent(new Event('input',{bubbles:true}))}
+  if(t.dataset&&t.dataset.code&&!t.readOnly&&e.key==='Tab'){e.preventDefault();var s=t.selectionStart;t.value=t.value.slice(0,s)+'    '+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;t.dispatchEvent(new Event('input',{bubbles:true}))}
   if(e.key==='Escape'&&INFO){INFO=false;var m=$('.modal');if(m)m.remove()}
 });
 document.addEventListener('change',function(e){
   var t=e.target;
   if(t.dataset&&t.dataset.mf){if(t.dataset.mf==='bank'){location.hash='#/mistakes'+(t.value?'/'+t.value:'')}else{MF[t.dataset.mf]=t.value;render()}return}
-  var k=t.dataset&&t.dataset.k;if(!k||!CUR.b||CUR.rv)return;
+  var k=t.dataset&&t.dataset.k;if(!k||!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   var bs=BS(CUR.b.id),it=itemOf(k),a=bs.ans[k];
   if(it.t==='mc')bs.ans[k]=+t.dataset.v;
   else if(it.t==='ms'){a=Array.isArray(a)?a:[];var v=+t.dataset.v,ix=a.indexOf(v);if(t.checked&&ix<0)a.push(v);if(!t.checked&&ix>=0)a.splice(ix,1);bs.ans[k]=a}
@@ -236,7 +240,8 @@ function doRun(k){
   out.className='out';
   if(it.t==='py'){
     out.textContent='Loading Python (the first run takes a few seconds)...';
-    runPy(ta.value,[],true).then(function(o){out.textContent=o||'(the program printed nothing)'}).catch(function(e){out.innerHTML='<span class="er">Python could not start. It needs an internet connection the first time it runs. Reload the page and try again.</span>'});
+    var input=$('textarea[data-pyinput="'+k+'"]'),values=input&&input.value?input.value.replace(/\r/g,'').split('\n'):[];
+    runPy(ta.value,values).then(function(o){out.textContent=o||'(the program printed nothing)'}).catch(function(e){out.textContent=e.message});
   }else if(it.t==='sq'){
     out.textContent='Loading the SQL engine...';
     runSQL(b.qs[n-1].db,ta.value).then(function(r){out.innerHTML=resHTML(r)}).catch(function(){out.innerHTML='<span class="er">The SQL engine could not load. Check your connection and reload.</span>'});

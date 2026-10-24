@@ -5,6 +5,10 @@
     "api/mark.js": {
       "maxDuration": 300,
       "includeFiles": "public/{helpers,kit,bank*,formats}.js"
+    },
+    "api/compare.js": {
+      "maxDuration": 300,
+      "includeFiles": "public/{helpers,kit,bank*,formats,marking-config}.js"
     }
   }
 }

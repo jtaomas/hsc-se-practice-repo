@@ -15,9 +15,12 @@ async function privateBlob() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) throw error(503, 'marking_storage_unavailable', 'Private marking storage is not configured.');
   return import('@vercel/blob');
 }
-function failureDiagnostics(value) {
+function failureDiagnostics(value, kind) {
+  const comparison = kind === 'comparison';
+  const failureCodes = new Set(FAILURE_CODES);
+  if (comparison) for (const code of ['comparison_timeout', 'comparison_call_budget', 'comparison_request_too_large', 'comparison_input_too_large', 'comparison_unavailable']) failureCodes.add(code);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const clean = { code: FAILURE_CODES.has(value.code) ? value.code : 'marking_unavailable' };
+  const clean = { code: failureCodes.has(value.code) ? value.code : 'marking_unavailable' };
   const number = value => Number.isSafeInteger(value) && value >= 0 && value <= 10000000;
   const usage = source => {
     const out = {};
@@ -30,15 +33,15 @@ function failureDiagnostics(value) {
     clean.audit = { usage: usage(audit.usage), calls: [] };
     if (number(audit.durationMs)) clean.audit.durationMs = audit.durationMs;
     if (audit.requestedModel != null) clean.audit.requestedModel = model(audit.requestedModel);
-    if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, 3).map(model);
-    if (Array.isArray(audit.calls)) for (const call of audit.calls.slice(0, 3)) {
-      if (!call || !['marker1', 'marker2', 'auditor'].includes(call.stage)) continue;
+    if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, comparison ? 10 : 3).map(model);
+    if (Array.isArray(audit.calls)) for (const call of audit.calls.slice(0, comparison ? 10 : 3)) {
+      if (!call || (comparison ? !/^(profile:p[1-8]|synthesis|auditor)$/.test(call.stage) : !['marker1', 'marker2', 'auditor'].includes(call.stage))) continue;
       const out = { stage: call.stage, usage: usage(call.usage) };
       if (['running', 'completed', 'failed'].includes(call.status)) out.status = call.status;
       if (number(call.durationMs)) out.durationMs = call.durationMs;
       if (call.requestedModel != null) out.requestedModel = model(call.requestedModel);
       if (call.returnedModel != null) out.returnedModel = model(call.returnedModel);
-      if (FAILURE_CODES.has(call.errorCode)) out.errorCode = call.errorCode;
+      if (failureCodes.has(call.errorCode)) out.errorCode = call.errorCode;
       if (['stop', 'length', 'tool_calls', 'function_call', 'content_filter'].includes(call.finishReason)) out.finishReason = call.finishReason;
       clean.audit.calls.push(out);
     }
@@ -60,6 +63,12 @@ async function authorize(headers) {
 
 function createStore(options) {
   options = options || {};
+  const kind = options.kind || 'marking';
+  if (!['marking', 'comparison'].includes(kind)) throw new Error('Invalid storage kind.');
+  const completedState = kind === 'comparison' ? 'complete' : 'marked';
+  const completedStates = [completedState, 'needs_review'];
+  const states = ['pending', completedState, 'needs_review', 'failed'];
+  const prefix = kind + '/v1/';
   const provider = options.blob || privateBlob;
   const now = options.now || Date.now;
   const operationMs = options.operationTimeoutMs == null ? STORAGE_TIMEOUT_MS : options.operationTimeoutMs;
@@ -70,7 +79,7 @@ function createStore(options) {
   function identity(sessionId, digest) {
     if (typeof sessionId !== 'string' || !HASH.test(sessionId) || typeof digest !== 'string' || !HASH.test(digest)) throw error(400, 'invalid_marking_identity', 'Invalid marking identity.');
     const owner = sha(sessionId);
-    return { owner, path: 'marking/v1/jobs/' + owner + '/' + digest + '.json' };
+    return { owner, path: prefix + 'jobs/' + owner + '/' + digest + '.json' };
   }
   async function bounded(operation) {
     const controller = new AbortController();
@@ -118,20 +127,20 @@ function createStore(options) {
     throw error(503, 'marking_storage_busy', 'Marking storage is busy. Try again in a moment.');
   }
   function checkJob(job, digest) {
-    if (job && (job.version !== 1 || job.inputDigest !== digest || !['pending', 'marked', 'needs_review', 'failed'].includes(job.state))) throw error(503, 'marking_storage_invalid', 'The saved marking record cannot be verified.');
+    if (job && (job.version !== 1 || job.inputDigest !== digest || !states.includes(job.state))) throw error(503, 'marking_storage_invalid', 'The saved marking record cannot be verified.');
   }
   function checkQuota(old, date, owner) {
     const ledger = old || { version: 1, day: date, total: 0, users: {} };
     if (ledger.version !== 1 || ledger.day !== date || !Number.isSafeInteger(ledger.total) || ledger.total < 0 || ledger.total > DEFAULT_LIMITS.site || !ledger.users || typeof ledger.users !== 'object' || Array.isArray(ledger.users) || Object.keys(ledger.users).length > DEFAULT_LIMITS.site) throw error(503, 'marking_storage_invalid', 'The marking allowance cannot be verified.');
     const entries = Object.entries(ledger.users);
     if (entries.some(([key, count]) => !HASH.test(key) || !Number.isSafeInteger(count) || count < 1 || count > DEFAULT_LIMITS.perUser) || entries.reduce((sum, [, count]) => sum + count, 0) !== ledger.total) throw error(503, 'marking_storage_invalid', 'The marking allowance cannot be verified.');
-    if ((ledger.users[owner] || 0) >= limits.perUser) throw error(429, 'quota_exceeded', 'Your daily AI marking allowance has been reached.');
-    if (ledger.total >= limits.site) throw error(429, 'quota_exceeded', 'The site daily AI marking allowance has been reached.');
+    if ((ledger.users[owner] || 0) >= limits.perUser) throw error(429, 'quota_exceeded', kind === 'comparison' ? 'Your daily AI comparison allowance has been reached.' : 'Your daily AI marking allowance has been reached.');
+    if (ledger.total >= limits.site) throw error(429, 'quota_exceeded', kind === 'comparison' ? 'The site daily AI comparison allowance has been reached.' : 'The site daily AI marking allowance has been reached.');
     return ledger;
   }
   async function reserveQuota(owner) {
     const date = new Date(now()).toISOString().slice(0, 10);
-    return change('marking/v1/quota/' + date + '.json', old => {
+    return change(prefix + 'quota/' + date + '.json', old => {
       const ledger = checkQuota(old, date, owner);
       ledger.total++; ledger.users[owner] = (ledger.users[owner] || 0) + 1;
       return { write: ledger, value: null };
@@ -143,7 +152,7 @@ function createStore(options) {
     return change(path, job => {
       checkJob(job, digest);
       if (!job || job.state !== 'pending' || job.leaseId !== leaseId) return { write: null, value: false };
-      const failed = { version: 1, inputDigest: digest, state: 'failed', finishedAt: now() }, safe = failureDiagnostics(diagnostics) || failureDiagnostics(job.diagnostics);
+      const failed = { version: 1, inputDigest: digest, state: 'failed', finishedAt: now() }, safe = failureDiagnostics(diagnostics, kind) || failureDiagnostics(job.diagnostics, kind);
       if (safe) failed.diagnostics = safe;
       return { write: failed, value: true };
     });
@@ -151,7 +160,7 @@ function createStore(options) {
   async function getCached(sessionId, digest) {
     const { path } = identity(sessionId, digest), record = await read(path), job = record && record.data;
     checkJob(job, digest);
-    if (!job || !['marked', 'needs_review'].includes(job.state)) return null;
+    if (!job || !completedStates.includes(job.state)) return null;
     if (!job.result || job.result.status !== job.state) throw error(503, 'marking_storage_invalid', 'The saved marking result cannot be verified.');
     return job.result;
   }
@@ -162,12 +171,12 @@ function createStore(options) {
     if (!probe || probe.data.state === 'failed' || (probe.data.state === 'pending' && probe.data.leaseUntil <= now())) {
       // Avoid creating unlimited rejected-job records after a quota is exhausted.
       // The later CAS reservation remains authoritative for concurrent requests.
-      const date = new Date(now()).toISOString().slice(0, 10), quota = await read('marking/v1/quota/' + date + '.json');
+      const date = new Date(now()).toISOString().slice(0, 10), quota = await read(prefix + 'quota/' + date + '.json');
       checkQuota(quota && quota.data, date, owner);
     }
     const acquired = await change(path, job => {
       checkJob(job, digest);
-      if (job && (job.state === 'marked' || job.state === 'needs_review')) {
+      if (job && completedStates.includes(job.state)) {
         if (!job.result || job.result.status !== job.state) throw error(503, 'marking_storage_invalid', 'The saved marking result cannot be verified.');
         return { write: null, value: { state: 'cached', result: job.result } };
       }
@@ -176,7 +185,7 @@ function createStore(options) {
         if (job.leaseUntil > now()) return { write: null, value: { state: 'busy', retryAfter: Math.max(1, Math.ceil((job.leaseUntil - now()) / 1000)) } };
       }
       const pending = { version: 1, inputDigest: digest, state: 'pending', leaseId, startedAt: now(), leaseUntil: now() + limits.leaseMs };
-      if (job && job.diagnostics) pending.diagnostics = failureDiagnostics(job.diagnostics);
+      if (job && job.diagnostics) pending.diagnostics = failureDiagnostics(job.diagnostics, kind);
       return { write: pending, value: { state: 'reserved', leaseId } };
     });
     if (acquired.state !== 'reserved') return acquired;
@@ -196,18 +205,18 @@ function createStore(options) {
   }
   async function finish(sessionId, digest, leaseId, result) {
     const { path } = identity(sessionId, digest);
-    if (!LEASE.test(leaseId || '') || !result || typeof result !== 'object' || Array.isArray(result) || !['marked', 'needs_review'].includes(result.status)) throw error(500, 'invalid_marking_result', 'The marking result cannot be stored.');
+    if (!LEASE.test(leaseId || '') || !result || typeof result !== 'object' || Array.isArray(result) || !completedStates.includes(result.status)) throw error(500, 'invalid_marking_result', 'The marking result cannot be stored.');
     let copy;
     try { const text = JSON.stringify(result); if (Buffer.byteLength(text) > limits.resultBytes) throw new Error('Too large'); copy = JSON.parse(text); }
     catch (_) { throw error(500, 'invalid_marking_result', 'The marking result cannot be stored.'); }
     // Only validated response data belongs here, never the submitted input bundle.
-    const keys = ['status', 'mark', 'summary', 'strengths', 'improve', 'advice', 'criteria', 'audit'];
+    const keys = kind === 'comparison' ? ['status', 'summary', 'profiles', 'comparisons', 'statistics', 'audit'] : ['status', 'mark', 'summary', 'strengths', 'improve', 'advice', 'criteria', 'audit'];
     if (Object.keys(copy).some(key => !keys.includes(key))) throw error(500, 'invalid_marking_result', 'The marking result contains unexpected source data.');
     return change(path, job => {
       checkJob(job, digest);
       if (!job || job.state !== 'pending' || job.leaseId !== leaseId || job.leaseUntil <= now()) throw error(409, 'marking_lease_lost', 'This marking reservation expired. Its result was not saved.');
       const completed = { version: 1, inputDigest: digest, state: copy.status, finishedAt: now(), result: copy };
-      if (job.diagnostics) completed.diagnostics = failureDiagnostics(job.diagnostics);
+      if (job.diagnostics) completed.diagnostics = failureDiagnostics(job.diagnostics, kind);
       return { write: completed, value: copy };
     });
   }

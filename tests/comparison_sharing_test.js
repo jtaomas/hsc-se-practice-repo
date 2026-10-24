@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {Readable}=require('node:stream');
+const {createSharing,TTL_MS}=require('../server/comparison-sharing');
+const records=new Map();let time=100000;
+const blob={async get(p){return records.has(p)?{statusCode:200,stream:Readable.from([records.get(p)])}:null},async put(p,v){if(records.has(p))throw new Error('already exists');records.set(p,v)}};
+(async()=>{
+ const a=createSharing({blob:async()=>blob,now:()=>time}),b=createSharing({blob:async()=>blob,now:()=>time});
+ const [one,two]=await Promise.all([a.sign({version:1,parts:[]},'a'.repeat(64)),b.sign({version:1,parts:[]},'b'.repeat(64))]);
+ assert.equal(records.size,1,'concurrent first exports share the atomically created key');
+ assert.equal((await b.verify(one)).participantId,one.snapshot.participantId);assert.notEqual(one.snapshot.participantId,two.snapshot.participantId);
+ const again=await a.sign({version:1,parts:[]},'a'.repeat(64));assert.equal(again.snapshot.participantId,one.snapshot.participantId);
+ const edited=JSON.parse(JSON.stringify(one));edited.snapshot.parts.push({mark:100});await assert.rejects(a.verify(edited),/changed/);
+ await assert.rejects(a.verify({...one,signature:'0'.repeat(64)}),/changed/);
+ await assert.rejects(a.verify({...one,extra:true}),/unedited/);
+ await assert.rejects(a.sign({answer:'x'.repeat(210000)},'a'.repeat(64)),/200 KiB/);
+ records.set('progress/'+'a'.repeat(64)+'.json',JSON.stringify({u:{'1':{done:true,ans:{'1.0':1}}}}));
+ assert((await a.loadPaper('a'.repeat(64),'1')).done);assert.equal(await a.loadPaper('b'.repeat(64),'1'),null);
+ time+=TTL_MS;await assert.rejects(a.verify(one),/expired/);
+ const hung=createSharing({blob:()=>new Promise(()=>{}),timeoutMs:5});await assert.rejects(hung.loadPaper('a'.repeat(64),'1'),/time limit/);
+ console.log('comparison sharing tests passed');
+})().catch(e=>{console.error(e);process.exitCode=1});

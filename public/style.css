@@ -296,3 +296,28 @@ table.ctbl td{font-weight:600}
 .cedit.ace-on>textarea[data-code],.cedit.ace-on>.gut{display:none}
 .cedit .cedit-ed{position:absolute;inset:0;font-family:Monaco,Menlo,Consolas,'Ubuntu Mono',monospace}
 .cedit .ace-empty{position:absolute;top:0;left:6px;color:#75715E;pointer-events:none;font-size:13px;line-height:1.5}
+
+/* Explicitly shared comparison evidence and reports. */
+.comparison-page{max-width:1180px;margin:0 auto;width:100%}
+.comparison-steps{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.comparison-steps .feature{margin:12px 0;min-width:0}
+.comparison-page h2{font-size:1.2em;margin-top:0}.comparison-page h3{font-size:1.1em}
+.comparison-page select,.comparison-page input[type=file]{display:block;width:100%;margin:8px 0 14px}
+.comparison-page select,.comparison-file-list input{padding:8px;border:1px solid #7b8290;border-radius:3px}
+.comparison-consent{display:flex;gap:10px;align-items:flex-start;margin:18px 0;font-size:.92em}
+.comparison-consent input{flex:none;margin-top:5px;width:18px;height:18px}
+.comparison-page .acts{flex-wrap:wrap;gap:10px}
+.comparison-file-list{list-style:none;padding:0}.comparison-file-list li{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.comparison-file-list label{width:100%;font-size:.9em}.comparison-file-list input{min-width:0;flex:1;width:120px}
+#comparison-status{margin:12px 0;color:#002664}#comparison-error{margin:12px 0;color:#b81237;font-weight:700}
+.comparison-report{margin-top:24px}.comparison-report caption{text-align:left;font-weight:700;margin:10px 0}
+.comparison-profile{margin-top:20px}.comparison-profile h4{background:#eaf0fa;padding:12px;font-size:1.1em;margin-bottom:0}
+.comparison-finding{border:1px solid #d5dbe5;padding:16px;margin:12px 0;overflow-wrap:anywhere}
+.comparison-finding p{margin:8px 0}.comparison-kicker{color:#002664;font-weight:700;font-size:.9em}
+.comparison-evidence{margin-top:12px}.comparison-quote{border-left:3px solid #8a9fbc;padding:10px 14px;margin:12px 0;background:#f6f8fc}
+.comparison-quote blockquote{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.comparison-provenance{margin:20px 0;overflow-wrap:anywhere}.comparison-page summary{cursor:pointer}
+@media(max-width:760px){.comparison-steps{grid-template-columns:1fr;gap:0}.comparison-report{padding:14px}.comparison-page .nb{min-width:0}.comparison-file-list .nb{padding:8px}}
+
+.comparison-report .res{min-width:620px}.comparison-scroll-note{display:none}
+@media(max-width:760px){.comparison-scroll-note{display:block;font-size:.9em;color:#424b59}}

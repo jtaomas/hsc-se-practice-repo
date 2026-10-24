@@ -22,6 +22,8 @@ jobs:
           node tests/marking_api_test.js
           node tests/marking_client_test.js
           sh tests/run_marking_store_test.sh
+      - name: Comparison evidence, agent audit, sharing and regression harness (no network)
+        run: npm run test:comparison
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install browser test dependencies

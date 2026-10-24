@@ -33,6 +33,7 @@ with sync_playwright() as p:
     pg.on("console",lambda m: logs.append(m.text) if m.type=='error' and 'ERR_FAILED' not in m.text else None)
     pg.route("https://fonts.g*/**",lambda r:r.abort())
     if os.environ.get('ACE_DIR'): pg.add_init_script("window.ACEBASE='/__ace__/';")
+    if os.environ.get('PYODIDE_DIR'): pg.add_init_script("window.PYBASE='/__pyodide__/';")
     pg.route("**/api/auth",auth)
     pg.route("**/api/mark",lambda r:r.fulfill(status=200,content_type='application/json',body='{"ok":true}'))
     pg.goto(U);pg.wait_for_timeout(300)

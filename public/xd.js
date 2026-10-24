@@ -37,6 +37,17 @@ function xdMount(b,k,ro){
     st.root.render(React.createElement(ExcalidrawLib.Excalidraw,props));
   }).catch(function(){host.innerHTML='<div class="xdl er">The drawing tool could not load. It needs an internet connection. Reload the page and try again.</div>'});
 }
+function xdScene(all){
+  // Preserve positions, paths, rotations, labels and endpoint bindings for the server.
+  return {elements:JSON.parse(JSON.stringify((all||[]).filter(function(e){return !e.isDeleted}))).map(function(e){delete e._t;return e})};
+}
+function xdPNG(elements){
+  var snapshot=xdScene(elements).elements;
+  return loadXD().then(function(){return ExcalidrawLib.exportToBlob({elements:snapshot,files:{},appState:{exportBackground:true,viewBackgroundColor:'#ffffff'},mimeType:'image/png',maxWidthOrHeight:1600})}).then(function(blob){
+    if(!blob||blob.size>1024*1024)return null;
+    return new Promise(function(resolve){var reader=new FileReader();reader.onload=function(){resolve(reader.result)};reader.onerror=function(){resolve(null)};reader.readAsDataURL(blob)});
+  }).catch(function(){return null});
+}
 function xdText(all){
   var els=(all||[]).filter(function(e){return !e.isDeleted});
   if(!els.length)return 'The canvas is empty.';
@@ -50,13 +61,13 @@ function xdText(all){
     shapes.forEach(function(s){if(cx>=s.x&&cx<=s.x+s.width&&cy>=s.y&&cy<=s.y+s.height&&(!best||s.width*s.height<best.width*best.height))best=s});
     if(best)(lab[best.id]=lab[best.id]||[]).push({y:t.y,t:t.text});else loose.push(t);
   });
-  var name={},out=[];
+  var name={},labels={},out=[];
   shapes.forEach(function(s,i){
     var L=(lab[s.id]||[]).sort(function(a,b){return a.y-b.y}).map(function(x){return x.t.replace(/\n+/g,' / ')});
-    name[s.id]='S'+(i+1);s._t=L;
+    name[s.id]='S'+(i+1);labels[s.id]=L;
     out.push('S'+(i+1)+' ['+s.type+', top-left ('+Math.round(s.x)+','+Math.round(s.y)+'), '+Math.round(s.width)+'x'+Math.round(s.height)+'] text: '+(L.length?L.join(' | '):'(empty)'));
   });
-  function nm(s){return s?name[s.id]+(s._t.length?' "'+s._t[0].slice(0,30)+'"':''):'nothing'}
+  function nm(s){return s?name[s.id]+(labels[s.id].length?' "'+labels[s.id][0].slice(0,30)+'"':''):'nothing'}
   function near(pt,bid){
     if(bid){var b=shapes.filter(function(s){return s.id===bid})[0];if(b)return b}
     var best=null,bd=1e9;

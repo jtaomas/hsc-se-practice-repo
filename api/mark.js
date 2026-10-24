@@ -1,51 +1,53 @@
-// Vercel serverless function: marks one answer with DeepSeek.
-// The key comes from the DEEPSEEK_API_KEY environment variable only.
-const MAXLEN = 12000;
-function clip(s, n) { s = s == null ? '' : String(s); return s.length > n ? s.slice(0, n) + '\n[cut]' : s; }
-module.exports = async (req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'GET') { res.status(200).json({ ok: true, serverKey: !!process.env.DEEPSEEK_API_KEY }); return; }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'Use POST.' }); return; }
-  const key = process.env.DEEPSEEK_API_KEY || '';
-  if (!key) { res.status(401).json({ code: 'no_key', error: 'AI marking is not set up on this site yet.' }); return; }
-  let p = req.body;
-  if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = {}; } }
-  p = p || {};
-  const call = async (messages, max) => {
-    const r = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.1, max_tokens: max, response_format: { type: 'json_object' } })
-    });
-    const t = await r.text();
-    let j; try { j = JSON.parse(t); } catch (e) { j = {}; }
-    return { r, j };
+// Three bounded DeepSeek calls: two blind assessments, then a rubric/evidence audit.
+const inputTools = require('../server/marking-input');
+const engine = require('../server/marking-engine');
+const store = require('../server/marking-store');
+
+function createHandler(deps = {}) {
+  const marking = deps.engine || engine, storage = deps.store || store, env = deps.env || process.env;
+  return async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!env.DEEPSEEK_API_KEY, model: marking.MODEL, harnessVersion: marking.HARNESS_VERSION, requiresSignIn: true });
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
+    let session, prepared, lease, inputDigest;
+    try {
+      session = await storage.authorize(req.headers || {});
+      prepared = inputTools.prepare(req.body);
+      inputDigest = inputTools.digest({ input: prepared.input, questionVersion: prepared.questionVersion, rubricVersion: prepared.rubricVersion, model: marking.MODEL, harness: marking.HARNESS_VERSION });
+      const provenance = { inputDigest, questionVersion: prepared.questionVersion, rubricVersion: prepared.rubricVersion, harnessVersion: marking.HARNESS_VERSION, requestedModel: marking.MODEL };
+      if (prepared.blank || prepared.reviewReason) {
+        return res.status(200).json({ status: prepared.reviewReason ? 'needs_review' : 'marked', mark: prepared.reviewReason ? null : 0,
+          summary: prepared.reviewReason || 'No answer was given for this part.', strengths: [], improve: [], advice: [], criteria: [],
+          audit: Object.assign(provenance, { calls: [], checks: [prepared.reviewReason ? 'evidence_requires_review' : 'blank_answer'], returnedModels: [] }) });
+      }
+      // Cached decisions remain available when the provider key is temporarily absent.
+      if (!env.DEEPSEEK_API_KEY) {
+        if (storage.getCached) {
+          const cached = await storage.getCached(session.id, inputDigest);
+          if (cached) return res.status(200).json(cached);
+        }
+        return res.status(503).json({ code: 'no_key', error: 'AI marking is not configured. Your answer remains saved.' });
+      }
+      const reservation = await storage.getOrReserve(session.id, inputDigest);
+      if (reservation.state === 'cached') return res.status(200).json(reservation.result);
+      if (reservation.state === 'busy') { res.setHeader('Retry-After', '15'); return res.status(409).json({ code: 'marking_busy', error: 'This answer is already being marked. Try again shortly to retrieve the result.' }); }
+      lease = reservation.leaseId;
+      const result = await marking.mark(prepared.input, { apiKey: env.DEEPSEEK_API_KEY });
+      result.audit = Object.assign({}, result.audit, provenance);
+      if (Buffer.byteLength(JSON.stringify(result)) > 64000) throw Object.assign(new Error('The marking result exceeded the storage limit.'), { status: 502, code: 'invalid_result' });
+      // Do not show an unpersisted result: subsequent reads must see the same decision.
+      await storage.finish(session.id, inputDigest, lease, result);
+      lease = null;
+      return res.status(200).json(result);
+    } catch (e) {
+      if (lease) { try { await storage.fail(session.id, inputDigest, lease, { code: e.code, audit: e.audit }); } catch (_) {} }
+      const status = [400, 401, 403, 409, 413, 429, 502, 503, 504].includes(e.status) ? e.status : 503;
+      const code = typeof e.code === 'string' && /^[a-z_]+$/.test(e.code) ? e.code : 'marking_unavailable';
+      if (status === 429) res.setHeader('Retry-After', '3600');
+      const safe = e.status && e.code ? e.message : 'AI marking is temporarily unavailable. Your answer remains saved.';
+      return res.status(status).json({ code, error: safe });
+    }
   };
-  try {
-    const max = Math.max(1, Math.min(20, parseInt(p.max, 10) || 1));
-    const sys = 'You are a strict, fair NSW HSC Software Engineering marker. Mark one student answer out of ' + max + ' using only the marking criteria and the sample answer given. ' +
-      'Award marks for correct ideas even when the wording or code differs from the sample. Do not award marks for vague statements, for repeating the question, or for content that is wrong. ' +
-      'If automatic test results are given, treat them as strong evidence for code answers. For a diagram, the answer is a text description of shapes, text and connectors read from the student\'s drawing; judge it against the criteria. ' +
-      'The student is in Year 12. Write feedback addressed to the student, plain and specific, with no flattery. ' +
-      'Reply with JSON only: {"mark": integer from 0 to ' + max + ', "summary": one or two sentences, "strengths": array of at most 3 short strings naming what earned marks, "improve": array of at most 3 short strings naming what would earn more marks}.';
-    const user = 'QUESTION TYPE: ' + clip(p.type, 40) + '\nMARKS AVAILABLE: ' + max + (p.wordLimit ? '\nWORD LIMIT: ' + p.wordLimit : '') +
-      '\n\nSTIMULUS:\n' + clip(p.stimulus, 4000) + '\n\nQUESTION:\n' + clip(p.question, 2000) +
-      '\n\nMARKING CRITERIA:\n' + (Array.isArray(p.criteria) ? p.criteria.map((c, i) => (i + 1) + '. ' + clip(c, 400)).join('\n') : '') +
-      '\n\nSAMPLE ANSWER:\n' + clip(p.sample, 3000) + (p.tests ? '\n\nAUTOMATIC CHECK:\n' + clip(p.tests, 300) : '') +
-      '\n\nSTUDENT ANSWER:\n' + clip(p.answer, MAXLEN);
-    const { r, j } = await call([{ role: 'system', content: sys }, { role: 'user', content: user }], 700);
-    if (r.status === 401 || r.status === 403) { res.status(401).json({ code: 'bad_key', error: 'DeepSeek rejected this key.' }); return; }
-    if (r.status === 402) { res.status(402).json({ error: 'The DeepSeek account has no balance left.' }); return; }
-    if (r.status === 429) { res.status(429).json({ error: 'DeepSeek is rate limiting requests. Try again in a minute.' }); return; }
-    if (!r.ok) { res.status(502).json({ error: (j.error && j.error.message) || 'DeepSeek returned ' + r.status }); return; }
-    let out = {};
-    try { out = JSON.parse(j.choices[0].message.content); } catch (e) { res.status(502).json({ error: 'DeepSeek sent a reply that could not be read.' }); return; }
-    let mark = Math.round(Number(out.mark));
-    if (!isFinite(mark)) { res.status(502).json({ error: 'DeepSeek did not return a mark.' }); return; }
-    mark = Math.max(0, Math.min(max, mark));
-    const arr = (a) => (Array.isArray(a) ? a.slice(0, 3).map((x) => clip(x, 300)) : []);
-    res.status(200).json({ mark, summary: clip(out.summary, 600), strengths: arr(out.strengths), improve: arr(out.improve) });
-  } catch (e) {
-    res.status(502).json({ error: 'Could not reach DeepSeek.' });
-  }
-};
+}
+module.exports = createHandler();
+module.exports.createHandler = createHandler;

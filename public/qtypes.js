@@ -6,7 +6,6 @@
      guide(it,a)           correct-answer HTML for the marking guide.
      compare(it,a)         rows [label, yours, correct, ok] for My mistakes.
      isAns(it,a)           true if the student has answered.
-     payload(it,a,base)    request body for AI marking (types that are not auto).
      sample(it), preview(it,a), cls   sample answer, answer preview and filter class. */
 
 /* ---------- shared drag-and-drop engine for od and dm ----------
@@ -22,10 +21,11 @@ function slotHTML(k,s,inner,ro,cls,style){
 function dzUsed(a){var u={};Object.keys(a||{}).forEach(function(s){u[a[s]]=s});return u}
 function dzRedraw(k){
   var el=$('.dz[data-k="'+k+'"]');if(!el||!CUR.b)return;
-  var it=itemOf(k),t=document.createElement('div');t.innerHTML=QT[it.t].render(it,k,BS(CUR.b.id).ans[k],!!CUR.rv,CUR.rv);
+  var it=itemOf(k),t=document.createElement('div');t.innerHTML=QT[it.t].render(it,k,BS(CUR.b.id).ans[k],!!CUR.rv||BS(CUR.b.id).done,CUR.rv);
   el.parentNode.replaceChild(t.firstChild,el);
 }
 function dzPlace(k,s,ci,from){
+  if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   var it=itemOf(k),bs=BS(CUR.b.id),a={},old=bs.ans[k]||{};
   Object.keys(old).forEach(function(x){a[x]=old[x]});
   var prev=a[s];
@@ -35,7 +35,7 @@ function dzPlace(k,s,ci,from){
   if(prev!=null&&prev!==ci&&from!=null)a[from]=prev;
   bs.ans[k]=a;save();dzRedraw(k);refreshNav();
 }
-function dzRemove(k,s){var bs=BS(CUR.b.id),a=bs.ans[k];if(!a||a[s]==null)return;delete a[s];save();dzRedraw(k);refreshNav()}
+function dzRemove(k,s){if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;var bs=BS(CUR.b.id),a=bs.ans[k];if(!a||a[s]==null)return;delete a[s];save();dzRedraw(k);refreshNav()}
 function dzClear(){DZ.sel=null;$$('.chip.picked').forEach(function(c){c.classList.remove('picked')});$$('.dz.picking').forEach(function(c){c.classList.remove('picking')})}
 function dzSelect(k,ci,from){
   DZ.sel=(DZ.sel&&DZ.sel.k===k&&DZ.sel.ci===ci&&DZ.sel.from===from)?null:{k:k,ci:ci,from:from};
@@ -150,12 +150,11 @@ regType('ft',{
       return '<input class="fti" data-fk="'+k+'" data-c="'+r+','+ci+'" value="'+esc(a[r+','+ci]||'')+'" aria-label="'+esc(plain(it.h[ci]))+', row '+(r+1)+'" autocomplete="off"'+(ro?' readonly':'')+'>'})+'</div>';
   },
   isAns:function(it,a){return Object.keys(a).some(function(x){return String(a[x]).trim()})},
-  payload:function(it,a,base){a=a||{};base.type='table response';base.answer=ftText(it,function(r,ci){return a[r+','+ci]});base.sample=ftText(it,function(r,ci){return ftModel(it,r,ci)});return base},
   sample:function(it){return ftTable(it,function(c,r,ci){return c!=null?c:esc(ftModel(it,r,ci))})},
   preview:function(it,a){a=a||{};return '<div class="yans">'+ftTable(it,function(c,r,ci){return c!=null?c:esc(a[r+','+ci]||'')})+'</div>'}
 });
 document.addEventListener('input',function(e){
-  var t=e.target;if(!t.dataset||!t.dataset.fk||!CUR.b||CUR.rv)return;
+  var t=e.target;if(!t.dataset||!t.dataset.fk||!CUR.b||CUR.rv||t.readOnly||BS(CUR.b.id).done)return;
   var bs=BS(CUR.b.id),k=t.dataset.fk,a=bs.ans[k]||{};
   if(t.value.trim())a[t.dataset.c]=t.value;else delete a[t.dataset.c];
   bs.ans[k]=a;save();refreshNav();

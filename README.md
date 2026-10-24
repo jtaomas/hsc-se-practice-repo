@@ -65,3 +65,5 @@ Only the project owner needs these. Contributors do not need them: tests use moc
 4. The owner checks the preview and merges. Merging to `main` deploys to production.
 
 See `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
+
+Access check: edited by Claude on 2026-10-24.

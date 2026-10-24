@@ -113,4 +113,3 @@ Everyone with access works directly on `main`.
 
 See `AUTHORING.md` for how to write questions and papers, and `AGENTS.md` for rules that apply to AI coding assistants (Claude, ChatGPT and others).
 
-Access check: edited by Claude on 2026-10-24.

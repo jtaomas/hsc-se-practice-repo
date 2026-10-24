@@ -36,6 +36,7 @@ jobs:
           sh tests/run_marking_store_test.sh
           node tests/marking_storage_transport_test.js
           node tests/d1_adapter_test.js
+          node tests/archive_test.js
       - name: Comparison evidence, agent audit, sharing and regression harness (no network)
         run: npm run test:comparison
       - uses: actions/setup-python@v5

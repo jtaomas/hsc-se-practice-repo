@@ -28,7 +28,7 @@ public/            static site, served as-is (no build step)
   marking/marking.js shared registry and criterion formatter
   marking/pem2026.js PEM trial marking entries (loaded before banks)
   marking/doe2026.js DoE trial marking entries (loaded before banks)
-  bank1..10.js     seven full original papers, two converted trials and a mini paper (push into BANKS)
+  bank1..10.js     papers 1 to 7 are archived (hidden in the app, content in archive/); 8 and 9 are the converted trials, 10 the mini paper (push into BANKS)
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)

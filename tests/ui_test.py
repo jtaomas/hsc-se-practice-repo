@@ -26,7 +26,7 @@ def auth(r):
         current['hist']=p['data'].get('hist',[])
         return out(200,{'ok':True,'data':current,'revisions':revisions})
 import os
-U=os.environ.get("SITE","http://localhost:8767")+"/index.html"
+U=os.environ.get("SITE","http://localhost:8767")+"/index.html?archive=1"
 with sync_playwright() as p:
     b=p.chromium.launch(**({'executable_path':os.environ['CHROME']} if os.environ.get('CHROME') else {})); ctx=b.new_context(viewport={"width":1440,"height":900}); pg=ctx.new_page()
     pg.on("pageerror",lambda e: logs.append(f"PAGEERROR: {e}"))
@@ -61,6 +61,8 @@ with sync_playwright() as p:
     pg.click('[data-act=submit]');pg.wait_for_timeout(800)
     assert 'results' in pg.url and pg.inner_text('.big').count('/')==1,pg.inner_text('.big')
     pg.goto(U+'#/1/q/15');pg.wait_for_timeout(200)
+    tops=pg.evaluate("(function(){var n=document.querySelector('#nums');var h=n.innerHTML;n.innerHTML='<button class=\"nav-elem cur part\">1</button><button class=\"nav-elem part\">2</button><button class=\"nav-elem ok\">3</button>';var t=[].map.call(n.children,function(e){return Math.round(e.getBoundingClientRect().top)});n.innerHTML=h;return t})()")
+    assert len(set(tops))==1,'question number boxes are not level: %s'%tops
     assert pg.get_attribute('.rta','contenteditable')=='false','submitted answer is editable through an old route'
     pg.goto(U+'#/1/q/19');pg.wait_for_timeout(200)
     before=pg.input_value('textarea[data-code]');pg.press('textarea[data-code]','Tab') if not os.environ.get('ACE_DIR') else None

@@ -154,6 +154,8 @@ function resultsPage(b){
 /* ---------- routing ---------- */
 function render(){
   var h=location.hash.replace(/^#\/?/,'').split('/'),b=BANKS.filter(function(x){return x.id===h[0]})[0],html;
+  /* Archived papers (see archive/README.md) are not reachable from the app; ?archive=1 is for tests and maintainers. */
+  if(b&&b.archived&&!/[?&]archive=1\b/.test(location.search))b=undefined;
   MENU={};CPK='';xdCleanup();
   if(h[0]==='papers')html=papersPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}

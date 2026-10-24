@@ -70,7 +70,7 @@ function infoHTML(){
     '<p>With the keyboard, Tab to an item, press Enter, then Tab to a box and press Enter.</p>'+
     '<h3>Drawing tool</h3><p>A brief demonstration of the Drawing tool is shown. Choose a shape, then click the page to place it, and type to label it. Use the connector tools to join two shapes. Reset clears the page.</p>'+
     '<div class="dmo"><div class="dmh"><span><b>7 (b)</b> &nbsp;Sample question text appears here.</span><span class="dmb"><i class="n">Full screen</i><i class="n">Reset</i><i class="o">hide'+IC.up+'</i></span></div><div class="dmc"><div class="dmt"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="dml">Library</div></div></div>'+
-    '<h3>Code editors</h3><p><b>Python:</b> write code in the left pane and press Run to see the result in the output pane. The first run downloads Python, so you need an internet connection. Put input() values in Program input, one value per line. Use Stop to cancel a run. Programs stop after 10 seconds.</p>'+
+    '<h3>Code editors</h3><p><b>Python:</b> write code in the left pane and press Run to see the result in the output pane. The first run downloads Python, so you need an internet connection. When your program calls input(), a box asks for each value, as in the HSC exam. Cancel enters an empty value. The box cannot be closed, so a loop that keeps calling input() will not let you leave: avoid while True with input(). If it happens, reload the page (your answers are saved). Use Stop to cancel a run. Programs stop after 10 seconds of running.</p>'+
     '<p><b>Pseudocode:</b> there is no Run button. Indent with the Tab key and follow the syllabus style.</p>'+
     '<p><b>SQL:</b> Run shows the rows your query returns. Reset DB clears the results. Only SELECT queries are accepted, and you may use the syllabus words such as GREATER THAN, EQUALS and CONTAINS.</p>'+
     '<h3>Zoom and slides</h3><p>The round + button on a panel opens a larger view. Close it with Close or Escape. Arrows and dots under a panel move between slides.</p>'+
@@ -293,8 +293,7 @@ function doRun(k){
   out.className='out'+(it.t==='sq'?' sqres':'');
   if(it.t==='py'){
     out.textContent='Loading Python (the first run takes a few seconds)...';
-    var input=$('textarea[data-pyinput="'+k+'"]'),values=input&&input.value?input.value.replace(/\r/g,'').split('\n'):[];
-    runPy(ta.value,values).then(function(o){out.textContent=o||'(the program printed nothing)'}).catch(function(e){out.textContent=e.message});
+    runPyInteractive(ta.value,function(o,fin){var el=document.getElementById('o'+k)||out;el.className='out';el.textContent=o||(fin?'(the program printed nothing)':'');el.scrollTop=el.scrollHeight}).catch(function(e){var el=document.getElementById('o'+k)||out;el.textContent=e.message});
   }else if(it.t==='sq'){
     out.textContent='Loading the SQL engine...';
     runSQL(b.qs[n-1].db,ta.value).then(function(r){out.innerHTML=resHTML(r)}).catch(function(){out.innerHTML='<span class="er">The SQL engine could not load. Check your connection and reload.</span>'});

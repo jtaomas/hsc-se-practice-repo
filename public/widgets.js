@@ -114,7 +114,6 @@ function codeBox(it,k,a,ro,label,tog){
   var val=a!=null?a:(it.start||'');
   return '<div class="cbox" data-k="'+k+'"><div class="cbar"><div class="hoa-q cbl">'+label+'</div><div class="btns">'+
     '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='sq'&&!ro?'<button class="nb" data-act="rdb" data-k="'+k+'">Reset DB</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
-    (it.t==='py'&&!ro?'<label class="pyinput">Program input (one value per line)<textarea data-pyinput="'+k+'" aria-label="Program input" rows="2" placeholder="Enter input() values here before running"></textarea></label>':'')+
     (it.t==='sq'?'<div class="split sqs"><div class="qtab"><span>Query</span></div>':'<div class="split'+(hasRun?'':' one')+'">')+'<div class="cedit"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
     (hasRun?'<div class="out ph'+(it.t==='sq'?' sqres':'')+'" id="o'+k+'">'+(it.t==='sq'?'Run the query to see the results.':'# Output')+'</div>':'')+'</div></div>';
 }

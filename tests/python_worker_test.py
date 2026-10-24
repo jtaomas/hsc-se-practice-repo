@@ -23,6 +23,21 @@ with sync_playwright() as p:
     assert 'limit' in page.evaluate('workerResult')
     page.evaluate('PYTIMEOUT=10000')
     assert page.evaluate("runPy('print(8)',[])").strip()=='8'
+    # Run button: input() opens a dialog like the HSC exam, echoes each answer after its prompt,
+    # and a while True loop around input() cannot be left (Cancel = empty answer, no timeout while waiting).
+    page.evaluate("window.shown='';window.done=false;runPyInteractive('a = input(\"Name? \")\\nprint(\"Hi \" + a)',function(o,f){shown=o;done=f});void 0")
+    page.wait_for_selector('.pyask');assert page.inner_text('#pyaskl')=='Name? '
+    page.fill('#pyaski','Sam');page.keyboard.press('Enter');page.wait_for_function('done')
+    assert page.evaluate('shown')=='Name? Sam\nHi Sam\n',page.evaluate('shown')
+    page.evaluate("PYTIMEOUT=300;window.trapEnded=false;runPyInteractive('while True:\\n    input(\"Are you stuck?\")',function(){}).then(function(){trapEnded=true},function(){trapEnded=true});void 0")
+    for how in ('enter','cancel','escape'):
+        page.wait_for_selector('.pyask')
+        if how=='enter':page.keyboard.press('Enter')
+        elif how=='cancel':page.click('.pyno')
+        else:page.keyboard.press('Escape');page.wait_for_timeout(200);assert page.locator('.pyask').count()==1,'Escape closed the input dialog'
+    page.wait_for_timeout(800)
+    assert page.locator('.pyask').count()==1 and not page.evaluate('trapEnded'),'input loop escaped or timed out while waiting'
+    page.reload();page.wait_for_function('typeof runPy === "function"')
     # All committed Python model answers pass using the actual browser runtime.
     count=page.evaluate('''async()=>{
       var total=0;
@@ -37,4 +52,4 @@ with sync_playwright() as p:
     expected=page.evaluate("BANKS.reduce(function(n,b){return n+b.qs.reduce(function(m,q){return m+q.it.reduce(function(k,it){return k+(it.t==='py'?it.tests.length:0)},0)},0)},0)")
     assert count==expected and count>=42,(count,expected)
     browser.close()
-    print('Python worker OK: interactive input, real infinite-loop stop/timeout, recovery and %d model cases'%count)
+    print('Python worker OK: interactive input, exam-style input dialog and inescapable input loop, real infinite-loop stop/timeout, recovery and %d model cases'%count)

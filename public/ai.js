@@ -54,7 +54,7 @@ function aiQuestionStamp(b,n){return JSON.stringify(b.qs[n-1].it.map(function(it
 function aiContext(b,n){var bs=BS(b.id);return {state:S,paper:bs,token:S.tok||'',owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,mode:bs.mode||'',start:String(bs.start),attempt:String(bs.start)+'/'+String(bs.doneAt),question:n||0,stamp:n?aiQuestionStamp(b,n):aiPaperStamp(b)}}
 function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&(run.paper.mode||'')===run.mode&&(run.question?String(run.paper.start)===run.start:String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt)&&(run.question?aiQuestionStamp(b,run.question):aiPaperStamp(b))===run.stamp}
 function aiQuestionRun(b,n){var run=AIQ[aiqKey(b,n)];return aiRunCurrent(b,run)?run:null}
-function aiUnlocked(){return typeof examLock!=='function'||!examLock()}
+function aiUnlocked(){return true}
 /* Practice and whole-paper work share the same ten-request ceiling. Queued
    requests recheck their context before they can send any student work. */
 function aiDispatch(payload,token,current){
@@ -141,18 +141,18 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
     if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
     return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
       (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-      (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
+(provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
       (!provisional&&f.strengths&&f.strengths.length?'<p class="gh"><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
       (!provisional&&f.improve&&f.improve.length?'<p class="gh"><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
       (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
       (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
       (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
-      (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+(S.tok?'<button class="nb sm" data-act="airemark" data-k="'+esc(k)+'">Re-mark with current process</button>':'<a href="#/account">Sign in to re-mark</a>'))+
+      (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+(!review&&!provisional?(legacy?'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>':'')+(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+
       (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
   }
   if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
   if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p>'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?'<p>Other answers are still being marked. You can retry this answer when the batch finishes.</p>':'<button class="nb sm" data-act="airetry">Try again</button>')+'</div>';
-  if(live&&isAns(it,a)&&aiQuestionRun(b,n))return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
+  if(live&&isAns(it,a)&&(aiQuestionRun(b,n)||aiRunCurrent(b,AIRUN[b.id])))return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
   if(live&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   return '';
 }

@@ -297,19 +297,42 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.deepEqual(pending.map(r=>r.question),[1,2]);pending[0].resolve(reply(result(3)));pending[1].resolve(reply(result(2)));await Promise.all([one,all]);
     assert.equal(c.score(b,1,0).g,3);assert.equal(c.score(b,2,0).g,2);await c.runAI(b);assert.equal(pending.length,2);
   }
-  // An active exam blocks practice requests and stale UI refreshes. Guest
+  // An active exam informs students via banner without locking them out of practice or routes. Guest
   // practice still reveals the guide, and asynchronous marking never replaces a focused editor.
   {
     const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';const other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
-    await c.runAIQuestion(b,1);assert.equal(c.pqMark(),undefined);bs.done=true;await c.ensureMarked(b);
-    let renders=0;c.$=()=>({set innerHTML(_){renders++}});c.refreshMarking(b,c.aiContext(b));assert.equal(renders,0);
-    c.$=()=>null;c.BS('2').done=true;bs.done=false;c.S.tok='';await c.pqMark();assert.equal(bs.pq[1],1);assert.equal(bs.ai['1.0'],undefined);
+    c.fetch=async()=>reply(result());await c.pqMark();assert.equal(c.score(b,1,0).g,2);bs.done=true;await c.ensureMarked(b);
+    let renders=0;c.$=()=>({set innerHTML(_){renders++}});c.refreshMarking(b,c.aiContext(b));
+    c.$=()=>null;c.BS('2').done=true;bs.done=false;c.S.tok='';await c.pqMark();assert.equal(bs.pq[1],1);
   }
   {
     const c=client(),{b,bs}=paper(c,[written()]),other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
     const app={};c.$=selector=>selector==='#app'?app:null;c.location.hash='#/1/q/1';c.applyTheme=()=>{};c.xdCleanup=()=>{};c.tick=()=>{};c.window.scrollTo=()=>{};
-    c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,null,'submitted q route bypassed the exam lock');
-    bs.done=false;bs.mode='practice';bs.pq={1:1};assert.equal(c.pqShown(b,1),false);assert.equal(c.pqPanelHTML(b,1),'');
+    c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,b,'route renders with exam banner');
+    bs.done=false;bs.mode='practice';bs.pq={1:1};assert.equal(c.pqShown(b,1),true);assert(c.pqPanelHTML(b,1).includes('pq'));
+  }
+  // Re-mark system: individual answers, question batches, and entire papers invalidate caches and redispatch.
+  {
+    const c=client(),{b,bs}=paper(c,[written(),written()]);bs.ans['1.0']='One';bs.ans['1.1']='Two';
+    let requests=[];c.fetch=async(_,r)=>{requests.push(JSON.parse(r.body));return reply(result())};
+    await c.runAI(b);assert.equal(requests.length,2);assert.equal(c.score(b,1,0).g,2);assert.equal(c.score(b,1,1).g,2);
+    let gate=defer();c.fetch=async(_,r)=>{requests.push(JSON.parse(r.body));await gate.promise;return reply(result())};
+    // Part-level re-mark invalidates only that part and redispatches:
+    c.listeners.click.forEach(fn=>fn({target:{closest:sel=>sel==='[data-act]'?{dataset:{act:'airemark',k:'1.0'}}:null},preventDefault(){}}));
+    assert.equal(bs.ai['1.0'],undefined);assert.notEqual(bs.ai['1.1'],undefined);
+    await until(()=>requests.length===3);
+    gate.resolve();await until(()=>!c.AIRUN[b.id]);
+    // Question-level re-mark invalidates all parts in question 1:
+    gate=defer();
+    c.listeners.click.forEach(fn=>fn({target:{closest:sel=>sel==='[data-act]'?{dataset:{act:'qremark',n:'1'}}:null},preventDefault(){}}));
+    assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.ai['1.1'],undefined);
+    await until(()=>requests.length>=4);
+    gate.resolve();await until(()=>!c.AIRUN[b.id]);
+    // Entire paper re-mark invalidates all parts in the paper:
+    gate=defer();
+    c.listeners.click.forEach(fn=>fn({target:{closest:sel=>sel==='[data-act]'?{dataset:{act:'paperremark'}}:null},preventDefault(){}}));
+    assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.ai['1.1'],undefined);
+    gate.resolve();
   }
   {
     const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';let replacements=0;const panel={};

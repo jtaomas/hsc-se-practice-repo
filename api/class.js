@@ -86,7 +86,6 @@ function createHandler(deps) {
 
       const bank = typeof p.bankId === 'string' && BANK_ID.test(p.bankId) ? bankFor(p.bankId) : null;
       if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
-      if ((p.action === 'answers' || p.action === 'analyse') && await sittingExam(sess.id)) return fail(403, 'exam_in_progress', 'Class answers are locked while you are sitting an exam. Submit it or wait for your working time to end.');
       if (p.action === 'answers') {
         const all = await classAnswers(bank, sess.id);
         return res.status(200).json({ bankId: bank.id, members: all.members.length, submitted: all.submitted, parts: all.parts });

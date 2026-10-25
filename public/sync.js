@@ -248,7 +248,7 @@ function accountPage(){
   }else{
     var up=ACC.mode==='up';
     body='<h2 class="pt">'+(up?'Create an account':'Sign in')+'</h2>'+
-      '<p>Use your education email address, for example <b>name@student.det.nsw.edu.au</b>. An account saves your answers and marks so you can carry on from any device.</p>'+
+      '<p>Use your NSW education email address, for example <b>name@student.det.nsw.edu.au</b> or <b>name@education.nsw.gov.au</b>. An account saves your answers and marks so you can carry on from any device.</p>'+
       '<form class="acform" onsubmit="return false"><label for="acemail">Email</label><input id="acemail" type="email" autocomplete="username" placeholder="name@student.det.nsw.edu.au">'+
       '<label for="acpw">Password</label><input id="acpw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="At least 8 characters">'+
       (up?'<label for="acpw2">Confirm password</label><input id="acpw2" type="password" autocomplete="new-password">':'')+
@@ -267,6 +267,7 @@ function acGo(){
   var em=($('#acemail')||{}).value||'',pw=($('#acpw')||{}).value||'',up=ACC.mode==='up';
   em=em.trim();
   if(!em||!pw)return acSet('Enter your email and password.');
+  if(up&&typeof isEduEmail==='function'&&!isEduEmail(em))return acSet('Please use your education email address (e.g. name@student.det.nsw.edu.au or name@education.nsw.gov.au).');
   if(up&&pw!==(($('#acpw2')||{}).value||''))return acSet('The two passwords do not match.');
   var epoch=SYNC.epoch;
   var extra={};

@@ -116,8 +116,6 @@ function cvNavHTML(b){
 function cvPg(inner){return '<div class="pg"><h1 class="pt">Class</h1>'+inner+'</div>'}
 function cvHTML(){
   if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
-  var lock=typeof examLock==='function'?examLock():null;
-  if(lock)return cvPg('<div class="feature"><p><b>Class answers are locked while you sit an exam.</b></p><p>Submit '+esc(lock.name)+' or wait for its working time to end.</p><div class="acts"><a class="nb" href="#/'+esc(lock.id)+'/q/'+(BS(lock.id).cur||1)+'">Return to the exam</a></div></div>');
   if(CV.st===null)return cvPg('<div class="feature"><p>Loading your class...</p></div>'+(CV.msg?'<p class="mut">'+esc(CV.msg)+'</p>':''));
   if(!CV.st.configured)return cvPg('<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>');
   if(!CV.st.member)return cvPg(cvJoinHTML());

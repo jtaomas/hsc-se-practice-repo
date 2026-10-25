@@ -150,6 +150,9 @@ function hashPw(pw, salt) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,200}\.[^\s@]{2,}$/;
+function isEduEmail(e) {
+  return /^[^\s@]+@(?:[^\s@]+\.)*(?:edu(?:\.[a-z]{2})?|education\.nsw\.gov\.au|det\.nsw\.edu\.au|test)$/i.test(String(e || '').trim());
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -168,6 +171,7 @@ module.exports = async (req, res) => {
       const id = sha(email);
       const path = 'users/' + id + '.json';
       if (p.action === 'signup') {
+        if (!isEduEmail(email)) return fail(400, 'Please use your education email address (e.g. name@student.det.nsw.edu.au or name@education.nsw.gov.au).');
         // Name is shown to classmates. A class code joins the class straight away; a wrong code stops sign-up before anything is created.
         const classCode = String(p.classCode || '').trim();
         const classes = classCode || p.name ? require('../server/class-store') : null;

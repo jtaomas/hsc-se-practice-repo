@@ -72,7 +72,7 @@ with sync_playwright() as pw:
     expect(page).to_have_url(SITE + '/#/9/q/1')
     for route_hash in ['#/class', '#/review', '#/8/review/1', '#/mistakes', '#/8/results']:
         page.goto(SITE + '/' + route_hash)
-        expect(page.locator('.pg')).to_contain_text('Exam in progress')
+        expect(page.locator('.exam-notice')).to_contain_text('Exam in progress')
     n = len(class_calls)
     page.click('text=Return to the exam')
     expect(page).to_have_url(SITE + '/#/9/q/1')

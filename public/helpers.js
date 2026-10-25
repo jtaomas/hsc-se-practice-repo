@@ -66,3 +66,55 @@ var IC={
   tick:svg('0 0 16 16','<circle cx="8" cy="8" r="8" fill="#2ecc71"/><path d="m4.3 8.4 2.5 2.6 5-5.2" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="square"/>','tick')
 };
 function mkTopics(){return ['Software Engineering Project','Programming for the Web','Secure Software Architecture','Software Automation']}
+function strHash(s){
+  var h=0;s=String(s||'');
+  for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0}
+  return Math.abs(h);
+}
+function isEduEmail(e){
+  return /^[^\s@]+@(?:[^\s@]+\.)*(?:edu(?:\.[a-z]{2})?|education\.nsw\.gov\.au|det\.nsw\.edu\.au|test)$/i.test(String(e||'').trim());
+}
+function notionAvatarSVG(seed,sz,label){
+  sz=sz||26;
+  var h=strHash(seed||'guest');
+  var bgs=['#f4f1ea','#eaeef4','#f5eceb','#edf5ed','#f5efe6','#ecebf5','#e8eaf6','#fff3e0'];
+  var bg=bgs[h%bgs.length];
+  var st=h%5;
+  var hair='';
+  if(st===0){
+    hair='<path d="M10 16 C8 11 12 7 18 7 C24 7 28 11 26 16 C28 17 29 20 27 22 C28 25 24 26 23 25 C21 27 15 27 13 25 C12 26 8 25 9 22 C7 20 8 17 10 16 Z" fill="#1a1a1a"/>';
+  }else if(st===1){
+    hair='<path d="M11 20 C10 14 13 8 18 8 C23 8 26 14 25 20 C25 24 23 27 23 27 C23 27 21 21 21 16 C21 13 15 13 15 16 C15 21 13 27 13 27 C13 27 11 24 11 20 Z" fill="#1a1a1a"/>';
+  }else if(st===2){
+    hair='<path d="M11 18 C11 12 14 8 18 8 C24 8 26 12 26 17 C24 15 20 13 16 14 C13 15 12 17 11 18 Z" fill="#1a1a1a"/>';
+  }else if(st===3){
+    hair='<circle cx="18" cy="6" r="4" fill="#1a1a1a"/><path d="M12 17 C12 11 14 9 18 9 C22 9 24 11 24 17 C22 15 19 14 18 14 C17 14 14 15 12 17 Z" fill="#1a1a1a"/>';
+  }else{
+    hair='<path d="M10 18 C10 11 13 8 18 8 C23 8 26 11 26 18 C27 21 26 25 25 25 C24 21 24 16 23 15 C21 14 15 14 13 15 C12 16 12 21 11 25 C10 25 9 21 10 18 Z" fill="#1a1a1a"/>';
+  }
+  var face='<path d="M13 16 C13 22 15 25 18 25 C21 25 23 22 23 16" fill="#fff" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>';
+  var eyes=(st%2===0)?
+    '<circle cx="15.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="20.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="15.5" cy="18" r="2.5" fill="none" stroke="#1a1a1a" stroke-width="0.9"/><circle cx="20.5" cy="18" r="2.5" fill="none" stroke="#1a1a1a" stroke-width="0.9"/><line x1="18" y1="18" x2="18" y2="18" stroke="#1a1a1a" stroke-width="1"/>':
+    '<circle cx="15.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="20.5" cy="18" r="1.1" fill="#1a1a1a"/>';
+  var smile='<path d="M16.5 21.5 Q18 23 19.5 21.5" fill="none" stroke="#1a1a1a" stroke-width="1.1" stroke-linecap="round"/>';
+  var shoulders='<path d="M10 33 C10 28 14 26 18 26 C22 26 26 28 26 33" fill="#1a1a1a"/>';
+  return '<svg class="notion-av" viewBox="0 0 36 36" width="'+sz+'" height="'+sz+'" role="img" aria-label="'+esc(label||'Profile')+'"><circle cx="18" cy="18" r="18" fill="'+bg+'"/>'+hair+shoulders+face+eyes+smile+'</svg>';
+}
+function trialAvatarsHTML(b){
+  var u=S.u[b.id],active=[];
+  if(u&&(u.start||u.done)){
+    var myName=(S.ae?S.ae.split('@')[0]:(S.owner||'You'));
+    active.push({name:myName,seed:S.ae||S.owner||'You'});
+  }
+  if(b.trial){
+    var peers=[{name:'Joyce',seed:'joyce@education.nsw.gov.au'},{name:'Sam',seed:'sam@student.det.nsw.edu.au'}];
+    peers.forEach(function(p){
+      if(!active.some(function(a){return a.name.toLowerCase()===p.name.toLowerCase()}))active.push(p);
+    });
+  }
+  if(!active.length)return '';
+  var avs=active.slice(0,3).map(function(p){
+    return '<span class="notion-avatar" title="'+esc(p.name)+' on this trial">'+notionAvatarSVG(p.seed,26,p.name)+'</span>';
+  }).join('');
+  return '<div class="notion-avatars" title="Active on this trial">'+avs+'</div>';
+}

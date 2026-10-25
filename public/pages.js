@@ -134,9 +134,18 @@ function frame(title,main,opt){
   var right;
   if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
   else if(opt.landing){right=''}
-  else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
+  else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(S.ae?'<span class="hdr-av">'+notionAvatarSVG(S.ae,20,S.ae)+'</span>':'')+acctText()+'</a></nav>';
+  var lock=typeof examLock==='function'?examLock():null;
+  var banner='';
+  if(lock&&(!opt.timer||opt.bid!==lock.id)){
+    banner='<div class="exam-notice" style="background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:12px 18px;margin:12px auto;border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-size:14px;box-sizing:border-box;">'+
+      '<div><strong>Exam in progress:</strong> You are currently sitting <b>'+esc(lock.name)+'</b> in exam mode.</div>'+
+      '<a class="nb sm" href="#/'+esc(lock.id)+'/q/'+(BS(lock.id).cur||1)+'" style="text-decoration:none;padding:6px 14px;font-size:13px">Return to the exam</a>'+
+    '</div>';
+  }
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
-    (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
+    (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+
+    banner+main+
     (opt.footer||(opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>'));
 }
 function infoHTML(){
@@ -294,11 +303,24 @@ function navArrows(scrollToCur){
 }
 document.addEventListener('scroll',function(e){if(e.target&&e.target.id==='nums')navArrows(false)},true);
 window.addEventListener('resize',function(){navArrows(false)});
+function rqPanelHTML(b,n){
+  var q=b.qs[n-1],open=q.it.some(function(it){return !AUTO[it.t]});
+  if(!open)return '';
+  var running=aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n);
+  return '<div class="aib" id="rq" style="margin-top:12px">'+
+    '<p style="margin:0 0 8px"><b>Re-mark this question or the whole exam:</b> re-runs AI assessment against syllabus criteria.</p>'+
+    '<div class="acts" style="display:flex;gap:10px;flex-wrap:wrap">'+
+      (S.tok?
+        '<button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(running?' disabled':'')+'>Re-mark this question</button>'+
+        '<button type="button" class="nb sm ol" data-act="paperremark"'+(running?' disabled':'')+'>Re-mark entire paper</button>' :
+        '<a href="#/account" class="nb sm ol">Sign in to re-mark</a>')+
+    '</div></div>';
+}
 function qHTML(b,n,rv){
   var q=b.qs[n-1];
   var title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
   var st=(q.st||'')+(q.db?dbTables(q.db):'');
-  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('')+(rv?'':pqPanelHTML(b,n));
+  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('')+(rv?rqPanelHTML(b,n):pqPanelHTML(b,n));
   var last=n===b.qs.length;
   var acts='<div class="acts">'+(rv?'<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Back to results':'Next question')+(last?'':IC.right)+'</button>':
     '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Finish exam':'Next question')+(last?'':IC.right)+'</button>')+'</div>';
@@ -332,7 +354,7 @@ function resultsPage(b){
     '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Assessed marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k],m=t.m-t.pending-t.provisionalM;return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+m+(t.pending?' ('+t.pending+' unscored)':'')+(t.provisionalParts?'<br><span class="note">'+provisionalMarksText(t)+'</span>':'')+'</td><td><div class="tbar"><i style="width:'+(m?Math.round(100*t.g/m):0)+'%"></i></div></td></tr>'}).join('')+'</table>'+
     '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend||x.provisionalParts?'part':x.g===x.m?'ok':x.g===0?'bad':'part';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:x.provisionalParts?'No confirmed mark':'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+(x.provisionalParts?'<br><span class="note">'+provisionalMarksText(x)+'</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
     (typeof improvementPanel==='function'?improvementPanel(b):'')+
-    '<div class="acts"><a class="nb" href="#/'+b.id+'/review/1" style="text-decoration:none">Review all questions</a><a class="nb ol" href="#/mistakes/'+b.id+'" style="text-decoration:none">Review my mistakes</a><a class="nb ol" href="#/papers" style="text-decoration:none">All papers</a></div></div>';
+    '<div class="acts"><a class="nb" href="#/'+b.id+'/review/1" style="text-decoration:none">Review all questions</a><button type="button" class="nb ol" data-act="paperremark" style="cursor:pointer"'+(aiRunCurrent(b,AIRUN[b.id])?' disabled':'')+'>Re-mark entire paper</button><a class="nb ol" href="#/mistakes/'+b.id+'" style="text-decoration:none">Review my mistakes</a><a class="nb ol" href="#/papers" style="text-decoration:none">All papers</a></div></div>';
   return frame(b.name+' Software Engineering',h);
 }
 
@@ -347,8 +369,7 @@ function render(){
   if(b&&TIMEUP[b.id]&&BS(b.id).done&&(h[1]==='q'||h[1]==='finish')){stopPython();location.replace('#/'+b.id+'/results');return}
   xdCleanup();
   var lock=examLock();LOCKVIEW=false;
-  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
-  else if(h[0]==='papers')html=papersPage();
+  if(h[0]==='papers')html=papersPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
@@ -363,10 +384,10 @@ function render(){
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
-  if(!lock&&h[0]==='class')classBind();
+  if(h[0]==='class')classBind();
   if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review')&&CUR.b===b){afterQ();navArrows(true)}
-  if(!lock&&b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
+  if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();
 }
 /* ---------- exam lock, review hub, practice marking ---------- */
@@ -403,7 +424,7 @@ function pqPanelHTML(b,n){
     :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
     :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
   if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
-  return '<div class="aib" id="pq">'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button></div></div>';
+  return '<div class="aib" id="pq">'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button>'+(shown?' <button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(run?' disabled':'')+'>Re-mark this question</button>':'')+'</div></div>';
 }
 function pqMark(){
   var b=CUR.b,n=CUR.n;if(!b||CUR.rv||!aiUnlocked())return;
@@ -416,11 +437,11 @@ function pqMark(){
 function afterQ(){
   var b=CUR.b,n=CUR.n,q=b.qs[n-1],rv=CUR.rv;
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
-  aceMount();if(typeof classEnsure==='function')classEnsure(b);
+  if(typeof aceMount==='function')aceMount();if(typeof classEnsure==='function')classEnsure(b);
   var bs=BS(b.id);
   if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b);
 }
-function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount();if(typeof classEnsure==='function')classEnsure(b)}
+function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});if(typeof aceMount==='function')aceMount();if(typeof classEnsure==='function')classEnsure(b)}
 var MARKINGDEFER=null;
 function refreshMarking(b,context){
   if(!aiRunCurrent(b,context)||CUR.b!==b||!aiUnlocked())return;
@@ -537,7 +558,43 @@ document.addEventListener('click',function(e){
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
   else if(a==='airetry'&&CUR.b&&!BS(CUR.b.id).done&&!CUR.rv)pqMark();
   else if(a==='airetry'){var rb=CUR.b;if(rb&&aiUnlocked()&&!aiRunCurrent(rb,AIRUN[rb.id])){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
-  else if(a==='airemark'){var mb=CUR.b,old=mb&&BS(mb.id).ai[d.k];if(mb&&S.tok&&old&&!old.stamp&&!old.status){delete BS(mb.id).ai[d.k];delete BS(mb.id).aiErr[d.k];save(mb.id);markAndShow(mb)}}
+  else if(a==='airemark'){
+    var mb=CUR.b;if(mb&&S.tok){
+      var bs=BS(mb.id),qn=+d.k.split('.')[0],running=aiRunCurrent(mb,AIRUN[mb.id])||aiQuestionRun(mb,qn);
+      if(running)return;
+      delete bs.ai[d.k];delete bs.aiErr[d.k];delete AIRUN[mb.id];delete AIQ[aiqKey(mb,qn)];save(mb.id);
+      if(bs.done){markAndShow(mb)}
+      else if(bs.mode==='practice'){
+        if(!bs.pq)bs.pq={};
+        bs.pq[qn]=1;
+        var context=aiContext(mb,qn),task=runAIQuestion(mb,qn);
+        ensureLocalChecks(mb,context);refreshMarking(mb,context);
+      }
+    }
+  }
+  else if(a==='qremark'){
+    var qb=CUR.b,qn=+d.n;if(qb&&qn&&S.tok){
+      var bs=BS(qb.id),running=aiRunCurrent(qb,AIRUN[qb.id])||aiQuestionRun(qb,qn);
+      if(running)return;
+      qb.qs[qn-1].it.forEach(function(it,i){var k=qn+'.'+i;delete bs.ai[k];delete bs.aiErr[k]});
+      delete AIRUN[qb.id];delete AIQ[aiqKey(qb,qn)];save(qb.id);
+      if(bs.done){markAndShow(qb)}
+      else if(bs.mode==='practice'){
+        if(!bs.pq)bs.pq={};
+        bs.pq[qn]=1;
+        var context=aiContext(qb,qn),task=runAIQuestion(qb,qn);
+        ensureLocalChecks(qb,context);refreshMarking(qb,context);
+      }
+    }
+  }
+  else if(a==='paperremark'){
+    var pb=CUR.b;if(pb&&S.tok&&!aiRunCurrent(pb,AIRUN[pb.id])){
+      var bs=BS(pb.id);
+      pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i;delete bs.ai[k];delete bs.aiErr[k]})});
+      delete AIRUN[pb.id];Object.keys(AIQ).forEach(function(k){if(k.indexOf(pb.id+'/')===0)delete AIQ[k]});
+      save(pb.id);markAndShow(pb);
+    }
+  }
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();

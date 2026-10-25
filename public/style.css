@@ -1449,3 +1449,14 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .nav-elem.aiwait:before{background:#9aa3ad}
 @keyframes aipulse{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.nav-elem.aimk:before{animation:none}}
+
+/* Class answers for single and multiple choice parts */
+.cvch{list-style:none;margin:8px 0 0;padding:0}
+.cvch-row{margin:0 0 10px}
+.cvch-top{display:flex;gap:8px;align-items:baseline}
+.cvch-l{font-weight:700;min-width:1.2em}
+.cvch-o{flex:1}
+.cvch-n{font-weight:700}
+.cvch-bar{height:6px;background:#e3e7ee;margin:4px 0 2px}
+.cvch-bar i{display:block;height:100%;background:#002664}
+.cvch-who{font-size:.9em;color:#4a5568}

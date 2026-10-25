@@ -45,6 +45,7 @@ function cvApi(body){
 }
 function cvBanks(){return BANKS.filter(function(b){return !b.hidden&&!b.archived})}
 function cvOpenItem(it){return it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'}
+function cvChoiceItem(it){return !!it&&(it.t==='mc'||it.t==='ms')}
 function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||'');return (d.textContent||'').replace(/\s+/g,' ').trim()}
 var CV_CACHE_KEY = 'sehsc-cv-cache';
 function loadCVCache(){
@@ -147,7 +148,7 @@ function cvAutoBuild(b){
   Array.prototype.forEach.call(document.querySelectorAll('.cvslot'),function(el){
     if(el.getAttribute('data-b')!==b.id)return;
     var n=+el.getAttribute('data-n'),i=+el.getAttribute('data-i'),it=b.qs[n-1]&&b.qs[n-1].it[i];
-    if(it&&it.t==='sq')return;
+    if(it&&(it.t==='sq'||cvChoiceItem(it)))return;
     var key=n+'.'+i,k=b.id+'|'+key,list=CV.ans.parts[key]||[];
     if(list.length<2||CV.res[k]||CV.run[k]||CV.auto[k])return;
     CV.auto[k]=1;cvAnalyse(b.id,k,n,i);
@@ -174,7 +175,7 @@ function cvDraw(){
 }
 function classSlot(b,n,i){
   var it=b.qs[n-1].it[i];
-  if(!S.tok||!cvOpenItem(it)||b.archived)return '';
+  if(!S.tok||!(cvOpenItem(it)||cvChoiceItem(it))||b.archived)return '';
   return '<div class="cvslot" data-b="'+esc(b.id)+'" data-n="'+n+'" data-i="'+i+'">'+cvSlotInner(b,n,i)+'</div>';
 }
 function cvSlotInner(b,n,i){
@@ -183,8 +184,20 @@ function cvSlotInner(b,n,i){
   if(!CV.st.member)return '<div class="aib"><b>Class answers.</b> <a href="#/class">Join your class</a> with the class code to see what classmates wrote for this part.</div>';
   if(CV.msg&&CV.ansBank!==b.id)return '<div class="aib bad"><b>Class answers.</b> '+esc(CV.msg)+'</div>';
   if(CV.ansBank!==b.id||!CV.ans)return '<div class="cv-skel-slot cv-shimmer"><div class="cv-skel-line w40" style="height:14px"></div><div class="cv-skel-line w80" style="height:12px;margin-top:8px"></div></div>';
-  var key=n+'.'+i;
+  var key=n+'.'+i,it0=b.qs[n-1].it[i];
+  if(cvChoiceItem(it0))return '<div class="aib cvbox">'+cvChoiceBody(it0,CV.ans.parts[key]||[])+'</div>';
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
+}
+/* Single and multiple choice parts: how many classmates picked each option, and who. */
+function cvChoiceBody(it,list){
+  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
+  if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
+  return h+'<ul class="cvch">'+it.o.map(function(o,j){
+    var who=list.filter(function(a){return a.choice.indexOf(j)>=0}),pct=Math.round(100*who.length/list.length);
+    return '<li class="cvch-row"><div class="cvch-top"><span class="cvch-l">'+String.fromCharCode(65+j)+'</span><span class="cvch-o">'+o+'</span><span class="cvch-n">'+who.length+'</span></div>'+
+      '<div class="cvch-bar"><i style="width:'+pct+'%"></i></div>'+
+      (who.length?'<div class="cvch-who">'+who.map(function(a){return esc(a.mine?'You':a.name)}).join(', ')+'</div>':'')+'</li>';
+  }).join('')+'</ul>';
 }
 /* Shared by the class page and the review panel. */
 /* A classmate's mark for the part, coloured like marks everywhere else: green full marks, red anything less. */
@@ -296,7 +309,7 @@ function cvPartView(b,n,i){
   var bs=BS(b.id),sv=bs.ans,h;
   bs.ans={};
   try{h=itemHTML(b,n,i,false)}finally{bs.ans=sv}
-  return '<div class="cvro">'+h+'</div>';
+  return '<div class="cvro">'+h+'</div>'+(cvChoiceItem(it)?classSlot(b,n,i):'');
 }
 function cvQuestionHTML(b,n){
   var q=b.qs[n-1],title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';

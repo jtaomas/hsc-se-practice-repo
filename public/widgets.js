@@ -258,8 +258,8 @@ function guideHTML(b,n,i){
   if(typeof rtStatusHTML==='function')h+=rtStatusHTML(b,n,i);
   if(AUTO[it.t]&&sc.g<sc.m&&typeof closedCompare==='function')h+='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+(sc.m-sc.g)+' mark'+(sc.m-sc.g===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
   if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
-  else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
-  else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}));
+  else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>'+(typeof classSlot==='function'?classSlot(b,n,i):'');
+  else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}))+(typeof classSlot==='function'?classSlot(b,n,i):'');
   else if(it.t==='dd'){h+='<p><b>Correct answer:</b></p><div class="tpl">'+it.tpl.replace(/\{(\d+)\}/g,function(m,u){var bl=it.b[+u];return '<b>['+bl[0][bl[1]]+']</b>'})+'</div>'}
   else if(it.t==='gd'){h+='<p><b>Correct answers:</b></p><div class="tw"><table class="hoa"><tr>'+it.h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+it.r.map(function(row){return '<tr>'+row.map(function(c){return '<td>'+(typeof c==='string'?c:'<b>'+c[0][c[1]]+'</b>')+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
   else if(it.t==='mt'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+it.h[r[1]+1]+'</b>'}))}

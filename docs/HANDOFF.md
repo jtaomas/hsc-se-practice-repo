@@ -33,7 +33,7 @@ Verified by tests (all pass at `f001457`): auth, marking store, comparison, sync
 
 ## Class page (automatic sharing) added 25 October
 
-Replaces the old opt-in file comparison for day-to-day use. There is no consent step: everyone who joins the class sees each other's **submitted written answers** (types `tx`, `py`, `ps`, `sq`) with names. Multiple choice, tables and diagrams are not shared. Unsubmitted work never leaves its owner (`paper.done` must be true).
+Replaces the old opt-in file comparison for day-to-day use. There is no consent step: everyone who joins the class sees each other's **submitted written answers** (types `tx`, `py`, `ps`, `sq`) with names. Single and multiple choice parts (`mc`, `ms`) are shared too (26 October): the panel shows how many classmates picked each option and who (`choiceOf` in `api/class.js`, `cvChoiceBody` in `public/classview.js`), under the correct answer in review and under the question on the Class page. It carries no marks and no model answer. Other closed types, tables and diagrams are still not shared. Unsubmitted work never leaves its owner (`paper.done` must be true).
 
 - **Setup the owner must do:** add the Vercel environment variable `CLASS_CODE` (long random phrase, 10+ characters, never in chat or GitHub), then redeploy. Share it with the class. Without it the Class page says the class is not set up and sign-up with a code fails with `class_not_configured`.
 - **Joining:** sign-up asks for a name (required) and a class code (optional). Existing accounts join from `#/class` with name and code. Wrong codes are counted per hour for the whole site (60 an hour, then locked for the hour). Max 200 members.

@@ -118,6 +118,16 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await rest(h, { action: 'overview' })).body.papers['8'].find(x => x.name === 'Priya').photo, 'data:image/jpeg;base64,/9j/2Q==');
   assert.deepEqual(ans.parts['17.0'].map(x => [x.name, x.mine]).sort(), [['Priya', false], ['Samuel', true]]);
   assert(!ans.parts['17.0'].some(x => 'email' in x));
+  // Single choice parts share which option each classmate picked: option numbers only, and anything out of range is ignored.
+  assert.equal(bank.qs[0].it[0].t, 'mc');
+  const withPick = (html, pick) => { const x = paper('<p>' + html + '</p>'); x.ans['1.0'] = pick; return x; };
+  await m.put('progress/' + id(1) + '.json', { u: { 8: withPick(text1, 2) } });
+  await m.put('progress/' + id(2) + '.json', { u: { 8: withPick(text2, 99) } });
+  const picks = (await rest(h, { action: 'answers', bankId: '8' })).body.parts['1.0'];
+  assert.deepEqual(picks.map(x => [x.name, x.mine, x.choice]), [['Samuel', true, [2]]], 'only valid picks are shared');
+  assert(!picks.some(x => 'email' in x || 'text' in x));
+  await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>' + text1 + '</p>') } });
+  await m.put('progress/' + id(2) + '.json', { u: { 8: paper('<p>' + text2 + '</p>') } });
   // Every answer carries its author's mark for the part: their own mark first, else a confirmed AI mark. Provisional, needs-review and out-of-range marks are not shown.
   const priya = async () => (await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].find(x => x.name === 'Priya');
   const putPriya = extra => m.put('progress/' + id(2) + '.json', { u: { 8: Object.assign(paper('<p>' + text2 + '</p>'), extra) } });

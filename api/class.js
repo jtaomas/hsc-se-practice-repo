@@ -52,6 +52,16 @@ function createHandler(deps) {
     return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
   }
 
+  // What a classmate picked in a single or multiple choice part: option numbers only, checked against the real option list.
+  function choiceOf(item, stored) {
+    const n = Array.isArray(item.o) ? item.o.length : 0;
+    const ok = v => Number.isInteger(v) && v >= 0 && v < n;
+    if (item.t === 'mc') return ok(stored) ? [stored] : null;
+    if (!Array.isArray(stored)) return null;
+    const picked = [...new Set(stored.filter(ok))].sort((a, b) => a - b);
+    return picked.length ? picked : null;
+  }
+
   function firstSentence(t) {
     t = String(t || '').replace(/\s+/g, ' ').trim();
     const m = t.match(/^.*?[.!?](?:\s|$)/);
@@ -111,6 +121,15 @@ function createHandler(deps) {
     // Practice answers are shared as they are saved and exam answers once submitted. An exam that is still being sat stays private.
     const submitted = rows.filter(r => r.paper && sharedPaper(r.paper));
     bank.qs.forEach((q, qi) => q.it.forEach((item, pi) => {
+      if (item.t === 'mc' || item.t === 'ms') {
+        const key = (qi + 1) + '.' + pi, picks = [];
+        submitted.forEach(r => {
+          const choice = choiceOf(item, r.paper.ans && r.paper.ans[key]);
+          if (choice) picks.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', choice });
+        });
+        parts[key] = picks;
+        return;
+      }
       if (!engine.isOpen(item)) return;
       const list = [];
       submitted.forEach(r => {

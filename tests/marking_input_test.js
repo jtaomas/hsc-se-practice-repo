@@ -53,8 +53,12 @@ for (const bank of loadBanks().filter(bank => !bank.hidden)) {
     assert.deepEqual(actual.input.rubricGuidance || [], it.crit.filter(text => text === holisticGuidance));
     assert.equal(actual.questionVersion, digest(q));
     assert.equal(actual.rubricVersion, digest(it.crit), 'Source fingerprint includes application guidance, not only scored descriptors');
-    // a question with a raster image cannot be seen by the marker, so it must be sent to review
-    if (/<img\b/i.test(q.st)) assert.match(actual.reviewReason, /image/); else assert.equal(actual.reviewReason, null);
+    // the marker cannot see a picture: a real alt description is passed on, a bare heading as alt means manual review
+    if (/<img\b/i.test(q.st)) {
+      const alts = (q.st.match(/<img\b[^>]*>/gi) || []).map(tag => (/\balt="([^"]*)"/i.exec(tag) || [, ''])[1]);
+      if (alts.every(a => a.length >= 40)) { assert.equal(actual.reviewReason, null); assert.match(actual.input.stimulus, /SOURCE IMAGE DESCRIPTION/); }
+      else assert.match(actual.reviewReason, /image/);
+    } else assert.equal(actual.reviewReason, null);
     count++;
   }));
 }
@@ -169,5 +173,9 @@ try {
   assert.equal(prepare({ ...request, answer: {} }).blank, true);
   fixture.qs[0].st = '<img src="https://example.invalid/source.png" alt="Source image">';
   assert.match(prepare(request).reviewReason, /image that is unavailable/);
+  fixture.qs[0].st = '<img src="x.png" alt="A diagram of a web server connected to a database with arrows labelled request and response">';
+  const described = prepare(request);
+  assert.equal(described.reviewReason, null);
+  assert.match(described.input.stimulus, /web server connected to a database/);
 } finally { loadBanks().pop(); }
 console.log('Marking input OK: canonical authority, ' + count + ' open parts across ' + loadBanks().filter(bank => !bank.hidden).length + ' papers, browser/server bank parity, typed tables, SVG topology, limits and source fingerprints');

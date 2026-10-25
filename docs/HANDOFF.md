@@ -158,3 +158,8 @@ Roger reported that "Mark N unmarked answers" finished instantly without marking
 - Tests: `tests/marking_client_test.js` (busy wait, give-up, sync replacement, provisional retry), `tests/marking_api_test.js` and `tests/marking_store_test.js` (re-mark replace and restore), `tests/marking_ui_test.py`.
 - Pre-existing, not from this change: `tests/archive_test.js` fails because `archive/banks-1-7.json` is out of date; `tests/ui_test.py` needs CDN access.
 
+
+## Image questions are marked from their alt text
+- `server/marking-input.js`: the marker cannot see pictures, so each `<img>` alt description (40+ characters) is sent as "SOURCE IMAGE DESCRIPTION" and the part is marked normally (DoE 2026 Trial Q27 was stuck on "Needs review").
+- A picture whose alt is only a heading (bank 13 Q25, screenshots of an article) still goes to manual review, as before.
+- Answers already stored as "Needs review" are not re-marked automatically; use "Re-mark entire paper" on the Papers page.

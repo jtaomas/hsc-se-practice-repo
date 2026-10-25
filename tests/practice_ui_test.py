@@ -62,7 +62,6 @@ with sync_playwright() as pw:
     assert page.evaluate("BS('8').done") is False
     # Class answers sit under the written part and are shared in practice mode too.
     expect(page.locator('.cvslot')).to_contain_text('Class answers')
-    page.click('.cvslot [data-cv=toggle]')
     expect(page.locator('.cvslot .cvans').first).to_contain_text('Priya')
     # Another question is untouched.
     page.goto(SITE + '/#/8/q/18')

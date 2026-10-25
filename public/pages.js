@@ -139,10 +139,10 @@ function frame(title,main,opt){
     right='<span class="hr">'+presenceHtml+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>';
   }
   else if(opt.landing){
-    right='<div class="hr" style="display:flex;align-items:center;gap:12px">'+presenceHtml+'<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav></div>';
+    right='<div class="hr" style="display:flex;align-items:center;gap:12px">'+presenceHtml+'<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mastery">Mastery</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav></div>';
   }
   else {
-    right='<nav class="hn">'+presenceHtml+'<a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav>';
+    right='<nav class="hn">'+presenceHtml+'<a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mastery">Mastery</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav>';
   }
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+(opt.timer?'':examBanner())+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+
@@ -368,8 +368,9 @@ function render(){
   xdCleanup();
   if(b&&h[1]==='q'&&examSitting()===b)EXAMOK='';
   var lock=examLock();LOCKVIEW=false;
-  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='retry'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||h[0]==='mastery'||(b&&(h[1]==='review'||h[1]==='retry'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
   else if(h[0]==='papers')html=papersPage();
+  else if(h[0]==='mastery')html=masteryPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]==='all'?'':(h[1]||'');MF.sel=h[2]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();

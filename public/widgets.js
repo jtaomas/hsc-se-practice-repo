@@ -18,11 +18,22 @@ function mkDB(SQL,db){
   });
   return d;
 }
-function resetSQLSession(k){
-  if(k&&SQL_SESSIONS[k]){
-    try{SQL_SESSIONS[k].close()}catch(e){}
-    delete SQL_SESSIONS[k];
+function resetSQLSession(k,bId){
+  if(!k)return;
+  var keys=[];
+  if(bId){
+    keys.push(k.indexOf(bId+':')===0 ? k : bId+':'+k);
   }
+  keys.push(k);
+  if(k.indexOf(':')<0&&typeof CUR!=='undefined'&&CUR&&CUR.b&&CUR.b.id){
+    keys.push(CUR.b.id+':'+k);
+  }
+  keys.forEach(function(key){
+    if(SQL_SESSIONS[key]){
+      try{SQL_SESSIONS[key].close()}catch(e){}
+      delete SQL_SESSIONS[key];
+    }
+  });
 }
 function translate(raw){
   var s=raw.replace(/[‘’]/g,"'").replace(/[“”]/g,'"').trim().replace(/;+\s*$/,'');
@@ -42,38 +53,39 @@ function translate(raw){
               .replace(/\bEQUALS?\b/gi,'=');
   }).join('');
 }
-function runSQL(db,raw,k,isCheck){
+function runSQL(db,raw,k,fresh,bId){
   return loadSQL().then(function(SQL){
     if(!raw||!raw.trim())return {error:'Type a query first.'};
-    var d, fresh=false;
-    if(k&&!isCheck){
-      if(!SQL_SESSIONS[k])SQL_SESSIONS[k]=mkDB(SQL,db);
-      d=SQL_SESSIONS[k];
+    var isCheck=!!fresh;
+    var sk=k?((bId&&k.indexOf(bId+':')!==0?bId+':':(k.indexOf(':')<0&&typeof CUR!=='undefined'&&CUR&&CUR.b&&CUR.b.id?CUR.b.id+':':''))+k):null;
+    var d,isFresh=false;
+    if(sk&&!isCheck){
+      if(!SQL_SESSIONS[sk])SQL_SESSIONS[sk]=mkDB(SQL,db);
+      d=SQL_SESSIONS[sk];
     }else{
       d=mkDB(SQL,db);
-      fresh=true;
+      isFresh=true;
     }
     var s=translate(raw);
     try{
       var r=d.exec(s);
-      if(fresh)d.close();
       if(!r.length){
         var cols=[];
-        if(!fresh){
-          try{
-            var stmt=d.prepare(s);
-            cols=stmt.getColumnNames()||[];
-            stmt.free();
-          }catch(e){}
-        }
+        try{
+          var stmt=d.prepare(s);
+          cols=stmt.getColumnNames()||[];
+          stmt.free();
+        }catch(e){}
         var mod=0;
         try{mod=d.getRowsModified()}catch(e){}
+        if(isFresh){try{d.close()}catch(ex){}}
         return {cols:cols,rows:[],modified:mod};
       }
+      if(isFresh){try{d.close()}catch(ex){}}
       var last=r[r.length-1];
       return {cols:last.columns,rows:last.values,all:r};
     }catch(e){
-      if(fresh){try{d.close()}catch(ex){}}
+      if(isFresh){try{d.close()}catch(ex){}}
       return {error:String(e&&e.message||e)};
     }
   });

@@ -22,6 +22,8 @@ function xdCleanup(){
 }
 function xdMount(b,k,ro){
   var host=document.getElementById('x'+k);if(!host)return;
+  if(host.dataset.xd)return;
+  host.dataset.xd='1';
   loadXD().then(function(){
     if(!document.body.contains(host))return;
     var saved=ANS(b)[k],els=(saved&&saved.e)||[];

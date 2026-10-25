@@ -284,7 +284,7 @@ WHERE UnitPrice < 20.00 AND Fulfilled <> 'No'
 GROUP BY Category
 ORDER BY Category ASC`,true,[
     '1 mark: selects Category and the sum of Quantity * UnitPrice with column heading TotalCost.',
-    '1 mark: filters by UnitPrice < 20.00 and Fulfilled <> \'No\' (or Fulfilled = \'Yes\').',
+    '1 mark: filters by UnitPrice &lt; 20.00 and Fulfilled &lt;&gt; \'No\' (or Fulfilled = \'Yes\').',
     '1 mark: groups by Category.',
     '1 mark: orders results in ascending alphabetical order of Category.'
   ])
@@ -315,7 +315,7 @@ WHERE Patients.Age >= 18 AND Consultations.Fee > 80.00 AND Consultations.Fee <= 
 ORDER BY Consultations.ConsultDate ASC`,true,[
     '1 mark: selects PatientName, Suburb, ConsultDate, and Fee.',
     '1 mark: correctly joins Patients and Consultations on PatientID.',
-    '1 mark: filters by Age >= 18, Fee > 80.00, and Fee <= 150.00.',
+    '1 mark: filters by Age >= 18, Fee > 80.00, and Fee &lt;= 150.00.',
     '1 mark: orders results by ConsultDate in ascending order.'
   ])
 ],{two:true,db:DB6}));
@@ -383,7 +383,7 @@ GROUP BY Clients.ClientName, Projects.ProjectTitle
 ORDER BY TotalBilled DESC`,true,[
     '1 mark: selects ClientName, ProjectTitle, SUM(Hours) as TotalHours, and SUM(Hours * Rate) as TotalBilled.',
     '1 mark: correctly joins Clients, Projects, and Timesheets on their corresponding keys.',
-    '1 mark: filters by Country = \'Australia\', Industry <> \'Retail\', and Approved = \'Yes\'.',
+    '1 mark: filters by Country = \'Australia\', Industry &lt;&gt; \'Retail\', and Approved = \'Yes\'.',
     '1 mark: applies pattern filters for \'Web\'/\'App\' and excluding \'Legacy\', groups by client and project, and orders by TotalBilled descending.'
   ])
 ],{two:true,db:DB10}));

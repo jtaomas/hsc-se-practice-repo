@@ -14,7 +14,12 @@ const HARNESS_VERSION = 'hsc-class-1';
 const ENDPOINT = PROVIDER.endpoint;
 const LIMITS = Object.freeze({ timeoutMs: 200000, maxTokens: 16384, requestBytes: 400000, responseBytes: 400000, answerChars: 6000, minAnswerChars: 12 });
 const OPEN_TYPES = new Set(['tx', 'py', 'ps', 'sq']);
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+function letter(i) {
+  const base = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (i < 26) return base[i];
+  return base[Math.floor(i / 26) - 1] + base[i % 26];
+}
+const LETTERS = Array.from({ length: 702 }, (_, i) => letter(i));
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function error(status, code, message) { return Object.assign(new Error(message), { status, code }); }
 const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -165,4 +170,4 @@ async function analyse(context, labelled, options) {
   } finally { clearTimeout(timer); controller.abort(); }
 }
 
-module.exports = { MODEL, HARNESS_VERSION, LIMITS, OPEN_TYPES, answerText, isOpen, partContext, label, digestFor, targetWords, buildPayload, validate, checkedResult, analyse, POLICY, error };
+module.exports = { MODEL, HARNESS_VERSION, LIMITS, OPEN_TYPES, answerText, isOpen, partContext, label, digestFor, targetWords, buildPayload, validate, checkedResult, analyse, POLICY, error, LETTERS, letter };

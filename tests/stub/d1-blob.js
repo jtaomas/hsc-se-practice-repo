@@ -13,8 +13,9 @@ const mem = {
   }
 };
 async function get(path) {
-  if (!data.has(path)) return null;
-  return { statusCode: 200, stream: Readable.from([data.get(path)]), blob: { etag: versions.get(path) } };
+  const item = mem.get(path);
+  if (!item) return null;
+  return { statusCode: 200, stream: Readable.from([item.body]), blob: { etag: item.etag, pathname: path } };
 }
 async function getMany(paths) {
   const map = new Map();
@@ -38,7 +39,8 @@ async function list(options) {
   return { blobs: [...data.keys()].filter(k => k.startsWith(prefix)).map(pathname => ({ pathname })), hasMore: false };
 }
 async function del(paths) {
-  for (const p of [].concat(paths)) { data.delete(p); versions.delete(p); }
+  paths = [].concat(paths || []).filter(p => typeof p === 'string');
+  for (const p of paths) { data.delete(p); versions.delete(p); }
 }
 const configured = () => !!process.env.CF_API_TOKEN;
 function create() {

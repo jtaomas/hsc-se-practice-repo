@@ -129,7 +129,7 @@ function create(config) {
 
   async function get(path, options) {
     const signal = options && options.abortSignal;
-    const skipCache = !cacheEnabled || (options && options.noCache);
+    const skipCache = !cacheEnabled || (options && (options.noCache || options.useCache === false));
     if (!skipCache && typeof path === 'string') {
       const cached = cacheGet(path);
       if (cached) {
@@ -151,7 +151,7 @@ function create(config) {
     paths = [].concat(paths || []).filter(p => typeof p === 'string');
     if (!paths.length) return new Map();
     const signal = options && options.abortSignal;
-    const skipCache = !cacheEnabled || (options && options.noCache);
+    const skipCache = !cacheEnabled || (options && (options.noCache || options.useCache === false));
     const results = new Map();
     const missing = [];
     if (!skipCache) {
@@ -246,7 +246,7 @@ function create(config) {
     await init(signal);
     for (let i = 0; i < paths.length; i += 50) {
       const chunk = paths.slice(i, i + 50);
-      await sql('DELETE FROM blobs WHERE path IN (' + chunk.map(() => '?').join(',') + ')', chunk, signal, false);
+      await sql('DELETE FROM blobs WHERE path IN (' + chunk.map(() => '?').join(',') + ')', chunk, signal, true);
     }
   }
   const configured = () => { const c = env(); return !!(c.account && c.database && c.token); };

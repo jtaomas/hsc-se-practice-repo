@@ -1232,3 +1232,203 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
   padding: 16px 18px;
   margin-top: 12px;
 }
+
+/* ---------- Syllabus Outcome Mastery Heatmap ---------- */
+.sm-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 22px 40px;
+}
+.sm-rec {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-left: 6px solid #002664;
+  padding: 14px 18px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.sm-rec-title {
+  font-weight: 700;
+  font-size: 1.05em;
+  color: #002664;
+  margin-bottom: 4px;
+}
+.sm-rec-sub {
+  color: #475569;
+  font-size: .9em;
+  margin: 0;
+}
+.sm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+.sm-card {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  display: flex;
+  flex-direction: column;
+}
+.sm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.sm-title {
+  font-weight: 700;
+  font-size: 1.05em;
+  margin: 0;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sm-desc {
+  font-size: .82em;
+  color: #64748b;
+  margin: 4px 0 0;
+}
+.sm-badge {
+  font-size: .78em;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.sm-badge.b6 {
+  background: #dcfce7;
+  color: #166534;
+}
+.sm-badge.b5 {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+.sm-badge.b4 {
+  background: #fef3c7;
+  color: #92400e;
+}
+.sm-badge.b2 {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.sm-badge.none {
+  background: #f1f5f9;
+  color: #475569;
+}
+.sm-bar-wrap {
+  margin: 12px 0 8px;
+}
+.sm-bar {
+  height: 12px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+}
+.sm-bar-direct {
+  background: #008a38;
+  height: 100%;
+}
+.sm-bar-retry {
+  background: #f2c200;
+  height: 100%;
+}
+.sm-bar-lost {
+  background: #fca5a5;
+  height: 100%;
+}
+.sm-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: .82em;
+  color: #475569;
+  margin-bottom: 14px;
+}
+.sm-subs {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+  margin-top: auto;
+}
+.sm-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .82em;
+  padding: 5px 0;
+  gap: 8px;
+}
+.sm-sub-name {
+  color: #334155;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sm-sub-stat {
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+.sm-pill {
+  font-size: .75em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  min-width: 44px;
+  text-align: center;
+}
+.sm-pill.b6 {
+  background: #dcfce7;
+  color: #166534;
+}
+.sm-pill.b5 {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.sm-pill.b4 {
+  background: #fef3c7;
+  color: #92400e;
+}
+.sm-pill.b2 {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.sm-pill.none {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+.sm-card-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+.sm-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.sm-strip-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .85em;
+}

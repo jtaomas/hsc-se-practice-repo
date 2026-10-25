@@ -17,7 +17,9 @@ function aceMount(){
     host.dataset.ace='loading';
     loadAce().then(function(){
       if(!document.body.contains(ta)||host.dataset.ace!=='loading')return;
-      var it=itemOf(k),box=document.createElement('div');
+      var it=itemOf(k);
+      if(!it)return;
+      var box=document.createElement('div');
       box.className='cedit-ed';host.appendChild(box);
       var ed=ace.edit(box,{theme:'ace/theme/textmate',mode:ACE_MODE[it.t]||'ace/mode/text',value:ta.value,fontSize:15,showPrintMargin:false,tabSize:4,useSoftTabs:true,useWorker:false,readOnly:locked,highlightActiveLine:!locked,wrap:false});
       ed.clearSelection();
@@ -57,6 +59,8 @@ function aceCleanup(){
     }
     try{
       var box=ed.container,host=box.parentNode;
+      if(ed.renderer&&ed.renderer.scrollBarV&&ed.renderer.scrollBarV.element){try{ed.renderer.scrollBarV.element.onscroll=null}catch(e){}}
+      if(ed.renderer&&ed.renderer.scrollBarH&&ed.renderer.scrollBarH.element){try{ed.renderer.scrollBarH.element.onscroll=null}catch(e){}}
       ed.destroy();box.remove();
       if(host){host.classList.remove('ace-on');delete host.dataset.ace}
     }catch(e){}

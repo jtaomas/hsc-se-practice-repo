@@ -26,7 +26,12 @@ function papersPage(){
   }).join('');
   var hist=S.hist.filter(function(h){return !BANKS.some(function(b){return b.id===h.id&&b.hidden})}).sort(function(a,b){return b.at-a.at});
   var done=visible.filter(function(b){return S.u[b.id]&&S.u[b.id].done}).length;
+  var md=typeof syllabusMasteryData==='function'?syllabusMasteryData():null;
+  var stripHTML=md?'<div class="sm-strip">'+md.areas.map(function(a){
+    return '<a href="#/mastery" class="sm-strip-item" style="text-decoration:none;color:inherit" title="'+esc(a.name)+'"><b>'+esc(a.id)+':</b> <span style="max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.name)+'</span><span class="sm-pill '+a.band.cls+'">'+(a.pct!=null?a.pct+'%':'-')+'</span></a>';
+  }).join('')+'<a class="nb sm ol" href="#/mastery" style="margin-left:auto;align-self:center">Outcome Mastery &rarr;</a></div>':'';
   return frame('Papers','<div class="pg"><h1 class="pt">All papers</h1><div class="feature"><p>Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria. '+done+' of '+visible.length+' papers finished.</p><p><a class="nb ol" href="#/class">Class answers</a></p>'+
+    stripHTML+
     '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Mark</th><th></th></tr>'+rows+'</table></div></div>'+
     (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' · '+h.pending+' marks unscored':'')+(h.provisionalParts?'<br><span class="note">'+provisionalMarksText(h)+'</span>':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
 }
@@ -125,3 +130,205 @@ function mkDetail(list,m){
     '<a class="nb ol" href="#/'+b.id+'/review/'+m.n+'">Open in the full paper</a></div></div>';
 }
 function mistakesBind(){var m=mkSelected(mkFiltered());if(m)classEnsure(m.b)}
+
+/* ---------- Syllabus Outcome Mastery Heatmap ---------- */
+function masteryBand(pct){
+  if(pct==null)return {cls:'none',label:'Untested',desc:'No assessed questions yet'};
+  if(pct>=85)return {cls:'b6',label:'Band 6 (Exemplary)',desc:'Comprehensive syllabus mastery'};
+  if(pct>=70)return {cls:'b5',label:'Band 5 (Proficient)',desc:'Strong grasp across outcomes'};
+  if(pct>=50)return {cls:'b4',label:'Band 4 (Developing)',desc:'Developing understanding'};
+  return {cls:'b2',label:'Band 2-3 (Needs Practice)',desc:'Prioritise revision & retries'};
+}
+
+function subtopicForQ(tp,q){
+  var text=(q.st+' '+q.it.map(function(i){return i.q+' '+(i.model||'')}).join(' ')).toLowerCase();
+  if(tp==='Secure Software Architecture'){
+    if(/xss|csrf|sql injection|vulnerab|attack|exploit|race condition|side.channel|malware|buffer overflow/i.test(text))return 1;
+    if(/validat|saniti|defens|input|error handling|sandbox|boundary/i.test(text))return 2;
+    if(/sast|dast|pen test|penetration|audit|review|resilien|disaster|backup|continuity|recovery/i.test(text))return 3;
+    return 0; // Security Concepts & CIA Triad
+  }
+  if(tp==='Programming for the Web'){
+    if(q.db||/sql|table|database|query|select|join|group by|primary key|foreign key/i.test(text))return 1;
+    if(/ssl|tls|cert|encrypt|cipher|hash|digital signature|public key|private key/i.test(text))return 3;
+    if(/protocol|packet|dns|http|https|ip address|tcp|port|router|bandwidth|latency/i.test(text))return 0;
+    return 2; // Front-End, UI/UX & Standards
+  }
+  if(tp==='Software Automation'){
+    if(/regress|linear|logistic|knn|nearest|scatter|slope|gradient|equation|numeric/i.test(text))return 1;
+    if(/devops|rpa|bpa|ci\/cd|pipeline|automat|sensor|robot|stream/i.test(text))return 2;
+    if(/bias|ethical|society|social|legal|fairness|workplace|displacement|disability/i.test(text))return 3;
+    return 0; // AI vs ML Models & Neural Networks
+  }
+  if(tp==='Software Engineering Project'){
+    if(/agile|waterfall|scrum|sprint|kanban|wagile|iterat/i.test(text))return 0;
+    if(/direct|phased|parallel|pilot|cutover|deployment|installation/i.test(text))return 2;
+    if(/gantt|feasib|cost|schedule|budget|time|requirement|dictionary|scope/i.test(text))return 1;
+    return 3; // Quality Assurance, Testing & Ethics
+  }
+  return 0;
+}
+
+function syllabusMasteryData(){
+  var areas=[
+    {
+      id:'SSA',
+      name:'Secure Software Architecture',
+      desc:'Security by design, CIA triad, vulnerabilities, defensive coding & resilience',
+      subs:[
+        {name:'Security Concepts & CIA Triad',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Vulnerabilities & Attacks',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Defensive Programming',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Resilience & Security Testing',m:0,g:0,rg:0,lost:0,count:0}
+      ]
+    },
+    {
+      id:'PW',
+      name:'Programming for the Web',
+      desc:'Web protocols, relational databases & SQL, client/server systems, UI/UX & standards',
+      subs:[
+        {name:'Web Architecture & Protocols',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Databases & SQL',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Front-End, UI/UX & Standards',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Web Security & Encryption',m:0,g:0,rg:0,lost:0,count:0}
+      ]
+    },
+    {
+      id:'SA',
+      name:'Software Automation',
+      desc:'AI vs ML, regression models, neural networks, DevOps, bias & ethics',
+      subs:[
+        {name:'AI vs ML Models & Neural Networks',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Algorithms & Regression',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Automation Systems & DevOps',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Ethics, Bias & Societal Impacts',m:0,g:0,rg:0,lost:0,count:0}
+      ]
+    },
+    {
+      id:'SEP',
+      name:'Software Engineering Project',
+      desc:'Agile & Waterfall, requirements analysis, cutover methods, QA & project tools',
+      subs:[
+        {name:'Project Methodologies',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Requirements, Planning & Scheduling',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Implementation & Cutover Methods',m:0,g:0,rg:0,lost:0,count:0},
+        {name:'Quality Assurance, Testing & Ethics',m:0,g:0,rg:0,lost:0,count:0}
+      ]
+    }
+  ];
+
+  var grandM=0,grandG=0,grandRg=0,grandLost=0,grandCount=0;
+  var visible=BANKS.filter(function(b){return !b.hidden&&!b.archived});
+
+  visible.forEach(function(b){
+    var u=S.u[b.id];
+    if(!u)return;
+    b.qs.forEach(function(q,qi){
+      var n=qi+1;
+      var aIdx=-1;
+      for(var ai=0;ai<areas.length;ai++){
+        if(areas[ai].name===q.tp){aIdx=ai;break}
+      }
+      if(aIdx<0)return;
+      var sIdx=subtopicForQ(q.tp,q);
+      var sub=areas[aIdx].subs[sIdx];
+
+      q.it.forEach(function(it,i){
+        var sc=score(b,n,i);
+        if(!sc.set||sc.src==='provisional')return;
+        var m=sc.m||0,g=Math.min(m,Math.max(0,sc.g||0));
+        var r=typeof rtRes==='function'?rtRes(b,n,i):null;
+        var rg=0;
+        if(r){
+          if(r.full)rg=Math.max(0,m-g);
+          else if(r.g!=null&&r.g>g)rg=Math.min(m-g,r.g-g);
+        }
+        var lost=Math.max(0,m-g-rg);
+        sub.m+=m;sub.g+=g;sub.rg+=rg;sub.lost+=lost;sub.count++;
+        grandM+=m;grandG+=g;grandRg+=rg;grandLost+=lost;grandCount++;
+      });
+    });
+  });
+
+  areas.forEach(function(area){
+    var tm=0,tg=0,trg=0,tlost=0,tc=0;
+    area.subs.forEach(function(sub){
+      tm+=sub.m;tg+=sub.g;trg+=sub.rg;tlost+=sub.lost;tc+=sub.count;
+      var eff=sub.g+sub.rg;
+      sub.pct=sub.m?Math.round(100*eff/sub.m):null;
+      sub.band=masteryBand(sub.pct);
+    });
+    area.m=tm;area.g=tg;area.rg=trg;area.lost=tlost;area.count=tc;
+    var aEff=tg+trg;
+    area.pct=tm?Math.round(100*aEff/tm):null;
+    area.examPct=tm?Math.round(100*tg/tm):null;
+    area.band=masteryBand(area.pct);
+  });
+
+  var grandEff=grandG+grandRg;
+  var grandPct=grandM?Math.round(100*grandEff/grandM):null;
+
+  return {
+    areas:areas,
+    grandM:grandM,
+    grandG:grandG,
+    grandRg:grandRg,
+    grandLost:grandLost,
+    grandPct:grandPct,
+    grandBand:masteryBand(grandPct)
+  };
+}
+
+function masteryPage(){
+  CUR={b:null,n:0};
+  var d=syllabusMasteryData();
+
+  var assessed=d.areas.filter(function(a){return a.m>0});
+  assessed.sort(function(a,b){return (a.pct||0)-(b.pct||0)});
+  var weakest=assessed.length?assessed[0]:null;
+
+  var recHTML='';
+  if(!assessed.length){
+    recHTML='<div class="sm-rec"><div><div class="sm-rec-title">No completed examinations yet</div><p class="sm-rec-sub">Complete and submit practice exams to generate your live Syllabus Outcome Mastery Heatmap.</p></div><a class="nb" href="#/papers">Start a paper</a></div>';
+  }else if(weakest&&weakest.pct<85){
+    recHTML='<div class="sm-rec"><div><div class="sm-rec-title">Focus revision: '+esc(weakest.name)+' ('+weakest.pct+'%)</div><p class="sm-rec-sub">This focus area has the greatest potential for score improvement. Review explanations and retry shortfalls to move toward Band 6.</p></div><div style="display:flex;gap:8px"><a class="nb sm" href="#/mistakes/all">Retry mistakes</a><a class="nb sm ol" href="#/papers">Browse papers</a></div></div>';
+  }else{
+    recHTML='<div class="sm-rec" style="border-left-color:#008a38"><div><div class="sm-rec-title" style="color:#008a38">Outstanding performance across all syllabus focus areas</div><p class="sm-rec-sub">You are tracking in the top band across assessed outcomes. Maintain exam readiness with timed trials.</p></div><a class="nb sm" href="#/papers">Sit another paper</a></div>';
+  }
+
+  var cardsHTML=d.areas.map(function(area){
+    var b=area.band;
+    var dPct=area.m?Math.round(100*area.g/area.m):0;
+    var rPct=area.m?Math.round(100*area.rg/area.m):0;
+    var lPct=area.m?Math.max(0,100-dPct-rPct):0;
+
+    var subsHTML=area.subs.map(function(sub){
+      var sb=sub.band;
+      var stat=sub.m?(sub.g+sub.rg)+' / '+sub.m+' marks':'Untested';
+      return '<div class="sm-sub-row"><span class="sm-sub-name" title="'+esc(sub.name)+'">'+esc(sub.name)+'</span><span class="sm-sub-stat">'+stat+'</span><span class="sm-pill '+sb.cls+'">'+(sub.pct!=null?sub.pct+'%':'-')+'</span></div>';
+    }).join('');
+
+    return '<div class="sm-card">'+
+      '<div class="sm-head"><div><h3 class="sm-title">'+esc(area.name)+'</h3><p class="sm-desc">'+esc(area.desc)+'</p></div><span class="sm-badge '+b.cls+'">'+b.label+'</span></div>'+
+      '<div class="sm-bar-wrap"><div class="sm-bar">'+
+        (dPct?'<div class="sm-bar-direct" style="width:'+dPct+'%" title="Exam marks: '+area.g+'"></div>':'')+
+        (rPct?'<div class="sm-bar-retry" style="width:'+rPct+'%" title="Recovered retry marks: '+area.rg+'"></div>':'')+
+        (lPct?'<div class="sm-bar-lost" style="width:'+lPct+'%" title="Marks lost: '+area.lost+'"></div>':'')+
+      '</div></div>'+
+      '<div class="sm-stats"><span>Earned: <b>'+(area.g+area.rg)+'</b> / '+area.m+' marks'+(area.rg?' <span style="color:#b45309">(+'+area.rg+' retry)</span>':'')+'</span><span><b>'+(area.pct!=null?area.pct+'%':'Untested')+'</b></span></div>'+
+      '<div class="sm-subs">'+subsHTML+'</div>'+
+      '<div class="sm-card-acts"><a class="nb sm ol" href="#/mistakes/all" style="width:100%;text-align:center">Review mistakes in '+esc(area.id)+'</a></div>'+
+    '</div>';
+  }).join('');
+
+  var main='<div class="sm-page">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:12px">'+
+      '<div><h1 class="pt" style="margin:0 0 4px">Syllabus Outcome Mastery</h1><p class="mut" style="margin:0">Live mastery across all 4 NESA HSC Software Engineering focus areas and 16 key outcome subtopics.</p></div>'+
+      (d.grandM?'<div style="font-size:1.1em;font-weight:700">Overall: <span class="sm-badge '+d.grandBand.cls+'" style="font-size:.9em">'+d.grandPct+'% &middot; '+d.grandBand.label+'</span></div>':'')+
+    '</div>'+
+    recHTML+
+    '<div class="sm-grid">'+cardsHTML+'</div>'+
+  '</div>';
+
+  return frame('Syllabus Mastery',main,{bar:true});
+}

@@ -150,7 +150,7 @@ function rtCheck(){
   else if(!S.tok){
     if(it.t==='sq'&&b.qs[n-1].db&&typeof runSQL==='function'&&typeof sameSQLResult==='function'){
       RTRUN[key]=1;rtRefresh();
-      Promise.all([runSQL(b.qs[n-1].db,a,k),runSQL(b.qs[n-1].db,it.model,k)]).then(function(res){
+      Promise.all([runSQL(b.qs[n-1].db,a,null,true),runSQL(b.qs[n-1].db,it.model,null,true)]).then(function(res){
         delete RTRUN[key];
         if(sameSQLResult(res[0],res[1],it)){
           rtStore(b,n,i,{g:it.m,stamp:rtStampOf(b,n,i),self:1});

@@ -66,7 +66,7 @@ function createHandler(deps = {}) {
         let exportPkg = request.export;
         if (!exportPkg) {
           const paper = await evidence.loadPaper(session.id, request.bankId);
-          const snapshot = await input.prepareExport(request, paper, value => markerStore.getCached(session.id, value));
+          const snapshot = await input.prepareExport({ action: 'export', bankId: request.bankId, parts: request.parts }, paper, value => markerStore.getCached(session.id, value));
           exportPkg = await evidence.sign(snapshot, session.id);
         }
         await evidence.publishToClass(request.classCode, request.bankId, session.id, exportPkg);

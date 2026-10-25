@@ -317,5 +317,16 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.deepEqual(Object.keys(pr.online[0]).sort(), ['ageMs', 'bank', 'id'], 'presence exposes no email or name');
   const hOff = createHandler({ store, verify, synthesis: fake, env: { DISABLE_PRESENCE: '1' } });
   assert.deepEqual((await rest(hOff, { action: 'presence', bank: '8' })).body.online, [], 'kill switch returns nobody');
+  // Admin list: a class member with no login record still shows up, flagged, and cannot be deleted.
+  const ghost = id(7);
+  await m.put('class/members/' + ghost + '.json', { name: 'hi', joined: 5 });
+  await m.put('progress/' + ghost + '.json', { u: { 8: paper('<p>x</p>') } });
+  const listed = await store.adminUsers();
+  const g = listed.find(x => x.id === ghost);
+  assert(g && g.name === 'hi' && g.inClass === true && g.noLogin === true && g.email === '', 'orphan class member is listed');
+  assert(listed.every(x => x.id !== ghost || listed.filter(y => y.id === ghost).length === 1), 'listed once');
+  assert.equal(listed.filter(x => !x.noLogin).length > 0, true);
+  assert.equal((await store.adminUser(ghost)).noLogin, true);
+  await assert.rejects(store.adminUser(id(99)), /does not exist/);
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

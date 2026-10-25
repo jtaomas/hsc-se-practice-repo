@@ -248,29 +248,38 @@ function createClassStore(options) {
   }
 
   // ---- Platform admin: every account on the site, not only class members. ----
+  // Every account the site knows about. An account normally has a users/ record, but a class member or a saved
+  // progress file can outlive it, and those people must still show up here so an admin can see and manage them.
   async function adminUsers() {
     const store = await provider();
-    const listed = await store.list({ prefix: 'users/' });
-    const ids = (listed.blobs || []).map(b => String(b.pathname).slice('users/'.length).replace(/\.json$/, '')).filter(id => ID.test(id)).slice(0, 1000);
-    const inClass = new Set(((await store.list({ prefix: 'class/members/' })).blobs || []).map(b => String(b.pathname).slice('class/members/'.length).replace(/\.json$/, '')));
+    const idsOf = async prefix => ((await store.list({ prefix })).blobs || []).map(b => String(b.pathname).slice(prefix.length).replace(/\.json$/, '')).filter(id => ID.test(id));
+    const withUser = await idsOf('users/');
+    const inClass = new Set(await idsOf('class/members/'));
+    const seen = new Set(withUser);
+    const orphans = [...inClass, ...(await idsOf('progress/'))].filter(id => !seen.has(id) && seen.add(id));
+    const ids = withUser.concat(orphans).slice(0, 1000);
     const out = [];
     for (let i = 0; i < ids.length; i += 8) {
       const rows = await Promise.all(ids.slice(i, i + 8).map(async id => {
         const u = await read('users/' + id + '.json');
-        if (!u) return null;
         const m = inClass.has(id) ? await getMember(id) : null;
+        if (!u && !m && !(await read('progress/' + id + '.json'))) return null;
         const profile = await read('profiles/' + id + '.json');
-        return { id, email: u.data.email || '', name: (m && m.name) || u.data.name || '', inClass: !!m, photo: (profile && profile.data && profile.data.photo) || '', created: u.data.created || 0 };
+        const d = (u && u.data) || {};
+        return { id, email: d.email || '', name: (m && m.name) || d.name || '', inClass: !!m, photo: (profile && profile.data && profile.data.photo) || '', created: d.created || 0, noLogin: !u };
       }));
       rows.forEach(r => { if (r) out.push(r); });
     }
-    return out.sort((a, b) => a.email.localeCompare(b.email));
+    return out.sort((a, b) => (a.email || '\uffff' + a.name).localeCompare(b.email || '\uffff' + b.name));
   }
   async function adminUser(id) {
     if (!ID.test(id)) throw error(400, 'bad_member', 'Choose an account.');
     const u = await read('users/' + id + '.json');
-    if (!u) throw error(404, 'no_user', 'That account does not exist.');
-    return u.data;
+    if (u) return u.data;
+    // No login record: still an account to an admin if the person is in the class or has saved progress.
+    const m = await getMember(id);
+    if (m || await read('progress/' + id + '.json')) return { email: '', name: (m && m.name) || '', noLogin: true };
+    throw error(404, 'no_user', 'That account does not exist.');
   }
   async function adminSetName(id, name) {
     await adminUser(id);

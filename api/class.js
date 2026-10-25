@@ -230,6 +230,7 @@ function createHandler(deps) {
         if (p.action === 'admin_class') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetClass(id, p.inClass === true)));
         if (p.action === 'admin_delete') {
           const target = await store.adminUser(id);
+          if (!target.email) return fail(400, 'no_login', 'This account has no login record, so it cannot be deleted here. Remove it from the class instead.');
           if (id === sess.id || classAdminList().includes(String(target.email || '').toLowerCase())) return fail(400, 'protected', 'Admin accounts cannot be deleted here.');
           if (String(p.confirmEmail || '').toLowerCase() !== String(target.email || '').toLowerCase()) return fail(400, 'confirm', 'Type the account email to confirm.');
           return res.status(200).json(Object.assign({ ok: true }, await store.adminDelete(id)));

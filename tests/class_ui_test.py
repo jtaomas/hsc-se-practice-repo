@@ -23,6 +23,7 @@ def route(r):
             if p['code'] != 'good-code': return r.fulfill(status=400, content_type='application/json', body=json.dumps({'code': 'bad_code', 'error': 'That class code is not right.'}))
             state['member'] = True; return ok({'ok': True, 'name': p['name']})
         if a == 'roster': return ok({'admin': True, 'members': [{'id': 'a'*64, 'name': 'Sam', 'photo': '', 'mine': True, 'joined': 1}, {'id': 'b'*64, 'name': 'Priya', 'photo': '', 'mine': False, 'joined': 2}]})
+        if a == 'setname': return ok({'ok': True, 'name': p['name']})
         if a == 'setphoto': return ok({'ok': True, 'photo': p['photo']})
         if a == 'overview': return ok({'members': 2, 'counts': {'8': 2}})
         if a == 'answers': return ok(ANSWERS)
@@ -49,7 +50,13 @@ with sync_playwright() as pw:
     expect(page.locator('#cvroot')).to_contain_text('You are in the class as')
     expect(page.locator('.cv-person')).to_have_count(2)
     expect(page.locator('.cv-person').nth(1)).to_contain_text('Priya')
-    assert page.locator('[data-cv=photo]').count() == 2, 'admin sees Change photo on everyone'
+    assert page.locator('[data-cv=edit]').count() == 2, 'admin sees Edit on everyone'
+    a0 = page.locator('.cv-person').nth(0).bounding_box(); a1 = page.locator('.cv-person').nth(1).bounding_box()
+    assert a1['y'] > a0['y'] + a0['height'] - 2, 'people are stacked, one per row'
+    page.locator('[data-cv=edit]').nth(1).click()
+    page.fill('#cvnm', 'Priya S'); page.click('[data-cv=savename]')
+    expect(page.locator('.cv-person').nth(1)).to_contain_text('Priya S')
+    expect(page.locator('[data-cv=photo]')).to_have_count(1)
     page.click('a[href="#/class/8/1"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 1 ')
     assert page.locator('.nav-bar .nav-elem').count() > 5, 'question navigator'

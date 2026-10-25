@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -179,16 +179,25 @@ function cvNavHTML(b){
   }
   return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>';
 }
-/* Everyone in the class, like a Google Classroom people list. Admins can change anyone's photo. */
+/* Everyone in the class, one row each, like a Google Classroom people list. Admins edit any name or photo. */
 function cvRosterHTML(){
   var r=CV.roster;if(!r)return '';
-  var h='<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+(r.admin?'<p class="mut">You are a class admin. You can change anyone\'s photo.</p>':'')+
+  return '<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+(r.admin?'<p class="mut">You are a class admin. Press Edit to change anyone\'s name or photo.</p>':'')+
     '<ul class="cv-people">'+r.members.map(function(m){
-      return '<li class="cv-person"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span>'+
-        (r.admin?'<span class="cv-padm"><button class="nb sm ol" data-cv="photo" data-id="'+esc(m.id)+'" type="button">Change photo</button>'+(m.photo?'<button class="nb sm ol" data-cv="photoclear" data-id="'+esc(m.id)+'" type="button">Remove</button>':'')+'</span>':'')+'</li>';
-    }).join('')+'</ul>'+(r.admin?'<input id="cvphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>':'')+
-    (CV.photoMsg?'<p class="acmsg" role="status">'+esc(CV.photoMsg)+'</p>':'');
-  return h;
+      var open=r.admin&&CV.editing===m.id;
+      var row='<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span>'+
+        (r.admin?'<button class="nb sm ol" data-cv="edit" data-id="'+esc(m.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Edit')+'</button>':'')+'</div>';
+      if(open)row+='<div class="cv-edit"><label for="cvnm">Name</label><div class="cv-erow"><input id="cvnm" maxlength="40" value="'+esc(m.name)+'" autocomplete="off"><button class="nb sm" data-cv="savename" data-id="'+esc(m.id)+'" type="button">Save name</button></div>'+
+        '<label>Photo</label><div class="cv-erow"><span class="cv-pav">'+profileAvatarHTML(m.photo,m.id,56,m.name)+'</span><button class="nb sm ol" data-cv="photo" data-id="'+esc(m.id)+'" type="button">Upload new photo</button>'+(m.photo?'<button class="nb sm ol" data-cv="photoclear" data-id="'+esc(m.id)+'" type="button">Remove photo</button>':'')+'</div>'+
+        (CV.photoMsg?'<p class="acmsg" role="status">'+esc(CV.photoMsg)+'</p>':'')+'</div>';
+      return row+'</li>';
+    }).join('')+'</ul>'+(r.admin?'<input id="cvphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>':'');
+}
+function cvSetName(id,name){
+  CV.photoMsg='Saving name...';cvDraw();
+  cvApi({action:'setname',memberId:id,name:name}).then(function(x){
+    (CV.roster.members||[]).forEach(function(m){if(m.id===id)m.name=x.name});CV.photoMsg='Name saved.';cvDraw();
+  }).catch(function(e){CV.photoMsg=e.message;cvDraw()});
 }
 function cvSetPhoto(id,photo){
   CV.photoMsg='Saving photo...';cvDraw();
@@ -269,6 +278,8 @@ function cvResultHTML(res){
 document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
+  if(a==='edit'){var eid=el.getAttribute('data-id');CV.editing=CV.editing===eid?'':eid;CV.photoMsg='';cvDraw();return}
+  if(a==='savename'){cvSetName(el.getAttribute('data-id'),(document.getElementById('cvnm')||{}).value||'');return}
   if(a==='photo'){CV.photoFor=el.getAttribute('data-id');var fi=document.getElementById('cvphoto');if(fi)fi.click();return}
   if(a==='photoclear'){cvSetPhoto(el.getAttribute('data-id'),'');return}
   if(a==='goq'){location.hash='#/class/'+CV.bank+'/'+(+el.getAttribute('data-n')||1);return}

@@ -107,4 +107,4 @@ Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128Ã
 
 ## Class roster and admin
 - Class page lists everyone in the class with avatars (`roster` action in `api/class.js`, `cvRosterHTML` in `public/classview.js`).
-- Admins (emails in env `CLASS_ADMINS`, comma separated; default `thomas.luu@education.nsw.gov.au,thomas.lu@education.nsw.gov.au`) see "Change photo" / "Remove" on every member (`setphoto` action, same JPEG validation as the profile photo).
+- Admins (emails in env `CLASS_ADMINS`, comma separated; default `thomas.luu@education.nsw.gov.au`) see "Change photo" / "Remove" on every member (`setphoto` action, same JPEG validation as the profile photo).

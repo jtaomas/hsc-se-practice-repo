@@ -142,5 +142,8 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await asTok('admin', { action: 'setphoto', memberId: id(1), photo: jpeg })).status, 200);
   assert.equal((await asTok('admin', { action: 'roster' })).body.members.filter(x => x.id === id(1))[0].photo, jpeg);
   assert.equal((await asTok('admin', { action: 'setphoto', memberId: id(1), photo: '' })).status, 200);
+  assert.equal((await asTok('ok', { action: 'setname', memberId: id(2), name: 'Zed' })).body.code, 'not_admin');
+  assert.equal((await asTok('admin', { action: 'setname', memberId: id(1), name: 'Sam Renamed' })).body.name, 'Sam Renamed');
+  assert.equal((await asTok('admin', { action: 'setname', memberId: id(1), name: 'x' })).body.code, 'bad_name');
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

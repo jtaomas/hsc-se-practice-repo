@@ -18,7 +18,7 @@ function createHandler(deps) {
   const env = deps.env || process.env;
   const clock = deps.now || Date.now;
   // Class admins (comma-separated emails in CLASS_ADMINS) can change other members' photos.
-  const adminList = () => String(env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au,thomas.lu@education.nsw.gov.au').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+  const adminList = () => String(env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
   const isAdmin = sess => !!sess && !!sess.email && adminList().includes(String(sess.email).toLowerCase());
   const bankFor = id => banksOf().find(b => b.id === id && !b.hidden && !b.archived);
 
@@ -80,6 +80,11 @@ function createHandler(deps) {
       if (p.action === 'roster') {
         const list = await store.members();
         return res.status(200).json({ admin: isAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });
+      }
+      if (p.action === 'setname') {
+        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s names.');
+        if (typeof p.memberId !== 'string' || !/^[a-f0-9]{64}$/.test(p.memberId)) return fail(400, 'bad_member', 'Choose a class member.');
+        return res.status(200).json(Object.assign({ ok: true }, await store.rename(p.memberId, p.name)));
       }
       if (p.action === 'setphoto') {
         if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s photos.');

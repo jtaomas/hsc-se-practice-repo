@@ -1072,3 +1072,17 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .cv-sql-prob{display:flex;align-items:baseline;gap:8px;background:#fdeef1;border:1px solid #e0a1ae;border-left:4px solid #b81237;color:#8a0d29;padding:6px 10px;border-radius:4px;margin-top:4px}
 .cv-sql-prob .pill.bad{flex:none}
 .cvagg pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0;margin:6px 0 0}
+
+/* My mistakes list: wider, grouped by paper then by question type and topic, one line per part, score as a coloured pill */
+.mkpage{grid-template-columns:380px minmax(0,1fr)}
+@media (max-width:860px){.mkpage{grid-template-columns:1fr}}
+.mk-grp{display:flex;justify-content:space-between;align-items:baseline}
+.mk-grp .mk-n{font-weight:500;font-size:.85em;color:#555}
+.mk-sub{margin:8px 0 4px;font-size:.82em;color:#444;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.mk-sub b{color:#002664;text-transform:uppercase;letter-spacing:.04em;font-size:.95em}
+.mk-item{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:8px 10px}
+.mk-item .mk-meta{font-size:.85em;color:#333}
+.mk-item .mk-sc{font-size:.85em;padding:2px 9px;border-radius:10px;border:1px solid transparent}
+.mk-item.bad .mk-sc{background:#fdeef1;color:#8a0f2b;border-color:#e0a1ae}
+.mk-item.rtok .mk-sc{background:#fff6d1;color:#5c4400;border-color:#e6c34d}
+.mk-item.ok .mk-sc{background:#e6f4ea;color:#14532d;border-color:#9fd2ad}

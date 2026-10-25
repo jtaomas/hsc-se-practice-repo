@@ -57,20 +57,28 @@ function mkSelected(list){
 }
 function mkHref(m){return '#/mistakes/'+(MF.bank||'all')+'/'+mkKey(m)}
 function mkTypeName(it){var c=itemClass(it);return c==='closed'?'Multiple choice':c==='written'?'Written':c==='code'?(it.t==='sq'?'SQL':it.t==='py'?'Python':'Pseudocode'):c==='diagram'?'Diagram':'Question'}
+/* What a part asks, in one plain line for the list. */
+function mkAsk(it){var t=String(plain(it.q)).replace(/\s+/g,' ').trim();return t.length>140?t.slice(0,137).replace(/\s+\S*$/,'')+'...':t}
 function mistakesPage(){
   CUR={b:null,n:0};
   var all=mistakeList(),list=mkFiltered(),cur=mkSelected(list);
-  var lost=list.reduce(function(s,m){return s+(m.s.m-m.s.g)},0),fixed=list.filter(function(m){return partCls(m.b,m.n,m.i)==='rtok'}).length;
+  var fixed=list.filter(function(m){return partCls(m.b,m.n,m.i)==='rtok'}).length;
+  // Marks still lost: a part fixed by a retry no longer counts against the student.
+  var lost=list.reduce(function(s,m){return s+(partCls(m.b,m.n,m.i)==='rtok'?0:m.s.m-m.s.g)},0);
   function sel(name,val,opts){return '<select data-mf="'+name+'" aria-label="'+name+'">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
   if(!all.length)return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1><div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; provisional marks need review and are excluded.</p></div></div>');
   var filters='<div class="mk-filter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden&&!b.archived}).map(function(b){return [b.id,b.name]})))+
     sel('topic',MF.topic,[['','All topics']].concat(mkTopics().map(function(t){return [t,t]})))+
     sel('kind',MF.kind,[['','All question types'],['closed','Multiple choice, dropdown and match'],['written','Written'],['code','Python, pseudocode and SQL'],['diagram','Diagram']])+'</div>';
-  var groups='',last='';
+  // One heading per paper, one sub-heading per run of the same question type and topic, and one line per part
+  // that shows what the part asks, so the type and topic are not repeated on every row.
+  var groups='',last='',lastSub='';
   list.forEach(function(m){
-    if(m.b.id!==last){last=m.b.id;groups+='<div class="mk-grp">'+esc(m.b.name)+'</div>'}
-    var c=partCls(m.b,m.n,m.i)||'bad';
-    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta">'+esc(mkTypeName(m.it))+' &middot; '+esc(m.q.tp)+'</span><span class="mk-sc">'+(c==='rtok'?'Retried &middot; ':'')+m.s.g+' / '+m.s.m+'</span></a>';
+    if(m.b.id!==last){last=m.b.id;lastSub='';groups+='<div class="mk-grp"><span>'+esc(m.b.name)+'</span><span class="mk-n">'+list.filter(function(x){return x.b.id===m.b.id}).length+'</span></div>'}
+    var sub=mkTypeName(m.it)+'|'+m.q.tp;
+    if(sub!==lastSub){lastSub=sub;groups+='<div class="mk-sub"><b>'+esc(mkTypeName(m.it))+'</b><span>'+esc(m.q.tp)+'</span></div>'}
+    var c=partCls(m.b,m.n,m.i)||'bad',fixedNow=c==='rtok',ask=mkAsk(m.it);
+    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta" title="'+esc(ask)+'">'+esc(ask)+'</span><span class="mk-sc"'+(fixedNow?' title="Exam mark '+m.s.g+' / '+m.s.m+', fixed by a retry"':'')+'>'+(fixedNow?m.s.m:m.s.g)+' / '+m.s.m+'</span></a>';
   });
   var side='<aside class="mk-side" aria-label="Your mistakes">'+filters+'<p class="mk-sum">'+list.length+' part'+(list.length===1?'':'s')+' &middot; '+lost+' mark'+(lost===1?'':'s')+' lost'+(fixed?' &middot; <span class="rtk">'+fixed+' fixed by retry</span>':'')+'</p><nav class="mk-list">'+(groups||'<p class="mut">Nothing matches these filters.</p>')+'</nav></aside>';
   return frame('My mistakes','<div class="mkpage">'+side+'<main class="ex mk-main" id="mkmain">'+(cur?mkDetail(list,cur):'<div class="feature"><p>Nothing matches these filters.</p></div>')+'</main></div>',{bar:true});
@@ -81,7 +89,7 @@ function mkDetail(list,m){
   var mkLabel=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
   var crit=!AUTO[it.t]&&it.crit&&it.crit.length?'<details class="xdd"><summary>Marking criteria</summary>'+critList(it.crit)+'</details>':'';
   var prev=list[idx-1],next=list[idx+1],pc=partCls(b,m.n,m.i)||'bad';
-  return '<div class="qwrap"><h2 class="qt">Question '+m.n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="mk-badge '+pc+'">'+m.s.g+' / '+m.s.m+'</span>'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,m.n,m.i,'mk'):'')+'</h2>'+
+  return '<div class="qwrap"><h2 class="qt">Question '+m.n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="mk-badge '+pc+'"'+(pc==='rtok'?' title="Exam mark '+m.s.g+' / '+m.s.m+', fixed by a retry"':'')+'>'+(pc==='rtok'?m.s.m:m.s.g)+' / '+m.s.m+'</span>'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,m.n,m.i,'mk'):'')+'</h2>'+
     (typeof rtStatusHTML==='function'?rtStatusHTML(b,m.n,m.i):'')+
     '<p class="mut mk-where">'+esc(b.name)+' &middot; '+esc(q.tp)+'</p>'+
     '<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+

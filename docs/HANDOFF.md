@@ -141,3 +141,9 @@ Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128Ã
 ## Platform admin
 - `thomas.luu@education.nsw.gov.au` (env `SYSTEM_ADMINS`, defaulting to `CLASS_ADMINS`) is an admin of the whole site, not only the class. The Class page shows an "All accounts" list for admins (actions `admin_users`, `admin_progress`, `admin_name`, `admin_photo`, `admin_class`, `admin_delete` in `api/class.js`, store functions `admin*` in `server/class-store.js`).
 - System admins can inspect the full progress report ("Progress" button) for any account on the site whether in the class or not, and can rename, change photo, add/remove from the class, and delete any non-admin account (deletes user, progress, profile, backups, membership; needs the account email typed to confirm). Email and password changes are not supported (the account id is a hash of the email).
+
+## My mistakes list redesign
+- Rows are now `Q#`, a one-line snippet of what the part asks, and a score pill. Red = still wrong (exam mark, e.g. 0 / 4); yellow = fixed by a retry (full marks, e.g. 4 / 4, with the exam mark in the tooltip). Right-first-time parts are green elsewhere (review/results) and are not in this list.
+- Type and topic are shown once per run as a sub-heading (`.mk-sub`) under the paper heading (`.mk-grp`, with a count) instead of on every row.
+- List pane widened 320px to 380px (`.mkpage`), one column under 860px.
+- "marks lost" in the summary counts only marks still lost (retry-fixed parts excluded).

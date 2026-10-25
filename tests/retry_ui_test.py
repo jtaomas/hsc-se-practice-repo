@@ -104,6 +104,8 @@ with sync_playwright() as p:
     expect(page.locator('.mk-item.cur')).to_have_class(__import__('re').compile(r'\brtok\b'))
     expect(page.locator('.rtst.rtok')).to_be_visible()
     expect(page.locator('.mk-badge')).to_have_class(__import__('re').compile(r'\brtok\b'))
+    expect(page.locator('.mk-item.cur .mk-sc')).to_have_text('1 / 1')
+    assert page.locator('.mk-sub').count() >= 1, 'mistakes list is not grouped by type and topic'
     page.evaluate("location.hash='#/1/review/1'")
     expect(page.locator('.nav-elem[data-n="1"]')).to_have_class(__import__('re').compile(r'\brtok\b'))
     expect(page.locator('.guide > h4 .sc')).to_have_class(__import__('re').compile(r'\brtok\b'))

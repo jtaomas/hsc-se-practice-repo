@@ -13,6 +13,7 @@ Live site: https://hsc-se-practice-repo.vercel.app
 - Papers page, My mistakes page, and the older file-based **Compare responses** (now unlinked). Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
 - Evidence-linked feedback separates rubric shortfalls from 11 response-quality ratings. Lost marks are categorised where the rubric supports exact attribution; holistic shortfalls remain clearly labelled.
 - After submission, **Create my improvement plan** on the results page reviews verified feedback across the paper, identifies supported knowledge/writing patterns and gives prioritised exercises and success checks. A separate AI audit checks the plan; it never changes marks.
+- Profile pictures: upload or remove a JPEG, PNG or WebP on the Account page. Pictures are cropped to 128-pixel squares and shown in account headers, paper participants and class answers.
 - Accounts (email and password). Progress is saved to the account through `/api/auth`.
 - Submitted answers are read-only. Use **Start again** for another attempt.
 - Python runs in a separate worker with a **Stop** button and a 10-second execution limit. When a program calls `input()`, a dialog asks for the value, as in the HSC exam. Like the exam, it cannot be closed (Cancel enters an empty value), so `while True: input()` traps you until you reload. Time spent at the dialog does not count towards the limit.

@@ -16,6 +16,7 @@ server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
 threading.Thread(target=server.serve_forever,daemon=True).start()
 os.environ['SITE']='http://127.0.0.1:'+str(server.server_port)
 try:
+    runpy.run_path(str(ROOT/'tests/profile_ui_test.py'),run_name='__main__')
     runpy.run_path(str(ROOT/'tests/ui_test.py'),run_name='__main__')
     runpy.run_path(str(ROOT/'tests/marking_ui_test.py'),run_name='__main__')
     runpy.run_path(str(ROOT/'tests/feedback_ui_test.py'),run_name='__main__')

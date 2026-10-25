@@ -636,6 +636,8 @@ document.addEventListener('click',function(e){
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
   else if(a==='acgo')acGo();
   else if(a==='acsignout')acSignOut();
+  else if(a==='photo-upload'){if(!PHOTO.busy){var pf=$('#profile-file');pf.value='';pf.onchange=function(){photoRead(pf.files[0])};pf.click()}}
+  else if(a==='photo-remove'){if(!PHOTO.busy)photoSave('',SYNC.epoch)}
   else if(a==='acsync')syncNow();
   else if(a==='acclasscode')acSetClassCode(false);
   else if(a==='acclasscodeclear')acSetClassCode(true);

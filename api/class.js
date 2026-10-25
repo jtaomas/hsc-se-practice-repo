@@ -43,7 +43,7 @@ function createHandler(deps) {
       const list = [];
       submitted.forEach(r => {
         const text = engine.answerText(item, r.paper.ans && r.paper.ans[(qi + 1) + '.' + pi]);
-        if (text) list.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, text });
+        if (text) list.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text });
       });
       parts[(qi + 1) + '.' + pi] = list;
     }));
@@ -93,6 +93,7 @@ function createHandler(deps) {
                     id: m.id,
                     mine: m.id === sess.id,
                     name: m.name,
+                    photo: m.photo || '',
                     status: sp.done ? 'Submitted' : (sp.mode === 'exam' ? 'Sitting exam' : 'In progress')
                   });
                 }

@@ -124,7 +124,7 @@ function getPaperStudents(b){
     var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
     if(typeof CV !== 'undefined' && CV.st && CV.st.name) name = CV.st.name;
     var status = u.done ? 'Submitted' : 'In progress';
-    list.push({ name: name, email: email, status: status, seed: email, isMe: true });
+    list.push({ name: name, email: email, status: status, seed: email, photo: S.photo || '', isMe: true });
   }
   if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
     CV.over.papers[b.id].forEach(function(m){
@@ -134,6 +134,7 @@ function getPaperStudents(b){
           email: m.mine ? (S.ae || '') : '',
           status: m.status === 'Submitted' ? 'Submitted' : 'In progress',
           seed: m.id || m.name,
+          photo: m.mine ? (S.photo || '') : (m.photo || ''),
           isMe: !!m.mine
         });
       }
@@ -148,12 +149,12 @@ function trialAvatarsHTML(b, isInline){
   var display = students.slice(0, 3);
   var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
   var stack = display.map(function(s){
-    return '<span class="notion-avatar" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + notionAvatarSVG(s.seed, 26, s.name) + '</span>';
+    return '<span class="notion-avatar" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + '</span>';
   }).join('') + more;
 
   var popList = students.map(function(s){
     return '<div class="notion-pop-row">' +
-      '<span class="notion-pop-av">' + notionAvatarSVG(s.seed, 28, s.name) + '</span>' +
+      '<span class="notion-pop-av">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
         (s.email ? '<div class="notion-pop-email">' + esc(s.email) + '</div>' : '') +
@@ -171,4 +172,9 @@ function trialAvatarsHTML(b, isInline){
       '<div class="notion-pop-list">' + popList + '</div>' +
     '</div>' +
   '</div>';
+}
+
+function profileAvatarHTML(photo, seed, size, label){
+  if(typeof photo==='string' && photo.length<=44000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))return '<img class="profile-photo" src="'+esc(photo)+'" width="'+size+'" height="'+size+'" alt="'+esc(label||'Profile picture')+'" style="border-radius:50%;object-fit:cover;vertical-align:middle">';
+  return notionAvatarSVG(seed,size,label);
 }

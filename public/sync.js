@@ -7,7 +7,7 @@ function acctText(){
   return esc(S.ae)+' &middot; '+st;
 }
 function acctPillHTML(){
-  var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="hdr-av">'+notionAvatarSVG(S.ae,20,S.ae)+'</span>':'';
+  var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="hdr-av">'+profileAvatarHTML(S.photo,S.ae,20,S.ae)+'</span>':'';
   return av+'<span class="acct-lbl">'+acctText()+'</span>';
 }
 function refreshAcct(){$$('.acct').forEach(function(e){e.innerHTML=acctPillHTML()});var s=$('#syncst');if(s)s.innerHTML=syncStatusHTML()}
@@ -52,6 +52,7 @@ function syncEnvelope(j){
 function syncReply(action,j,sent){
   if(!syncObject(j)||j.error!==undefined)return false;
   if(action==='signup'||action==='login')return typeof j.token==='string'&&j.token.length>0&&j.token.length<=4096&&typeof j.email==='string'&&j.email.length>0&&j.email.length<=120;
+  if(action==='profile')return j.ok===true&&typeof j.photo==='string'&&j.photo===sent.photo;
   if(action==='backups')return Array.isArray(j.backups)&&j.backups.length<=1000&&j.backups.every(function(n){return typeof n==='string'&&/^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/.test(n)});
   if(!syncEnvelope(j))return false;
   if(action==='load')return true;
@@ -106,9 +107,10 @@ function replaceState(next){
   if(typeof xdCleanup==='function')xdCleanup();
   if(typeof stopPython==='function')stopPython();
   clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();SYNC.conflicts={};
+  if(typeof PHOTO!=='undefined')PHOTO={busy:false,msg:''};
   if(typeof BK!=='undefined')BK={list:null,msg:'',busy:false};
   if(typeof AIRUN!=='undefined')AIRUN={};
-  S=Object.assign({u:{},hist:[],pending:{},revisions:{},tok:'',ae:'',owner:'',ts:0,font:0,fg:0,bg:0},next);
+  S=Object.assign({u:{},hist:[],pending:{},revisions:{},tok:'',ae:'',photo:'',owner:'',ts:0,font:0,fg:0,bg:0},next);
   if(typeof CUR!=='undefined')CUR={b:null,n:0};persist();
 }
 function acceptAccount(r,signup){
@@ -123,7 +125,7 @@ function queuedSync(load){
   var epoch=SYNC.epoch,token=S.tok;
   var task=SYNC.queue.catch(function(){}).then(function(){
     checkSession(epoch);SYNC.state='saving';refreshAcct();
-    return load?api('load',{},token).then(function(r){checkSession(epoch);mergeRemote(r.data,r.revisions)}):null;
+    return load?api('load',{},token).then(function(r){checkSession(epoch);S.photo=r.photo||'';mergeRemote(r.data,r.revisions);refreshAcct();var av=$('#profile-preview');if(av)av.innerHTML=profileAvatarHTML(S.photo,S.ae,54,S.ae)}):null;
   }).then(function(){
     checkSession(epoch);
     if(Object.keys(SYNC.conflicts).length)throw new Error('Choose which paper version to keep on the Account page.');
@@ -245,8 +247,9 @@ function accountPage(){
   CUR={b:null,n:0};
   var body;
   if(S.tok&&S.ae){
-    var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="acct-av-lg">'+notionAvatarSVG(S.ae,54,S.ae)+'</span>':'';
+    var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="acct-av-lg" id="profile-preview">'+profileAvatarHTML(S.photo,S.ae,54,S.ae)+'</span>':'';
     body='<div class="acct-profile-hdr">'+av+'<div><h2 class="pt" style="margin:0">Your account</h2><p style="margin:4px 0 0">Signed in as <b>'+esc(S.ae)+'</b></p></div></div><p id="syncst">'+syncStatusHTML()+'</p>'+
+      profileControlsHTML()+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
       '<p class="note"><a href="#/class">Class page</a>: join your class with the class code and see classmates\' answers.</p>'+
       conflictHTML()+backupHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';
@@ -318,3 +321,34 @@ window.addEventListener('storage',function(e){
   var next;try{next=JSON.parse(e.newValue)}catch(x){return}
   if((next.owner||'')!==S.owner||(next.tok||'')!==(S.tok||'')){stashDraft();replaceState(next);render()}
 });
+
+var PHOTO={busy:false,msg:''};
+function profileControlsHTML(){
+  return '<p class="note">Your profile picture is visible to classmates. Images are cropped to a square.</p><input id="profile-file" type="file" accept="image/jpeg,image/png,image/webp" hidden><div class="acts"><button class="nb ol" data-act="photo-upload" '+(PHOTO.busy?'disabled':'')+'>Change picture</button><button class="nb ol" data-act="photo-remove" '+(PHOTO.busy?'disabled':'')+'>Remove picture</button></div><p id="photo-status" role="status">'+esc(PHOTO.msg)+'</p>';
+}
+function photoMessage(msg){PHOTO.msg=msg;var e=$('#photo-status');if(e)e.textContent=msg}
+function photoSave(photo,epoch){
+  if(epoch!==SYNC.epoch)return;
+  PHOTO.busy=true;photoMessage('Saving picture...');
+  var task=SYNC.queue.catch(function(){}).then(function(){checkSession(epoch);return api('profile',{photo:photo})}).then(function(r){
+    checkSession(epoch);S.photo=r.photo;persist();PHOTO.busy=false;PHOTO.msg=photo?'Picture saved.':'Picture removed.';render();
+  }).catch(function(e){if(epoch!==SYNC.epoch)return;PHOTO.busy=false;photoMessage(e.message)});
+  SYNC.queue=task.catch(function(){});return task;
+}
+function photoRead(file){
+  if(!file||PHOTO.busy)return;
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>10*1024*1024)return photoMessage('Choose a JPEG, PNG or WebP image smaller than 10 MB.');
+  var epoch=SYNC.epoch,url=URL.createObjectURL(file),img=new Image();PHOTO.busy=true;photoMessage('Preparing picture...');
+  img.onerror=function(){URL.revokeObjectURL(url);if(epoch!==SYNC.epoch)return;PHOTO.busy=false;photoMessage('This image could not be opened.')};
+  img.onload=function(){
+    URL.revokeObjectURL(url);if(epoch!==SYNC.epoch)return;
+    try{
+      var canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+      var ctx=canvas.getContext('2d'),side=Math.min(img.naturalWidth,img.naturalHeight);
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,128,128);
+      ctx.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,128,128);
+      photoSave(canvas.toDataURL('image/jpeg',0.8),epoch);
+    }catch(e){PHOTO.busy=false;photoMessage('This image could not be prepared. Choose another image.')}
+  };
+  img.src=url;
+}

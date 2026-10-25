@@ -129,7 +129,7 @@ function cvPartBody(bankId,key,qn,pi,list){
             (p.why?'<br><span class="mut">'+esc(p.why)+'</span>':'')+'</li>';
         }).join('')+'</ul></div>';
     }
-    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+esc(author)+'</span><span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+'</span><span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
       (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+
       ptsHTML+'</div>';
   }).join('');

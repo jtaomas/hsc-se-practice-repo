@@ -233,9 +233,20 @@ module.exports = async (req, res) => {
     if (!sess) return fail(401, 'Your sign-in has expired. Sign in again.');
     const ppath = 'progress/' + sess.id + '.json';
 
+    if (p.action === 'profile') {
+      const photo = p.photo;
+      if (typeof photo !== 'string' || photo.length > 44000 || (photo && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))) return fail(400, 'Choose a JPEG, PNG or WebP image using the photo picker.');
+      if (photo) {
+        const bytes = Buffer.from(photo.split(',')[1], 'base64');
+        if (bytes.length < 4 || bytes[0] !== 255 || bytes[1] !== 216 || bytes[bytes.length - 2] !== 255 || bytes[bytes.length - 1] !== 217) return fail(400, 'The profile picture is invalid.');
+      }
+      await updateRecord('profiles/' + sess.id + '.json', () => ({ photo }));
+      return res.status(200).json({ ok: true, photo });
+    }
+
     if (p.action === 'load') {
       const data = await readJSON(ppath);
-      return res.status(200).json(Object.assign({ email: sess.email }, progressView(data)));
+      return res.status(200).json(Object.assign({ email: sess.email, photo: ((await readJSON('profiles/' + sess.id + '.json')) || {}).photo || '' }, progressView(data)));
     }
     if (p.action === 'save') {
       const incoming = p.data || {};

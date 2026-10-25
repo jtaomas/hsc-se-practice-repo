@@ -16,6 +16,18 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   assert.equal((await call({action:'login',email:'a.b@student.det.nsw.edu.au',password:'incorrect-test-value'})).c,401);
   assert.equal((await call({action:'login',email:'nobody@example.test',password:'incorrect-test-value'})).c,401);
   assert.equal((await call({action:'load'})).c,401);
+  const photo = 'data:image/jpeg;base64,/9j/2Q==';
+  assert.equal((await call({action:'profile',photo})).c,401);
+  for (const invalid of ['https://example.test/photo.jpg', 'data:image/svg+xml;base64,AAAA', 'data:image/jpeg;base64,AAAA', photo+'A'.repeat(44000), null]) {
+    assert.equal((await call({action:'profile',photo:invalid},tok)).c,400);
+  }
+  assert.equal((await call({action:'profile',photo,email:'someoneelse@example.test'},tok)).c,200);
+  assert.equal((await call({action:'load'},tok)).j.photo,photo);
+  const second = await call({action:'signup',email:'profile-other@example.test',password:'synthetic-test-value'});
+  assert.equal((await call({action:'load'},second.j.token)).j.photo,'');
+  assert.equal((await call({action:'profile',photo:''},tok)).c,200);
+  assert.equal((await call({action:'load'},tok)).j.photo,'');
+
   assert.equal((await call({action:'load'},tok.slice(0,-3)+'abc')).c,401);
   const [body,mac]=tok.split('.');
   const forged=Buffer.from(JSON.stringify({id:'x',email:'e',exp:Date.now()+1e9})).toString('base64url')+'.'+mac;

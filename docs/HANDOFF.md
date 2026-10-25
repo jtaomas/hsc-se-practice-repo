@@ -100,3 +100,7 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - AI marking block (`aiBlock` in `public/ai.js`) shows one sentence of summary, up to 2 "Earned" and 2 "To gain" bullets. Advice, criterion evidence, losses, quality, provenance and re-mark sit in one collapsed "Details" drawer. It no longer repeats the score; the score shows once in the part header (or the question badge in My mistakes).
 - My mistakes shows the sample answer open by default, tighter list and detail spacing (CSS block "Concise My mistakes" at the end of `style.css`).
 - Class model answer builds automatically (`cvAutoBuild` in `public/classview.js`) for any part in view with 2+ shared answers, once per visit (cached server-side). It sits above the class answers; main points and gaps are in a collapsed drawer.
+
+## Account profile pictures
+
+Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128×128 JPEG in the browser. Authenticated `profile` requests store only the session owner’s picture at `profiles/<id>.json`; an empty picture removes it. The server caps the data URL at 44,000 characters and rejects external URLs, SVG and non-JPEG payloads. No credentials or progress are changed. Account load returns the picture; class membership reads attach it to overview and answer rows. Browser account epochs and the sync queue protect against stale uploads after sign-out or account changes. Tests cover authentication, validation, isolation, sharing, upload, reload and removal.

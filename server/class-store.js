@@ -106,7 +106,7 @@ function createClassStore(options) {
     const ids = (listed.blobs || []).map(b => String(b.pathname).slice('class/members/'.length).replace(/\.json$/, '')).filter(id => ID.test(id)).slice(0, MAX_MEMBERS);
     const out = [];
     for (let i = 0; i < ids.length; i += 8) {
-      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => { const m = await getMember(id); return m ? { id, name: m.name, joined: m.joined } : null; }));
+      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => { const m = await getMember(id); const profile = m ? await read('profiles/' + id + '.json') : null; return m ? { id, name: m.name, joined: m.joined, photo: (profile && profile.data.photo) || '' } : null; }));
       rows.forEach(r => { if (r) out.push(r); });
     }
     return out.sort((a, b) => a.joined - b.joined || a.id.localeCompare(b.id));

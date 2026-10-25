@@ -46,17 +46,86 @@ function cvApi(body){
 function cvBanks(){return BANKS.filter(function(b){return !b.hidden&&!b.archived})}
 function cvOpenItem(it){return it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'}
 function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||'');return (d.textContent||'').replace(/\s+/g,' ').trim()}
-function cvStatus(){
-  if(CV.st!==null||CV.loadSt||!S.tok)return Promise.resolve();
+var CV_CACHE_KEY = 'sehsc-cv-cache';
+function loadCVCache(){
+  try {
+    var raw = localStorage.getItem(CV_CACHE_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.over) CV.over = parsed.over;
+        if (parsed.roster) CV.roster = parsed.roster;
+        if (parsed.st) CV.st = parsed.st;
+        CV.overAt = parsed.overAt || 0;
+      }
+    }
+  } catch(e){}
+}
+function saveCVCache(){
+  try {
+    localStorage.setItem(CV_CACHE_KEY, JSON.stringify({
+      over: CV.over,
+      roster: CV.roster,
+      st: CV.st,
+      overAt: CV.overAt || Date.now()
+    }));
+  } catch(e){}
+}
+loadCVCache();
+
+function cvClearCache(){
+  try{localStorage.removeItem(CV_CACHE_KEY)}catch(e){}
+}
+
+function cvOverview(){
+  if(!S.tok)return Promise.resolve();
+  return cvApi({action:'overview'}).then(function(o){
+    var prev=JSON.stringify(CV.over);
+    CV.over=o;
+    CV.overAt=Date.now();
+    saveCVCache();
+    if(prev!==JSON.stringify(o))cvDraw();
+    return o;
+  }).catch(function(){});
+}
+
+function cvStatus(force){
+  if(force){cvClearCache();CV.st=null}
+  if(CV.loadSt||!S.tok)return Promise.resolve();
   CV.loadSt=true;
-  return cvApi({action:'status'}).then(function(r){CV.st=r;if(r.admin)cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(e){CV.amsg=e.message});return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o;CV.overAt=Date.now()}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
+  var statusReq=cvApi({action:'status'});
+  var needOver=CV.st?!!CV.st.member:(CV.over!==null||!!S.classCode);
+  var overReq=needOver?cvOverview():Promise.resolve();
+
+  return statusReq.then(function(r){
+    CV.st=r;
+    saveCVCache();
+    if(r.admin)cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(e){CV.amsg=e.message});
+    if(r.member){
+      var tasks=[cvApi({action:'roster'}).then(function(o){CV.roster=o;saveCVCache();cvDraw()}).catch(function(){})];
+      if(!needOver)tasks.push(cvOverview());
+      return Promise.all(tasks);
+    }
+    return null;
+  }).catch(function(e){
+    if(CV.st===null)CV.st={configured:true,member:false};
+    CV.msg=e.message;
+  }).then(function(){
+    return overReq;
+  }).then(function(){
+    CV.loadSt=false;
+    saveCVCache();
+    cvDraw();
+  });
 }
 function cvAutoStatus(){
   if(!S.tok||/[?&]archive=1\b/.test(location.search))return;
-  if(CV.st===null&&!CV.loadSt)cvStatus();
-  else if(CV.st&&CV.st.member&&!CV.loadSt&&(!CV.overAt||Date.now()-CV.overAt>20000)){
-    CV.overAt=Date.now();
-    cvApi({action:'overview'}).then(function(o){CV.over=o;cvDraw()}).catch(function(){});
+  if(CV.st===null&&!CV.loadSt){
+    cvStatus();
+  }else if(!CV.loadSt&&(!CV.overAt||Date.now()-CV.overAt>20000)){
+    if(!CV.st||CV.st.member||CV.over!==null||S.classCode){
+      cvOverview();
+    }
   }
 }
 function cvLoadAnswers(id,quiet){
@@ -90,7 +159,7 @@ function cvAutoBuild(b){
 }
 /* Called after a question is drawn: loads the class state once and keeps the panels fresh. */
 function classEnsure(b){
-  if(!S.tok||!b||!document.querySelector('.cvslot'))return;
+  if(!S.tok||!b||!document.querySelector('.cvslot')||/[?&]archive=1\b/.test(location.search))return;
   if(CV.st===null){if(!CV.loadSt)cvStatus().then(function(){classEnsure(b)});return}
   if(CV.st.member&&(CV.ansBank!==b.id||Date.now()-CV.ansAt>60000)&&!CV.loadAns)cvLoadAnswers(b.id,CV.ansBank===b.id);
   cvAutoBuild(b);
@@ -113,11 +182,11 @@ function classSlot(b,n,i){
   return '<div class="cvslot" data-b="'+esc(b.id)+'" data-n="'+n+'" data-i="'+i+'">'+cvSlotInner(b,n,i)+'</div>';
 }
 function cvSlotInner(b,n,i){
-  if(CV.st===null)return '<div class="aib"><b>Class answers.</b> Loading...</div>';
+  if(CV.st===null)return '<div class="cv-skel-slot cv-shimmer"><div class="cv-skel-line w40" style="height:14px"></div><div class="cv-skel-line w80" style="height:12px;margin-top:8px"></div></div>';
   if(!CV.st.configured)return '';
   if(!CV.st.member)return '<div class="aib"><b>Class answers.</b> <a href="#/class">Join your class</a> with the class code to see what classmates wrote for this part.</div>';
   if(CV.msg&&CV.ansBank!==b.id)return '<div class="aib bad"><b>Class answers.</b> '+esc(CV.msg)+'</div>';
-  if(CV.ansBank!==b.id||!CV.ans)return '<div class="aib"><b>Class answers.</b> Loading...</div>';
+  if(CV.ansBank!==b.id||!CV.ans)return '<div class="cv-skel-slot cv-shimmer"><div class="cv-skel-line w40" style="height:14px"></div><div class="cv-skel-line w80" style="height:12px;margin-top:8px"></div></div>';
   var key=n+'.'+i;
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
 }
@@ -554,9 +623,40 @@ document.addEventListener('change',function(ev){
   var f=el.files&&el.files[0];el.value='';cvCropFile(f,CV.photoFor);
 });
 function cvPg(inner){return '<div class="pg"><h1 class="pt">Class</h1>'+inner+'</div>'}
+function cvClassSkeletonHTML(){
+  var rows='';
+  for(var i=0;i<4;i++){
+    rows+='<li class="cv-person"><div class="cv-prow">'+
+      '<span class="cv-skel-avatar cv-shimmer"></span>'+
+      '<div class="cv-skel-col"><div class="cv-skel-line cv-shimmer '+(i%2===0?'w40':'w60')+'" style="height:14px"></div><div class="cv-skel-line cv-shimmer w20" style="height:10px"></div></div>'+
+      '<span class="cv-skel-btn cv-shimmer" style="width:72px;height:28px;margin-left:auto"></span>'+
+      '</div></li>';
+  }
+  var papers=cvBanks().map(function(b){
+    return '<div class="cv-skel-paper cv-shimmer"><div class="cv-skel-line w80" style="height:14px"></div><div class="cv-skel-line w40" style="height:11px"></div></div>';
+  }).join('');
+  return '<div class="cv-skel-wrap" aria-busy="true" aria-label="Loading your class">'+
+    '<div class="cv-loading-bar"><span class="cv-spinner"></span><span>Loading your class...</span></div>'+
+    '<div class="feature cv-skel-feature">'+
+      '<div class="cv-skel-head-row"><span class="cv-skel-pill cv-shimmer"></span><span class="cv-skel-line cv-shimmer w30" style="margin:0;height:16px"></span></div>'+
+      '<div class="cv-skel-line cv-shimmer w95"></div>'+
+      '<div class="cv-skel-line cv-shimmer w80"></div>'+
+      '<div class="cv-skel-line cv-shimmer w60"></div>'+
+      '<div class="acts" style="margin-top:14px"><span class="cv-skel-btn cv-shimmer"></span></div>'+
+    '</div>'+
+    '<h2 class="pt" style="margin-top:18px"><span class="cv-skel-line cv-shimmer w20" style="display:inline-block;height:22px;margin:0"></span></h2>'+
+    '<ul class="cv-people cv-skel-people">'+rows+'</ul>'+
+    '<h2 class="pt" style="margin-top:22px"><span class="cv-skel-line cv-shimmer w20" style="display:inline-block;height:22px;margin:0"></span></h2>'+
+    '<div class="cv-skel-line cv-shimmer w60" style="margin-bottom:14px"></div>'+
+    '<div class="cv-skel-acts">'+papers+'</div>'+
+  '</div>';
+}
 function cvHTML(){
   if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
-  if(CV.st===null)return cvPg('<div class="feature"><p>Loading your class...</p></div>'+(CV.msg?'<p class="mut">'+esc(CV.msg)+'</p>':''));
+  if(CV.st===null){
+    cvInitCache();
+    if(CV.st===null)return cvPg(cvClassSkeletonHTML()+(CV.msg?'<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>':''));
+  }
   if(!CV.st.configured)return cvPg('<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>');
   if(!CV.st.member)return cvPg(cvJoinHTML()+cvAdminHTML());
   var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
@@ -625,7 +725,12 @@ document.addEventListener('click',function(ev){
   if(a==='join'){
     var nm=(document.getElementById('cvname')||{}).value||'',cd=(document.getElementById('cvcode')||{}).value||'';
     CV.joining=true;CV.msg='';cvDraw();
-    cvApi({action:'join',name:nm,code:cd}).then(function(){CV.st=null;CV.joining=false;cvDraw();classBind()}).catch(function(e){CV.joining=false;CV.msg=e.message;cvDraw()});
+    cvApi({action:'join',name:nm,code:cd}).then(function(r){
+      if(!CV.st)CV.st={configured:true};
+      CV.st.member=true;CV.st.name=r&&r.name||nm;CV.joining=false;
+      cvSaveCache();cvDraw();
+      cvStatus(true).then(classBind);
+    }).catch(function(e){CV.joining=false;CV.msg=e.message;cvDraw()});
     return;
   }
   if(a==='rename'){

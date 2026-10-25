@@ -77,14 +77,35 @@ function createHandler(deps) {
     return { summary, problems: problems.slice(0, 4) };
   }
 
+  function parseBlobData(raw) {
+    if (!raw) return null;
+    const val = raw.body !== undefined ? (Buffer.isBuffer(raw.body) ? raw.body.toString('utf8') : raw.body) : raw;
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch (_) { return null; }
+    }
+    if (typeof val === 'object' && val !== null) {
+      return val.data !== undefined ? val.data : val;
+    }
+    return null;
+  }
+
   // Open-ended answers of every member for one paper, in a fixed order.
   async function classAnswers(bank, me) {
     const members = await store.members();
     const parts = {};
     const rows = [];
+    const progressPaths = members.map(m => 'progress/' + m.id + '.json');
+    const progressMap = typeof store.getMany === 'function' ? await store.getMany(progressPaths).catch(() => null) : null;
     for (let i = 0; i < members.length; i += 6) {
       const batch = members.slice(i, i + 6);
-      const papers = await Promise.all(batch.map(m => store.paperOf(m.id, bank.id).catch(() => null)));
+      const papers = progressMap
+        ? batch.map(m => {
+            const raw = progressMap.get('progress/' + m.id + '.json');
+            const d = parseBlobData(raw);
+            const p = d && d.u && d.u[bank.id];
+            return p && typeof p === 'object' ? p : null;
+          })
+        : await Promise.all(batch.map(m => store.paperOf(m.id, bank.id).catch(() => null)));
       batch.forEach((m, k) => rows.push({ member: m, paper: papers[k] }));
     }
     // Practice answers are shared as they are saved and exam answers once submitted. An exam that is still being sat stays private.
@@ -122,8 +143,44 @@ function createHandler(deps) {
       if (p.action === 'status') {
         const member = configured ? await store.getMember(sess.id) : null;
         const sys = isSystemAdmin(sess), cls = isClassAdmin(sess);
-        const out = { configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: sys };
+        const count = member ? (typeof store.memberCount === 'function' ? await store.memberCount() : (await store.members()).length) : 0;
+        const out = { configured, member: !!member, name: member ? member.name : '', count, admin: sys };
         if (cls && !sys) out.classAdmin = true;
+        if (p.bundle && member) {
+          const list = await store.members();
+          out.roster = { admin: cls, members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) };
+          const counts = {}, papers = {};
+          for (let i = 0; i < list.length; i += 6) {
+            const slice = list.slice(i, i + 6);
+            const done = await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
+            slice.forEach((m, idx) => {
+              const u = (done[idx] && done[idx].u) || {};
+              banksOf().forEach(b => {
+                if (b.archived) return;
+                const sp = u[b.id];
+                if (sp && sp.done) counts[b.id] = (counts[b.id] || 0) + 1;
+                if (!sp) return;
+                const isDone = !!sp.done, hasStart = !!sp.start, hasUpd = !!sp.upd;
+                if (!isDone && !hasStart && !hasUpd) return;
+                papers[b.id] = papers[b.id] || [];
+                const dur = typeof b.duration === 'number' ? b.duration : (b.duration === 'mini' ? 20 * 60 : 3 * 3600);
+                const isWorking = hasStart && !isDone && (clock() - sp.start < dur * 1000);
+                const isRecent = hasUpd && (clock() - sp.upd < 300000);
+                const isCurrent = isWorking || isRecent;
+                papers[b.id].push({
+                  id: m.id,
+                  name: m.name,
+                  photo: m.photo || '',
+                  mine: m.id === sess.id,
+                  status: isDone ? 'Submitted' : 'In progress',
+                  current: isDone ? false : isCurrent,
+                  score: isDone ? partMark(sp, '1.0', 1) : null
+                });
+              });
+            });
+          }
+          out.overview = { members: list.length, counts, papers };
+        }
         return res.status(200).json(out);
       }
       if (p.action === 'join') {

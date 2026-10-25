@@ -34,6 +34,28 @@ function create(config) {
   });
   const doFetch = (...a) => (config.fetch || fetch)(...a);
   let ready = null;
+  const cacheEnabled = config.cache !== undefined ? !!config.cache : !config.fetch;
+  const cacheTTL = typeof config.cacheTTL === 'number' ? config.cacheTTL : 5000;
+  const cache = new Map();
+
+  function cacheSet(path, value) {
+    if (!cacheEnabled) return;
+    if (cache.size >= 1000) cache.delete(cache.keys().next().value);
+    cache.set(path, value);
+  }
+  function cacheGet(path) {
+    if (!cacheEnabled) return null;
+    const item = cache.get(path);
+    if (!item) return null;
+    if (Date.now() > item.expires) {
+      cache.delete(path);
+      return null;
+    }
+    return item;
+  }
+  function cacheDelete(path) {
+    cache.delete(path);
+  }
 
   async function sql(statement, params, signal, retrySafe = true) {
     checkSignal(signal);
@@ -81,8 +103,21 @@ function create(config) {
   }
   async function init(signal) {
     checkSignal(signal);
-    if (!ready) ready = sql(SCHEMA, [], signal).catch(e => { ready = null; throw e; });
-    await ready; checkSignal(signal);
+    const globalInit = config.tableInitialized ||
+                       process.env.D1_TABLE_INITIALIZED === '1' ||
+                       process.env.D1_TABLE_INITIALIZED === 'true' ||
+                       (globalThis.__d1TableInitialized && !config.fetch);
+    if (globalInit) {
+      if (!ready) ready = Promise.resolve();
+      return;
+    }
+    if (!ready) {
+      ready = sql(SCHEMA, [], signal).then(() => {
+        globalThis.__d1TableInitialized = true;
+      }).catch(e => { ready = null; throw e; });
+    }
+    await ready;
+    checkSignal(signal);
   }
   const encode = (value) => {
     const buf = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
@@ -94,10 +129,73 @@ function create(config) {
 
   async function get(path, options) {
     const signal = options && options.abortSignal;
+    const skipCache = !cacheEnabled || (options && options.noCache);
+    if (!skipCache && typeof path === 'string') {
+      const cached = cacheGet(path);
+      if (cached) {
+        checkSignal(signal);
+        return { statusCode: 200, stream: Readable.from([cached.body]), blob: { etag: cached.etag, pathname: path } };
+      }
+    }
     await init(signal);
     const r = await sql('SELECT body, etag FROM blobs WHERE path = ?', [path], signal);
     if (!r.rows.length) return null;
-    return { statusCode: 200, stream: Readable.from([decode(r.rows[0].body)]), blob: { etag: String(r.rows[0].etag), pathname: path } };
+    const body = decode(r.rows[0].body);
+    const etag = String(r.rows[0].etag);
+    if (!skipCache && typeof path === 'string') {
+      cacheSet(path, { body, etag, expires: Date.now() + cacheTTL });
+    }
+    return { statusCode: 200, stream: Readable.from([body]), blob: { etag, pathname: path } };
+  }
+  async function getMany(paths, options) {
+    paths = [].concat(paths || []).filter(p => typeof p === 'string');
+    if (!paths.length) return new Map();
+    const signal = options && options.abortSignal;
+    const skipCache = !cacheEnabled || (options && options.noCache);
+    const results = new Map();
+    const missing = [];
+    if (!skipCache) {
+      for (const p of paths) {
+        if (results.has(p)) continue;
+        const cached = cacheGet(p);
+        if (cached) {
+          results.set(p, {
+            statusCode: 200,
+            body: cached.body,
+            blob: { etag: cached.etag, pathname: p }
+          });
+        } else if (!missing.includes(p)) {
+          missing.push(p);
+        }
+      }
+    } else {
+      for (const p of paths) {
+        if (!missing.includes(p)) missing.push(p);
+      }
+    }
+    if (!missing.length) {
+      checkSignal(signal);
+      return results;
+    }
+    await init(signal);
+    for (let i = 0; i < missing.length; i += 50) {
+      const chunk = missing.slice(i, i + 50);
+      const placeholders = chunk.map(() => '?').join(',');
+      const r = await sql('SELECT path, body, etag FROM blobs WHERE path IN (' + placeholders + ')', chunk, signal);
+      for (const row of r.rows) {
+        const body = decode(row.body);
+        const etag = String(row.etag);
+        if (!skipCache) {
+          cacheSet(row.path, { body, etag, expires: Date.now() + cacheTTL });
+        }
+        results.set(row.path, {
+          statusCode: 200,
+          body,
+          blob: { etag: String(row.etag), pathname: row.path }
+        });
+      }
+    }
+    return results;
   }
   async function put(path, value, options) {
     options = options || {};
@@ -115,6 +213,7 @@ function create(config) {
         if (!r.changes) throw new Error('This blob already exists');
       }
     } catch (error) {
+      cacheDelete(path);
       if (!error.uncertainMutation) throw error;
       checkSignal(signal);
       // A lost acknowledgement must not replay an increment, mistake our own
@@ -127,6 +226,10 @@ function create(config) {
       checkSignal(signal);
       if (observed.rows.length !== 1 || observed.rows[0].etag !== etag || observed.rows[0].body !== body) throw error;
     }
+    if (cacheEnabled && typeof path === 'string') {
+      const valBuf = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
+      cacheSet(path, { body: valBuf, etag, expires: Date.now() + cacheTTL });
+    }
     return { pathname: path, etag };
   }
   async function list(options) {
@@ -138,6 +241,7 @@ function create(config) {
   }
   async function del(paths, options) {
     paths = [].concat(paths || []).filter(p => typeof p === 'string');
+    for (const p of paths) cacheDelete(p);
     const signal = options && options.abortSignal;
     await init(signal);
     for (let i = 0; i < paths.length; i += 50) {
@@ -146,7 +250,7 @@ function create(config) {
     }
   }
   const configured = () => { const c = env(); return !!(c.account && c.database && c.token); };
-  return { get, put, list, del, configured, BlobPreconditionFailedError };
+  return { get, getMany, put, list, del, configured, BlobPreconditionFailedError };
 }
 
 module.exports = Object.assign(create(), { create, BlobPreconditionFailedError });

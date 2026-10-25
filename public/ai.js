@@ -8,7 +8,9 @@ function dbPlain(db){return Object.keys(db).map(function(n){var t=db[n];return '
 var KIND={tx:'written response',py:'Python program',ps:'pseudocode algorithm',sq:'SQL query',dr:'diagram'};
 function aiPayload(b,n,i,ans){
   var it=b.qs[n-1].it[i],a=arguments.length>3?ans:BS(b.id).ans[n+'.'+i];
-  return {bankId:b.id,questionNumber:n,partIndex:i,answer:it.t==='tx'?plain(a):it.t==='dr'?xdScene(a&&a.e):it.t==='ft'?JSON.parse(JSON.stringify(a||{})):String(a||'')};
+  var val=it.t==='tx'?plain(a):it.t==='dr'?xdScene(a&&a.e):it.t==='ft'?JSON.parse(JSON.stringify(a||{})):String(a||'');
+  if(typeof val==='string')val=val.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  return {bankId:b.id,questionNumber:n,partIndex:i,answer:val};
 }
 function aiStamp(b,n,i,ans){
   var q=b.qs[n-1],payload=arguments.length>3?aiPayload(b,n,i,ans):aiPayload(b,n,i);

@@ -25,7 +25,15 @@ function rtButtonHTML(b,n,i,from){
   return '<a class="nb sm rtbtn'+(again?' ol':'')+'" href="'+rtHref(b,n,i,from)+'">'+(again?'Retry again':'Retry')+'</a>';
 }
 function rtStatusHTML(b,n,i){
-  var r=rtRes(b,n,i);if(!r||!rtWrong(b,n,i))return '';
+  var r=rtRes(b,n,i);
+  if(!r){
+    var a=rtAnswer(b,n,i);
+    if(a!=null&&isAns(b.qs[n-1].it[i],a)&&rtWrong(b,n,i)){
+      return '<p class="rtst" style="background:#f0f4f8;border:1px solid #c9c9c9;border-left:4px solid #002664;color:#002664;padding:6px 10px;margin:8px 0;border-radius:3px"><b>Retry draft saved.</b> Your retry answer is saved in this browser. Click &ldquo;Retry&rdquo; above and then &ldquo;Check my answer&rdquo; to assess it.</p>';
+    }
+    return '';
+  }
+  if(!rtWrong(b,n,i))return '';
   if(r.full)return '<p class="rtst rtok"><b>Retried: full marks.</b> You got '+r.m+' / '+r.m+' on a retry'+(r.at&&typeof fmtD==='function'?' ('+fmtD(r.at)+')':'')+'. Your exam mark stays the same.</p>';
   return '<p class="rtst bad"><b>Last retry: '+(r.g==null?'not marked':r.g+' / '+r.m)+'.</b> Not full marks yet.</p>';
 }
@@ -139,7 +147,24 @@ function rtCheck(){
   var a=rtAnswer(b,n,i);delete RTERR[key];
   if(AUTO[it.t])rtStore(b,n,i,{g:score(b,n,i,a).g});
   else if(!isAns(it,a))rtStore(b,n,i,{g:0});
-  else if(!S.tok)RTSELF[key]=1;
+  else if(!S.tok){
+    if(it.t==='sq'&&b.qs[n-1].db&&typeof runSQL==='function'&&typeof sameSQLResult==='function'){
+      RTRUN[key]=1;rtRefresh();
+      Promise.all([runSQL(b.qs[n-1].db,a,k),runSQL(b.qs[n-1].db,it.model,k)]).then(function(res){
+        delete RTRUN[key];
+        if(sameSQLResult(res[0],res[1],it)){
+          rtStore(b,n,i,{g:it.m,stamp:rtStampOf(b,n,i),self:1});
+        }else{
+          RTSELF[key]=1;
+        }
+        rtRefresh();
+      }).catch(function(){
+        delete RTRUN[key];RTSELF[key]=1;rtRefresh();
+      });
+      return;
+    }
+    RTSELF[key]=1;
+  }
   else{rtMarkAI(b,n,i);return}
   rtRefresh();
 }

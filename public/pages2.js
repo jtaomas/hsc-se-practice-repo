@@ -33,15 +33,39 @@ function papersPage(){
 /* What's wrong comes first, then your answer, then the sample answer. */
 function ansPreview(m){
   var it=m.it,bs=BS(m.b.id),k=m.n+'.'+m.i,a=bs.ans[k],lost=m.s.m-m.s.g;
-  if(AUTO[it.t])return '<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
-  var h=aiBlock(m.b,m.n,m.i,it,bs,k,a,m.s);
-  if(lost&&h.indexOf('wrongbox')<0)h='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5><p>'+(isAns(it,a)?'There is no AI feedback for this answer. Compare your answer with the sample answer and the marking criteria below to find what is missing.':'You did not answer this part.')+'</p></div>'+h;
-  h+='<p class="gh"><b>Your answer</b></p>';
-  if(!isAns(it,a))h+='<p class="mut">You did not answer this part.</p>';
-  else if(QT[it.t]&&QT[it.t].preview)h+=QT[it.t].preview(it,a);
-  else if(it.t==='tx')h+='<div class="yans">'+a+'</div>';
-  else if(it.t==='dr')h+='<pre class="yans">'+esc(xdText(a.e))+'</pre>';
-  else h+='<pre class="yans">'+esc(String(a))+'</pre>';
+  var r=typeof rtRes==='function'?rtRes(m.b,m.n,m.i):null;
+  var rta=typeof rtAnswer==='function'?rtAnswer(m.b,m.n,m.i):undefined;
+  var isFixed=!!(r&&r.full),hasRta=isAns(it,rta);
+  var h='';
+  if(isFixed){
+    h+='<div class="wrongbox rtok" style="background:#fff6d1;border:1px solid #e6c34d;border-left:6px solid #f2c200"><h5 style="color:#2b2100"><span>Fixed on retry</span><span class="wl" style="background:#f2c200;color:#2b2100">Full marks ('+r.m+' / '+r.m+')</span></h5><p>You corrected this mistake on retry'+(r.at&&typeof fmtD==='function'?' ('+fmtD(r.at)+')':'')+'. Your exam score remains '+m.s.g+' / '+m.s.m+'.</p></div>';
+  }else if(r){
+    h+='<div class="wrongbox"><h5><span>Retry in progress</span><span class="wl">'+(r.g==null?'Pending':r.g+' / '+r.m)+'</span></h5><p>Last retry earned '+(r.g==null?'no mark yet':r.g+' of '+r.m+' marks')+'. Exam mark: '+m.s.g+' / '+m.s.m+'. Keep trying to earn full marks.</p></div>';
+  }else if(hasRta){
+    h+='<div class="wrongbox" style="background:#f4f7fb;border:1px solid #c4d1e2;border-left:6px solid #002664"><h5 style="color:#002664"><span>Retry draft saved</span><span class="wl" style="background:#002664;color:#fff">Unchecked</span></h5><p>You have a saved retry draft. Click &ldquo;Retry&rdquo; above to test or check your answer.</p></div>';
+  }else if(AUTO[it.t]){
+    h+='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
+  }else{
+    var blk=aiBlock(m.b,m.n,m.i,it,bs,k,a,m.s);
+    if(lost&&blk.indexOf('wrongbox')<0)blk='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5><p>'+(isAns(it,a)?'There is no AI feedback for this answer. Compare your answer with the sample answer and the marking criteria below to find what is missing.':'You did not answer this part.')+'</p></div>'+blk;
+    h+=blk;
+  }
+
+  function renderAns(ansVal,isRetry){
+    if(!isAns(it,ansVal))return '<p class="mut">You did not answer this part'+(isRetry?' on retry':' in the exam')+'.</p>';
+    if(QT[it.t]&&QT[it.t].preview)return QT[it.t].preview(it,ansVal);
+    if(it.t==='tx')return '<div class="yans">'+ansVal+'</div>';
+    if(it.t==='dr')return '<pre class="yans">'+esc(xdText(ansVal&&ansVal.e))+'</pre>';
+    if(it.t==='mc')return '<div class="yans">Selected: <b>'+esc(it.o[ansVal]||ansVal)+'</b></div>';
+    return '<pre class="yans">'+esc(String(ansVal))+'</pre>';
+  }
+
+  if(hasRta){
+    h+='<p class="gh"><b>'+(isFixed?'Your retried answer (fixed &middot; '+r.m+' / '+r.m+')':'Your latest retry answer')+'</b></p>'+renderAns(rta,true);
+    h+='<details class="xdd"><summary>Original exam answer ('+m.s.g+' / '+m.s.m+')</summary>'+renderAns(a,false)+'</details>';
+  }else{
+    h+='<p class="gh"><b>Your answer</b></p>'+renderAns(a,false);
+  }
   h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }

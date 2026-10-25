@@ -11,6 +11,14 @@ function memory() {
   class Pre extends Error { constructor() { super('Precondition failed'); this.name = 'BlobPreconditionFailedError'; } }
   const store = {
     async get(path) { const d = map.get(path); return d ? { statusCode: 200, stream: (async function* () { yield Buffer.from(d.body); })(), blob: { etag: d.etag } } : null; },
+    async getMany(paths) {
+      const out = new Map();
+      for (const p of [].concat(paths || [])) {
+        const d = map.get(p);
+        if (d) out.set(p, { statusCode: 200, body: Buffer.from(d.body), blob: { etag: d.etag, pathname: p } });
+      }
+      return out;
+    },
     async put(path, body, o) {
       const cur = map.get(path);
       if (o.ifMatch && (!cur || cur.etag !== o.ifMatch)) throw new Pre();

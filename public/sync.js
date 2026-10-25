@@ -21,18 +21,23 @@ function syncStatusHTML(){
 function syncPayload(){return {v:2,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S.fg,bg:S.bg,classCode:S.classCode||''}}
 function mergeRemote(r,revisions){
   r=r||{};var remote=r.u||{};revisions=revisions||{};
+  var changed=false;
   Object.keys(Object.assign({},S.u,remote,revisions)).forEach(function(id){
     if(S.pending[id]){
-      if(!S.revisions[id]&&revisions[id])S.revisions[id]=revisions[id];
+      if(!S.revisions[id]&&revisions[id]){S.revisions[id]=revisions[id];changed=true}
       return;
     }
-    if(remote[id]){if(JSON.stringify(S.u[id])!==JSON.stringify(remote[id]))S.u[id]=remote[id]}else delete S.u[id];
-    S.revisions[id]=revisions[id]||null;
+    if(remote[id]){if(JSON.stringify(S.u[id]||null)!==JSON.stringify(remote[id])){S.u[id]=remote[id];changed=true}}else if(S.u[id]!==undefined){delete S.u[id];changed=true}
+    if((S.revisions[id]||null)!==(revisions[id]||null)){S.revisions[id]=revisions[id]||null;changed=true}
   });
-  (r.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
-  if((r.ts||0)>(S.ts||0)){S.font=r.font||0;S.fg=r.fg||0;S.bg=r.bg||0}
-  if(r.classCode!==undefined)S.classCode=r.classCode||'';
+  (r.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at})){S.hist.push(h);changed=true}});
+  if((r.ts||0)>(S.ts||0)){
+    if(S.font!==(r.font||0)||S.fg!==(r.fg||0)||S.bg!==(r.bg||0))changed=true;
+    S.font=r.font||0;S.fg=r.fg||0;S.bg=r.bg||0;
+  }
+  if(r.classCode!==undefined&&S.classCode!==(r.classCode||'')){S.classCode=r.classCode||'';changed=true}
   persist();
+  return changed;
 }
 function syncObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
 function syncSame(a,b){
@@ -121,23 +126,32 @@ function acceptAccount(r,signup){
 }
 function checkSession(epoch){if(epoch!==SYNC.epoch){var e=new Error('Account changed.');e.stale=true;throw e}}
 function queuedSync(load){
-  if(!S.tok)return Promise.resolve();
-  var epoch=SYNC.epoch,token=S.tok;
+  if(!S.tok)return Promise.resolve(false);
+  var epoch=SYNC.epoch,token=S.tok,changed=false;
   var task=SYNC.queue.catch(function(){}).then(function(){
     checkSession(epoch);SYNC.state='saving';refreshAcct();
-    return load?api('load',{},token).then(function(r){checkSession(epoch);S.photo=r.photo||'';mergeRemote(r.data,r.revisions);refreshAcct();var av=$('#profile-preview');if(av)av.innerHTML=profileAvatarHTML(S.photo,S.ae,54,S.ae)}):null;
+    return load?api('load',{},token).then(function(r){
+      checkSession(epoch);
+      if(S.photo!==(r.photo||'')){S.photo=r.photo||'';changed=true}
+      var prevSnap=JSON.stringify(syncPayload());
+      var mChanged=mergeRemote(r.data,r.revisions);
+      if(mChanged||prevSnap!==JSON.stringify(syncPayload()))changed=true;
+      refreshAcct();var av=$('#profile-preview');if(av)av.innerHTML=profileAvatarHTML(S.photo,S.ae,54,S.ae);
+    }):null;
   }).then(function(){
     checkSession(epoch);
     if(Object.keys(SYNC.conflicts).length)throw new Error('Choose which paper version to keep on the Account page.');
     var sent=Object.assign({},S.pending),changes=Object.keys(sent).filter(function(id){return /^(?:[1-9]|1[0-9])$/.test(id)});
     if(!changes.length&&!load){
       SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
-      return;
+      return changed;
     }
     return api('save',{data:syncPayload(),changes:changes,revisions:S.revisions},token).then(function(r){
       checkSession(epoch);
       changes.forEach(function(id){S.revisions[id]=(r.revisions||{})[id]||null;if(S.pending[id]===sent[id])delete S.pending[id]});
-      mergeRemote(r.data,r.revisions);SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
+      if(mergeRemote(r.data,r.revisions))changed=true;
+      SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
+      return changed;
     }).catch(function(e){
       checkSession(epoch);
       var d=e.details;
@@ -152,10 +166,10 @@ function queuedSync(load){
             SYNC.conflicts[id]={data:rem,revision:(d.revisions&&d.revisions[id])||null};
           }
         });
-        mergeRemote(d.data,d.revisions);
+        if(mergeRemote(d.data,d.revisions))changed=true;
         if(!Object.keys(SYNC.conflicts).length){
           SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
-          return;
+          return changed;
         }
         if(location.hash==='#/account')render();
       }
@@ -166,7 +180,7 @@ function queuedSync(load){
   SYNC.queue=task.catch(function(){});return task;
 }
 function pushRemote(){return queuedSync(false)}
-function syncNow(){return queuedSync(true).then(function(){if(CUR.b===null&&/^#?\/?(papers|mistakes)?$/.test(location.hash))render()}).catch(syncFail)}
+function syncNow(){return queuedSync(true).then(function(changed){if(changed&&CUR.b===null&&/^#?\/?(papers|mistakes)?$/.test(location.hash))render()}).catch(syncFail)}
 function syncSoon(){
   if(!S.tok)return;
   clearTimeout(SYNC.tmr);

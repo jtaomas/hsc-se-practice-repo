@@ -191,17 +191,18 @@ function getPaperStudents(b){
     }
   }
 
-  if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
-    CV.over.papers[b.id].forEach(function(m){
+  var overPapers = (typeof CV !== 'undefined' && CV.over && CV.over.papers) ? (CV.over.papers[b.id] || CV.over.papers[bid]) : null;
+  if(overPapers && Array.isArray(overPapers)){
+    overPapers.forEach(function(m){
       var isMe = !!m.mine;
       if(!isMe || !list.some(function(item){return item.isMe})){
         var isSub = m.status === 'Submitted';
-        var status = isSub ? 'Submitted' : 'In progress';
+        var status = isSub ? 'Submitted' : (m.status === 'Sitting exam' ? 'Sitting exam' : 'In progress');
         var state = 'live';
         if(isSub){
           state = 'done';
         } else if(isMe){
-          state = isMyCurrentPaper(b.id) ? 'live' : 'working';
+          state = isMyCurrentPaper(bid) ? 'live' : 'working';
         } else {
           state = (m.current === false ? 'working' : 'live');
         }

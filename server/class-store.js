@@ -66,6 +66,36 @@ function createClassStore(options) {
   const configuredCode = () => normaliseCode(codeSource());
   const isPreconditionFailure = e => e && (e.name === 'BlobPreconditionFailedError' || /precondition|already exists/i.test(String(e.message)));
 
+  let _membersCache = null, _membersCacheAt = 0;
+  function invalidateMembers() { _membersCache = null; _membersCacheAt = 0; }
+
+  function parseJSON(entry) {
+    if (!entry) return null;
+    const raw = entry.body !== undefined ? (Buffer.isBuffer(entry.body) ? entry.body.toString('utf8') : entry.body) : entry;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch (_) { return null; }
+    }
+    if (typeof raw === 'object' && raw !== null) {
+      return raw.data !== undefined ? raw.data : raw;
+    }
+    return null;
+  }
+
+  async function getMany(paths) {
+    const store = await provider();
+    if (typeof store.getMany === 'function') {
+      return store.getMany(paths);
+    }
+    const map = new Map();
+    await Promise.all(paths.map(async p => {
+      const r = await read(p);
+      if (r && r.data != null) {
+        map.set(p, { statusCode: 200, body: Buffer.from(JSON.stringify(r.data)), blob: { etag: r.etag, pathname: p } });
+      }
+    }));
+    return map;
+  }
+
   async function read(path) {
     const store = await provider();
     const r = await store.get(path, { access: 'private', useCache: false });
@@ -121,6 +151,7 @@ function createClassStore(options) {
       if ((listed.blobs || []).length >= MAX_MEMBERS) throw error(409, 'class_full', 'The class is full.');
     }
     await update(path, current => ({ name: clean, joined: (current && current.joined) || now() }));
+    invalidateMembers();
     return { name: clean };
   }
   async function rename(id, name) {
@@ -128,27 +159,40 @@ function createClassStore(options) {
     if (!member) throw error(403, 'not_member', 'Join the class first.');
     const clean = cleanName(name);
     await update('class/members/' + id + '.json', current => Object.assign({}, current, { name: clean }));
+    invalidateMembers();
     return { name: clean };
   }
   async function leave(id) {
     if (!ID.test(id)) return;
     await (await provider()).del(['class/members/' + id + '.json']);
+    invalidateMembers();
+  }
+  async function memberCount() {
+    if (_membersCache && now() - _membersCacheAt < 20000) return _membersCache.length;
+    const store = await provider();
+    const listed = await store.list({ prefix: 'class/members/' });
+    return (listed.blobs || []).length;
   }
   async function members() {
+    if (_membersCache && now() - _membersCacheAt < 20000) return _membersCache;
     const store = await provider();
     const listed = await store.list({ prefix: 'class/members/' });
     const ids = (listed.blobs || []).map(b => String(b.pathname).slice('class/members/'.length).replace(/\.json$/, '')).filter(id => ID.test(id)).slice(0, MAX_MEMBERS);
+    if (!ids.length) { _membersCache = []; _membersCacheAt = now(); return []; }
+    const memberPaths = ids.map(id => 'class/members/' + id + '.json');
+    const profilePaths = ids.map(id => 'profiles/' + id + '.json');
+    const map = typeof store.getMany === 'function' ? await store.getMany([...memberPaths, ...profilePaths]) : await getMany([...memberPaths, ...profilePaths]);
     const out = [];
-    for (let i = 0; i < ids.length; i += 8) {
-      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => {
-        const m = await getMember(id);
-        if (!m) return null;
-        const profile = await read('profiles/' + id + '.json');
-        return { id, name: m.name, joined: m.joined, photo: (profile && profile.data && profile.data.photo) || '' };
-      }));
-      rows.forEach(r => { if (r) out.push(r); });
+    for (const id of ids) {
+      const m = parseJSON(map.get('class/members/' + id + '.json'));
+      if (!m || !m.name) continue;
+      const profile = parseJSON(map.get('profiles/' + id + '.json'));
+      out.push({ id, name: m.name, joined: m.joined, photo: (profile && profile.photo) || '' });
     }
-    return out.sort((a, b) => a.joined - b.joined || a.id.localeCompare(b.id));
+    const res = out.sort((a, b) => a.joined - b.joined || a.id.localeCompare(b.id));
+    _membersCache = res;
+    _membersCacheAt = now();
+    return res;
   }
   // One saved paper per member: u[bankId] from progress/<id>.json. Returned as stored; callers pick the fields they show.
   async function paperOf(id, bankId) {
@@ -157,6 +201,19 @@ function createClassStore(options) {
     return paper && typeof paper === 'object' ? paper : null;
   }
   async function papersOf(id) {
+    if (Array.isArray(id)) {
+      const ids = id.filter(x => ID.test(x));
+      if (!ids.length) return new Map();
+      const paths = ids.map(x => 'progress/' + x + '.json');
+      const store = await provider();
+      const map = typeof store.getMany === 'function' ? await store.getMany(paths) : await getMany(paths);
+      const out = new Map();
+      for (const memberId of ids) {
+        const d = parseJSON(map.get('progress/' + memberId + '.json'));
+        out.set(memberId, (d && d.u) || {});
+      }
+      return out;
+    }
     const r = ID.test(id) ? await read('progress/' + id + '.json') : null;
     return (r && r.data && r.data.u) || {};
   }
@@ -186,6 +243,7 @@ function createClassStore(options) {
   async function setPhoto(id, photo) {
     if (!(await getMember(id))) throw error(404, 'no_member', 'That person is not in the class.');
     await update('profiles/' + id + '.json', current => Object.assign({}, current, { photo }));
+    invalidateMembers();
     return { photo };
   }
 
@@ -219,11 +277,13 @@ function createClassStore(options) {
     const clean = cleanName(name);
     await update('users/' + id + '.json', cur => cur ? Object.assign({}, cur, { name: clean }) : null);
     if (await getMember(id)) await update('class/members/' + id + '.json', cur => Object.assign({}, cur, { name: clean }));
+    invalidateMembers();
     return { name: clean };
   }
   async function adminSetPhoto(id, photo) {
     await adminUser(id);
     await update('profiles/' + id + '.json', cur => Object.assign({}, cur, { photo }));
+    invalidateMembers();
     return { photo };
   }
   async function adminSetClass(id, on) {
@@ -234,6 +294,7 @@ function createClassStore(options) {
       const name = cleanName(u.name || String(u.email || '').split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
       await update('class/members/' + id + '.json', () => ({ name, joined: now() }));
     }
+    invalidateMembers();
     return { inClass: true };
   }
   async function memberProgress(id) {
@@ -299,10 +360,11 @@ function createClassStore(options) {
     const store = await provider();
     const backups = ((await store.list({ prefix: 'backup/' + id + '/' })).blobs || []).map(b => b.pathname);
     await store.del(['users/' + id + '.json', 'progress/' + id + '.json', 'profiles/' + id + '.json', 'class/members/' + id + '.json'].concat(backups));
+    invalidateMembers();
     return { deleted: true };
   }
 
-  return { configured, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  return { configured, list: async o => (await provider()).list(o), getMany, memberCount, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, cleanMarks, normaliseCode, QUOTA, MAX_MEMBERS, error };

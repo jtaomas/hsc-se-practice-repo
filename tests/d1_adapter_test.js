@@ -59,6 +59,10 @@ const read = async r => { const c = []; for await (const x of r.stream) c.push(B
   for (const p of ['backup/u1/2026-10-01.json', 'backup/u1/2026-10-02.json', 'backup/u10/2026-10-01.json', 'backup/u2/2026-10-01.json']) await s.put(p, '{}', {});
   const l = await s.list({ prefix: 'backup/u1/' });
   assert.deepEqual(l.blobs.map(b => b.pathname), ['backup/u1/2026-10-01.json', 'backup/u1/2026-10-02.json']);
+  const many = await s.getMany(['backup/u1/2026-10-02.json', 'missing.json', 'backup/u1/2026-10-01.json']);
+  assert.equal(many.size, 2);
+  assert.equal(many.get('backup/u1/2026-10-02.json').body.toString('utf8'), '{}');
+  assert.equal(many.get('missing.json'), undefined);
   await s.del(['backup/u1/2026-10-01.json', 'backup/u1/never-existed.json']);
   assert.equal((await s.list({ prefix: 'backup/u1/' })).blobs.length, 1);
   await s.del([]);

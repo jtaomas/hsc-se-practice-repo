@@ -61,7 +61,7 @@ function proposal(input) {
     assert.equal(offline.mode, 'offline_validation'); assert.equal(offline.trials.length, 0); assert.equal(offline.selectedActualMarks[0].mark, 3);
     let count = 0;
     const live = await evaluator.run(evaluator.parseArgs([...common, ...flags]), { apiKey: 'TEST_ONLY_NO_REAL_SECRET', fetch: async (_url, config) => {
-      assert.equal(_url, 'https://api.deepseek.com/chat/completions'); assert.equal(config.redirect, 'error');
+      assert.equal(_url, require('../server/ai-provider').current().endpoint); assert.equal(config.redirect, 'error');
       const body = JSON.parse(config.body), json = body.messages[1].content;
       for (const forbidden of ['LABEL_RATIONALE_SENTINEL', 'LABEL_FEEDBACK_SENTINEL', 'label_tag_sentinel', 'TEST_ONLY_NO_REAL_SECRET']) assert(!json.includes(forbidden));
       count++; const input = JSON.parse(json), value = count === 1 ? proposal(input) : require('./improvement_fixtures').coachApproval();

@@ -8,7 +8,9 @@ const MAX_NETWORK_ATTEMPTS = 6;
 const FORMAT_PROBLEMS = new Set(['invalid_json', 'invalid_json_duplicate_key', 'invalid_json_depth', 'proposal_schema', 'criterion_schema', 'criterion_coverage']);
 const { canonicalDigest } = require('./feedback-integrity');
 const { scoringModel, unavailableFeedback, scoreProblem, feedbackProblem, FEEDBACK_POLICY, QUALITY_FACTORS, evidenceCatalog, resolveEvidenceReferences } = require('./feedback-policy');
-const MODEL = 'deepseek-flash';
+const provider = require('./ai-provider');
+const PROVIDER = provider.current();
+const MODEL = PROVIDER.model;
 const HARNESS_VERSION = require('../public/marking-config').version;
 const LIMITS = Object.freeze({ stageMs: 120000, auditorMs: 105000, overallMs: 240000, maxTokens: 32768, requestBytes: 2 * 1024 * 1024, responseBytes: 1024 * 1024, resultBytes: 60 * 1024 });
 const PRECONNECT_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED']);
@@ -20,7 +22,7 @@ function transportCode(error) {
   for (const value of [error, error && error.cause]) if (value && TRANSPORT_CODES.has(value.code)) return value.code;
   return 'unknown';
 }
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const ENDPOINT = PROVIDER.endpoint;
 const AUDIT_CHECKS = Object.freeze({
   rubricAlignment: 'Both independent scoring cores support the same exact score and criterion assessments under the supplied rubric, with no invented requirement or unresolved scoring ambiguity.',
   evidenceGrounding: 'Credited evidence in both scoring cores is genuine and supports the claimed achievement; the selected feedback also uses genuine evidence in context.',
@@ -190,12 +192,12 @@ function confirmedProvenanceProblem(result) {
   if (result && result.audit && result.audit.resolution != null) return resolutionProvenanceProblem(result, false);
   if (!object(result) || result.status !== 'marked' || !Number.isInteger(result.mark) || result.mark < 0 || result.mark > 20 || !object(result.audit)) return 'confirmed_result_schema';
   const audit = result.audit;
-  if (audit.harnessVersion !== HARNESS_VERSION || audit.requestedModel !== MODEL) return 'confirmed_provenance_version';
+  if (audit.harnessVersion !== HARNESS_VERSION || !provider.knownModel(audit.requestedModel)) return 'confirmed_provenance_version';
   if (!object(audit.checks) || !['completed', 'modelMatch', 'outputSchema', 'evidenceSupported', 'blindAgreement', 'auditorApproved'].every(key => audit.checks[key] === true) ||
       !Array.isArray(audit.reasons) || audit.reasons.length) return 'confirmed_provenance_checks';
   const stages = ['marker1', 'marker2', 'auditor'];
-  if (!Array.isArray(audit.calls) || audit.calls.length !== stages.length || audit.calls.some((call, i) => !object(call) || call.stage !== stages[i] || call.status !== 'completed' || call.finishReason !== 'stop' || call.requestedModel !== MODEL || call.returnedModel !== MODEL || call.errorCode != null) ||
-      !Array.isArray(audit.returnedModels) || audit.returnedModels.length !== stages.length || audit.returnedModels.some(model => model !== MODEL)) return 'confirmed_provenance_calls';
+  if (!Array.isArray(audit.calls) || audit.calls.length !== stages.length || audit.calls.some((call, i) => !object(call) || call.stage !== stages[i] || call.status !== 'completed' || call.finishReason !== 'stop' || call.requestedModel !== audit.requestedModel || call.returnedModel !== audit.requestedModel || call.errorCode != null) ||
+      !Array.isArray(audit.returnedModels) || audit.returnedModels.length !== stages.length || audit.returnedModels.some(model => model !== audit.requestedModel)) return 'confirmed_provenance_calls';
   // Older synthetic/cache fixtures may omit optional transport metadata. When
   // supplied, it must account for every physical attempt without hiding retries.
   if (audit.networkAttempts != null || audit.calls.some(call => call.attemptCount != null || call.retryCause != null)) {
@@ -233,7 +235,7 @@ function resolutionProvenanceProblem(result, provisional) {
   const prefix = provisional ? 'provisional' : 'confirmed';
   if (!object(result) || result.status !== (provisional ? 'provisional' : 'marked') || !Number.isInteger(result.mark) || result.mark < 0 || result.mark > 20 || !object(result.audit)) return prefix + '_result_schema';
   const a = result.audit, resolution = provisional ? ['lower_mark_fallback'] : ['blind_agreement', 'adjudicated'];
-  if (a.harnessVersion !== HARNESS_VERSION || a.requestedModel !== MODEL || !resolution.includes(a.resolution)) return prefix + '_provenance_version';
+  if (a.harnessVersion !== HARNESS_VERSION || !provider.knownModel(a.requestedModel) || !resolution.includes(a.resolution)) return prefix + '_provenance_version';
   if (!object(a.checks) || !['completed', 'modelMatch', 'outputSchema', 'evidenceSupported'].every(k => a.checks[k] === true) ||
       a.checks.auditorApproved !== !provisional || typeof a.checks.blindAgreement !== 'boolean' || !Array.isArray(a.reasons) ||
       (provisional ? !a.reasons.length || a.reasons.length > 8 || a.reasons.some(r => !/^[a-z_]{1,80}$/.test(r)) : a.reasons.length)) return prefix + '_provenance_checks';
@@ -241,7 +243,7 @@ function resolutionProvenanceProblem(result, provisional) {
   if (!Array.isArray(calls) || calls.length < 2 || calls.length > MAX_LOGICAL_CALLS || calls[0].stage !== 'marker1' || calls[1].stage !== 'marker2') return prefix + '_provenance_calls';
   const names = calls.map(c => c && c.stage), allowed = ['marker1', 'marker2', 'marker1_format', 'marker2_format', 'auditor', 'adjudicator'];
   if (new Set(names).size !== names.length || names.some(n => !allowed.includes(n)) || names.includes('auditor') && names.includes('adjudicator') ||
-      calls.some(c => !object(c) || c.requestedModel !== MODEL || !['completed', 'failed'].includes(c.status)) ||
+      calls.some(c => !object(c) || c.requestedModel !== a.requestedModel || !['completed', 'failed'].includes(c.status)) ||
       !Array.isArray(a.returnedModels) || a.returnedModels.length !== calls.filter(c => Object.hasOwn(c, 'returnedModel')).length ||
       a.returnedModels.slice().sort().join('|') !== calls.filter(c => Object.hasOwn(c, 'returnedModel')).map(c => c.returnedModel).sort().join('|')) return prefix + '_provenance_calls';
   const gateIndex = names.findIndex(n => n === 'auditor' || n === 'adjudicator');
@@ -249,7 +251,7 @@ function resolutionProvenanceProblem(result, provisional) {
   if (!Number.isInteger(a.networkAttempts) || a.networkAttempts < calls.length || a.networkAttempts > MAX_NETWORK_ATTEMPTS ||
       calls.some(c => ![1, 2].includes(c.attemptCount) || (c.attemptCount === 2 ? !PRECONNECT_CODES.has(c.retryCause) : c.retryCause != null)) ||
       calls.reduce((sum, c) => sum + c.attemptCount, 0) !== a.networkAttempts || a.networkAttempts > calls.length + 1) return prefix + '_provenance_attempts';
-  function completed(stage) { const c = calls.find(c => c.stage === stage); return c && c.status === 'completed' && c.finishReason === 'stop' && c.returnedModel === MODEL && c.errorCode == null && c.problem == null; }
+  function completed(stage) { const c = calls.find(c => c.stage === stage); return c && c.status === 'completed' && c.finishReason === 'stop' && c.returnedModel === a.requestedModel && c.errorCode == null && c.problem == null; }
   if (!Array.isArray(a.proposals) || a.proposals.length !== 2 || !Array.isArray(a.proposalStages) || a.proposalStages.length !== 2 || ![0, 1].includes(a.selectedFeedback)) return prefix + '_provenance_proposals';
   const usable = [];
   function labels(criteria) {
@@ -305,7 +307,7 @@ async function mark(input, options = {}) {
   const data = canonicalData(input), fetcher = options.fetch || globalThis.fetch, now = options.now || Date.now;
   const timers = { set: options.setTimeout || setTimeout, clear: options.clearTimeout || clearTimeout };
   const limits = Object.assign({}, LIMITS, options.limits || {});
-  const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+  const apiKey = options.apiKey || PROVIDER.key();
   if (!apiKey) throw failure(503, 'no_key', 'AI marking is not configured.');
   const started = now(), deadline = started + limits.overallMs, controllers = new Set();
   let retryAvailable = true;
@@ -321,7 +323,7 @@ async function mark(input, options = {}) {
   async function request(stage, messages, duration) {
     if (audit.calls.length >= MAX_LOGICAL_CALLS) throw failure(502, 'marking_call_budget', 'The marking call limit was reached.');
     const reasoningEffort = ['auditor', 'adjudicator'].includes(stage) ? 'low' : 'high';
-    const requestBody = JSON.stringify({ model: MODEL, messages, thinking: { type: 'enabled' }, reasoning_effort: reasoningEffort, max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
+    const requestBody = JSON.stringify({ model: MODEL, messages, ...PROVIDER.reasoning(reasoningEffort), max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
     if (Buffer.byteLength(requestBody, 'utf8') > limits.requestBytes) throw failure(413, 'marking_request_too_large', 'This response is too large for automatic marking.');
     const available = Math.min(duration, deadline - now());
     if (available <= 0) throw failure(504, 'marking_timeout', 'AI marking exceeded its time limit. Try again later.');
@@ -350,7 +352,7 @@ async function mark(input, options = {}) {
         record.attemptCount++; audit.networkAttempts++;
         try {
           const response = await fetcher(ENDPOINT, { method: 'POST', signal: controller.signal,
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }, body: requestBody });
+            headers: PROVIDER.headers(apiKey), body: requestBody });
           transportPhase = 'body';
           if (!active || controller.signal.aborted || now() >= stageDeadline) {
             // A fetch that ignores cancellation must not resume into body reads,
@@ -387,7 +389,7 @@ async function mark(input, options = {}) {
           try { envelope = parse(body); } catch (_) { throw failure(502, 'provider_envelope', 'The marking service returned an unreadable response.'); }
           if (!object(envelope)) throw failure(502, 'provider_envelope', 'The marking service returned an unreadable response.');
           record.status = 'completed';
-          record.returnedModel = typeof envelope.model === 'string' ? envelope.model : null;
+          record.returnedModel = typeof envelope.model === 'string' ? (provider.canonicalModel(MODEL, envelope.model) || envelope.model) : null;
           if (typeof envelope.system_fingerprint === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.system_fingerprint)) record.systemFingerprint = envelope.system_fingerprint;
           audit.returnedModels.push(record.returnedModel);
           const choice = Array.isArray(envelope.choices) && envelope.choices.length === 1 ? envelope.choices[0] : null;

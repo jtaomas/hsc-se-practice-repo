@@ -4,6 +4,8 @@ const engine = require('../server/marking-engine');
 const store = require('../server/marking-store');
 const feedback = require('../server/feedback-policy');
 const { cacheValid } = require('../server/improvement-input');
+// The key for whichever AI service is configured (OpenCode Go or DeepSeek). See server/ai-provider.js.
+const aiKey = env => require('../server/ai-provider').current(env).key();
 
 function verifiedDecision(result, prepared, inputDigest, answerDigest, marking) {
   function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -34,7 +36,7 @@ function createHandler(deps = {}) {
   const marking = deps.engine || engine, storage = deps.store || store, env = deps.env || process.env;
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!env.DEEPSEEK_API_KEY, model: marking.MODEL, harnessVersion: marking.HARNESS_VERSION, requiresSignIn: true });
+    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!aiKey(env), model: marking.MODEL, harnessVersion: marking.HARNESS_VERSION, requiresSignIn: true });
     if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
     let session, prepared, lease, inputDigest;
     try {
@@ -53,7 +55,7 @@ function createHandler(deps = {}) {
           audit: Object.assign(provenance, { calls: [], checks: [prepared.reviewReason ? 'evidence_requires_review' : 'blank_answer'], returnedModels: [] }) }, prepared.reviewReason ? feedback.unavailableFeedback() : feedback.blankFeedback(prepared.input)));
       }
       // Cached decisions remain available when the provider key is temporarily absent.
-      if (!env.DEEPSEEK_API_KEY) {
+      if (!aiKey(env)) {
         if (storage.getCached) {
           const cached = await storage.getCached(session.id, inputDigest);
           if (cached) return res.status(200).json(verifiedCached(cached));
@@ -64,7 +66,7 @@ function createHandler(deps = {}) {
       if (reservation.state === 'cached') return res.status(200).json(verifiedCached(reservation.result));
       if (reservation.state === 'busy') { res.setHeader('Retry-After', '15'); return res.status(409).json({ code: 'marking_busy', error: 'This answer is already being marked. Try again shortly to retrieve the result.' }); }
       lease = reservation.leaseId;
-      const result = await marking.mark(prepared.input, { apiKey: env.DEEPSEEK_API_KEY });
+      const result = await marking.mark(prepared.input, { apiKey: aiKey(env) });
       result.audit = Object.assign({}, result.audit, provenance);
       // No supported proposal is a retryable failure, never a cached zero or a
       // terminal review that would retrieve the same failed attempt forever.

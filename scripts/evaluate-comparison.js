@@ -211,7 +211,7 @@ async function main(argv) {
   const selected = options.cases.length ? dataset.cases.filter(c => options.cases.includes(c.id)) : dataset.cases;
   let reports;
   if (options.live) {
-    assert(nonempty(process.env.DEEPSEEK_API_KEY), '--live requires DEEPSEEK_API_KEY.');
+    assert(nonempty(require('../server/ai-provider').current().key()), '--live requires ' + require('../server/ai-provider').current().keyEnv + '.');
     const output = path.resolve(options.output);
     // Reserve a new private file before any paid call; never overwrite evidence.
     const fd = fs.openSync(output, 'wx', 0o600);
@@ -223,7 +223,7 @@ async function main(argv) {
       console.error('Live synthetic evaluation: up to ' + ceiling + ' paid provider calls; never student application endpoints.');
       for (let run = 1; run <= options.repeat; run++) for (const test of selected) {
         try {
-          const report = await engine.compare(test.input, { apiKey: process.env.DEEPSEEK_API_KEY });
+          const report = await engine.compare(test.input, { apiKey: require('../server/ai-provider').current().key() });
           reports.reports.push({ caseId: test.id, run, report });
         } catch (error) {
           // No provider error text, response body, or secret enters logs.

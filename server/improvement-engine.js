@@ -4,7 +4,9 @@ const { parse } = require('./marking-json');
 const assessmentAudit = require('./assessment-audit');
 const { canonicalDigest } = require('./feedback-integrity');
 const { QUALITY_FACTORS } = require('./feedback-policy');
-const MODEL = 'deepseek-flash';
+const provider = require('./ai-provider');
+const PROVIDER = provider.current();
+const MODEL = PROVIDER.model;
 const REASONING_EFFORT = 'low';
 const HARNESS_VERSION = require('../public/marking-config').improvementVersion;
 const LIMITS = Object.freeze({ overallMs: 225000, stageMs: 115000, auditMs: 105000, coachMaxTokens: 24576, auditMaxTokens: 16384, requestBytes: 800000, responseBytes: 600000, resultBytes: 58000 });
@@ -142,9 +144,9 @@ function publicResultDigest(result) {
 }
 function auditApproved(value) { return exact(value, ['checks', 'issueCount']) && value.issueCount === 0 && exact(value.checks, AUDIT_IDS) && AUDIT_IDS.every(id => value.checks[id] === 'pass'); }
 function completedCalls(audit) {
-  return audit.reasoningEffort === REASONING_EFFORT && !Object.hasOwn(audit, 'reason') && Array.isArray(audit.returnedModels) && audit.returnedModels.length === 2 && audit.returnedModels.every(model => model === MODEL) && Array.isArray(audit.calls) && audit.calls.length === 2 && ['coach', 'coach_auditor'].every((stage, index) => {
+  return audit.reasoningEffort === REASONING_EFFORT && !Object.hasOwn(audit, 'reason') && Array.isArray(audit.returnedModels) && audit.returnedModels.length === 2 && provider.knownModel(audit.requestedModel) && audit.returnedModels.every(model => model === audit.requestedModel) && Array.isArray(audit.calls) && audit.calls.length === 2 && ['coach', 'coach_auditor'].every((stage, index) => {
     const call = audit.calls[index];
-    return object(call) && call.stage === stage && call.requestedModel === MODEL && call.returnedModel === MODEL && call.reasoningEffort === REASONING_EFFORT && call.status === 'completed' && call.finishReason === 'stop' && call.maxTokens === (index === 0 ? LIMITS.coachMaxTokens : LIMITS.auditMaxTokens) && call.errorCode == null && (index !== 0 || Number.isInteger(call.resolvedObjectiveReferences) && call.resolvedObjectiveReferences >= 0 && call.resolvedObjectiveReferences <= MAX_OBJECTIVE_REFERENCES);
+    return object(call) && call.stage === stage && call.requestedModel === audit.requestedModel && call.returnedModel === audit.requestedModel && call.reasoningEffort === REASONING_EFFORT && call.status === 'completed' && call.finishReason === 'stop' && call.maxTokens === (index === 0 ? LIMITS.coachMaxTokens : LIMITS.auditMaxTokens) && call.errorCode == null && (index !== 0 || Number.isInteger(call.resolvedObjectiveReferences) && call.resolvedObjectiveReferences >= 0 && call.resolvedObjectiveReferences <= MAX_OBJECTIVE_REFERENCES);
   });
 }
 function resultProblem(result, input, provenance) {
@@ -189,13 +191,13 @@ async function boundedBody(response, maximum) {
   return Buffer.concat(chunks).toString('utf8');
 }
 async function improve(input, options = {}) {
-  const limits = { ...LIMITS, ...options.limits }, fetcher = options.fetch || globalThis.fetch, now = options.now || Date.now, apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+  const limits = { ...LIMITS, ...options.limits }, fetcher = options.fetch || globalThis.fetch, now = options.now || Date.now, apiKey = options.apiKey || PROVIDER.key();
   if (!apiKey) throw error(503, 'no_key', 'AI improvement planning is not configured.');
   const evidence = projectEvidence(input);
   const started = now(), audit = { harnessVersion: HARNESS_VERSION, requestedModel: MODEL, reasoningEffort: REASONING_EFFORT, sourceBytes: Buffer.byteLength(JSON.stringify(input)), evidenceBytes: Buffer.byteLength(JSON.stringify(evidence)), returnedModels: [], calls: [], checks: { outputSchema: false, evidenceSupported: false, auditorApproved: false } };
   function finish() { audit.durationMs = Math.max(0, now() - started); return audit; }
   async function request(stage, policy, payload, stageMs, maxTokens) {
-    const requestBody = JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: policy }, { role: 'user', content: JSON.stringify(payload) }], thinking: { type: 'enabled' }, reasoning_effort: REASONING_EFFORT, max_tokens: maxTokens, response_format: { type: 'json_object' } });
+    const requestBody = JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: policy }, { role: 'user', content: JSON.stringify(payload) }], ...PROVIDER.reasoning(REASONING_EFFORT), max_tokens: maxTokens, response_format: { type: 'json_object' } });
     if (Buffer.byteLength(requestBody) > limits.requestBytes) throw error(413, 'improvement_request_too_large', 'This paper exceeds the automatic planning limit. No evidence has been truncated.');
     const remaining = Math.min(stageMs, limits.overallMs - (now() - started));
     if (remaining <= 0) throw error(504, 'marking_timeout', 'AI improvement planning exceeded its time limit.');
@@ -203,13 +205,13 @@ async function improve(input, options = {}) {
     let timer, active = true;
     try {
       return await Promise.race([(async () => {
-        const response = await fetcher('https://api.deepseek.com/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }, body: requestBody, signal: controller.signal });
+        const response = await fetcher(PROVIDER.endpoint, { method: 'POST', headers: PROVIDER.headers(apiKey), body: requestBody, signal: controller.signal });
         const body = await boundedBody(response, limits.responseBytes);
         if (!active) throw error(502, 'provider_cancelled', 'The improvement request was cancelled.');
         if (!response.ok) throw error(response.status === 429 ? 429 : 502, response.status === 429 ? 'provider_rate_limit' : 'provider_error', 'The improvement service could not complete this request.');
         let envelope; try { envelope = parse(body); } catch (_) { return { problem: 'provider_envelope' }; }
         if (!object(envelope)) return { problem: 'provider_envelope' };
-        record.returnedModel = typeof envelope.model === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.model) ? envelope.model : null; audit.returnedModels.push(record.returnedModel);
+        record.returnedModel = typeof envelope.model === 'string' ? (provider.canonicalModel(MODEL, envelope.model) || (/^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.model) ? envelope.model : null)) : null; audit.returnedModels.push(record.returnedModel);
         if (typeof envelope.system_fingerprint === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.system_fingerprint)) record.systemFingerprint = envelope.system_fingerprint;
         const choice = Array.isArray(envelope.choices) && envelope.choices.length === 1 ? envelope.choices[0] : null;
         record.finishReason = choice && choice.finish_reason; record.status = 'completed'; record.usage = {};

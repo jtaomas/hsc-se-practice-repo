@@ -129,8 +129,8 @@ async function run(options, dependencies = {}) {
     limitations: ['This is a constructed synthetic attempt, not a real student paper.', 'Only prior confirmed live marking outputs supply open-response scores and feedback; fixture labels are excluded from coach and audit prompts.', 'One smoke test does not establish teaching quality or rating calibration.', 'Missing open cases are deliberate blanks and must not be interpreted as evidence of missing knowledge.', 'An audit pass is a same-model gate, not independent teacher validation.'] };
   function checkpoint() { if (options.output) { fs.writeFileSync(options.output, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 }); fs.chmodSync(options.output, 0o600); } }
   if (!options.live) { report.liveEvaluation = 'Not run. Evidence and actual cached marks were validated without provider requests.'; report.metrics = usage([], options.prices); checkpoint(); return report; }
-  const key = dependencies.apiKey || (options.envFile ? readEvaluationKey(options.envFile) : process.env.DEEPSEEK_API_KEY);
-  if (!key) fail('DEEPSEEK_API_KEY is absent; no coach requests were made.');
+  const key = dependencies.apiKey || (options.envFile ? readEvaluationKey(options.envFile) : require('../server/ai-provider').current().key());
+  if (!key) fail(require('../server/ai-provider').current().keyEnv + ' is absent; no coach requests were made.');
   const bounded = budgetedFetch(dependencies.fetch || globalThis.fetch, options);
   report.budget = { maxCalls: options.maxCalls, maxOutputTokens: options.maxOutputTokens, maxUsd: options.maxUsd, prices: options.prices };
   report.stoppedAtBudget = false;

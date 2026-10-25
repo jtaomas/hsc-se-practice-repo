@@ -26,7 +26,7 @@ function mockEngine(values) {
   } }) };
 }
 function context(marking) {
-  const records = new Map(), events = [], env = { DEEPSEEK_API_KEY: 'mock-only' };
+  const records = new Map(), events = [], env = { [require('../server/ai-provider').current().keyEnv]: 'mock-only' };
   const store = { authorize: async () => ({ id: 'a'.repeat(64) }), getCached: async (_, key) => records.get(key), getOrReserve: async (_, key) => records.has(key) ? { state: 'cached', result: records.get(key) } : { state: 'reserved', leaseId: 'mock' }, finish: async (_, key, lease, r) => { events.push('finish'); records.set(key, r); }, fail: async (_, key, lease, d) => { events.push('fail'); store.failure = d; } };
   const handler = createHandler({ engine: marking, store, env });
   async function invoke() { const res = { setHeader() {}, status(n) { this.code = n; return this; }, json(value) { this.value = value; } }; await handler({ method: 'POST', body, headers: {} }, res); return res; }
@@ -42,7 +42,7 @@ function context(marking) {
     const a = r.value.audit;
     assert.equal(improvement.cacheValid(r.value, prepared, a.inputDigest, a.answerDigest, engine), resolve);
     assert.equal(improvement.cacheValid(r.value, prepared, a.inputDigest, a.answerDigest, engine, { allowProvisional: true }), true);
-    c.env.DEEPSEEK_API_KEY = ''; assert.equal((await c.invoke()).value.mark, 1); assert.equal(marking.count(), 3);
+    c.env[require('../server/ai-provider').current().keyEnv] = ''; assert.equal((await c.invoke()).value.mark, 1); assert.equal(marking.count(), 3);
     if (!resolve) {
       assert.deepEqual(r.value.losses, unavailableFeedback().losses); assert.deepEqual(r.value.quality, []);
       assert(engine.confirmedProvenanceProblem(r.value));

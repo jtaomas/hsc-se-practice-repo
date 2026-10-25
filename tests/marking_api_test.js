@@ -71,7 +71,7 @@ async function invoke(handler, input = body, auth = 'Bearer mock') {
   e.engine = { ...realEngine, mark: (input, options) => realEngine.mark(input, { ...options, fetch: async (_url, request) => {
     requests++;
     if (recoverConnection && requests === 1) throw Object.assign(new TypeError('Synthetic connection failure'), { cause: { code: 'EAI_AGAIN' } });
-    completedRequests++; const p = JSON.parse(request.body); assert.equal(p.model, 'deepseek-flash'); assert.equal(p.reasoning_effort, completedRequests <= 2 ? 'high' : 'low');
+    completedRequests++; const p = JSON.parse(request.body); assert.equal(p.model, require('../server/ai-provider').current().model); assert.equal(p.reasoning_effort, completedRequests <= 2 ? 'high' : 'low');
     let output;
     if (completedRequests <= 2) output = { status: 'marked', mark: 1, summary: 'You identify one-way hashing.', strengths: ['One-way hashing'], improve: ['Explain how a unique random salt protects passwords.'], advice: [], criteria: input.criteria.map((c, i) => ({ id: c.id, assessment: i === 2 ? 'met' : 'context', evidence: i === 2 ? ['Hashing is one way.'] : [], basis: i === 2 ? 'One idea identified.' : 'A higher band requires more detail.' })), uncertainties: [] };
     else output = { checks: Object.fromEntries(Object.keys(realEngine.AUDIT_CHECKS).map(id => [id, 'pass'])), issues: [], selectedFeedback: 0 };
@@ -79,7 +79,7 @@ async function invoke(handler, input = body, auth = 'Bearer mock') {
       output.losses={allocation:'holistic',totalLost:2,items:[{category:'insufficient_explanation',marksLost:null,criterionIds:[input.criteria[0].id,input.criteria[1].id],evidence:[],explanation:'The answer identifies hashing but does not explain salt or protection.',action:'Explain the effect of a unique salt on precomputed lookups.'}]};
       output.quality=require('../server/feedback-policy').QUALITY_FACTORS.map(id=>({id,rating:id==='technical_accuracy'?8:null,evidence:id==='technical_accuracy'?['Hashing is one way.']:[],feedback:id==='technical_accuracy'?'The explicit one-way claim is accurate.':'The brief response gives too little evidence, or this factor is inapplicable.',action:'Explain how hashing and salting work together.'}));
     }
-    return new Response(JSON.stringify({ model: 'deepseek-flash', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }], usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }), { status: 200 });
+    return new Response(JSON.stringify({ model: require('../server/ai-provider').current().model, choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }], usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }), { status: 200 });
   } }) };
   const integrated = await invoke(createHandler({ store: e.storage, engine: e.engine, env: e.env }));
   assert.equal(integrated.code, 200); assert.equal(integrated.value.status, 'marked'); assert.equal(requests, recoverConnection ? 4 : 3); assert.equal(e.records.size, 1);

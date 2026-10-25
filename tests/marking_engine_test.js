@@ -65,7 +65,7 @@ test('two blind calls are concurrent and blind; audit sees both scoring cores an
   gates[0].resolve(response(proposal())); gates[1].resolve(response(second));
   const result = await operation;
   assert.equal(result.status, 'marked'); assert.equal(result.mark, 4); assert.equal(requests.length, 3);
-  requests.forEach((request, index) => { assert.equal(request.model, 'deepseek-flash'); assert.deepEqual(request.thinking, { type: 'enabled' }); assert.equal(request.reasoning_effort, index === 2 ? 'low' : 'high'); assert.equal(request.max_tokens, 32768); });
+  requests.forEach((request, index) => { assert.equal(request.model, MODEL); assert.deepEqual(request.thinking, { type: 'enabled' }); assert.equal(request.reasoning_effort, index === 2 ? 'low' : 'high'); assert.equal(request.max_tokens, 32768); });
   const original = JSON.parse(requests[0].messages[1].content), audit = JSON.parse(requests[2].messages[1].content);
   assert.equal(original.independentProposals, undefined); assert.deepEqual(audit.originalEvidence, original);
   assert.deepEqual(audit.independentProposals, [proposal(), second].map(p => ({status:p.status,mark:p.mark,criteria:p.criteria,uncertainties:p.uncertainties})));
@@ -590,9 +590,9 @@ test('auditor and adjudicator deadlines abort hung fetch and body, preserving on
 test('invalid canonical input and missing key do not make model calls', async () => {
   const question = input(); question.criteria[1].id = 'c1';
   await assert.rejects(sequence([]).run(question), error => error.status === 400);
-  const old = process.env.DEEPSEEK_API_KEY; delete process.env.DEEPSEEK_API_KEY;
+  const keyEnv = require('../server/ai-provider').current().keyEnv, old = process.env[keyEnv]; delete process.env[keyEnv];
   try { await assert.rejects(mark(input(), { fetch() { throw new Error('must not fetch'); } }), error => error.code === 'no_key'); }
-  finally { if (old !== undefined) process.env.DEEPSEEK_API_KEY = old; }
+  finally { if (old !== undefined) process.env[keyEnv] = old; }
 });
 
 function additive() {
@@ -947,6 +947,34 @@ test('confirmed provenance accepts either genuinely selected candidate and optio
   zero.criteria.forEach(c => { c.assessment = 'not_met'; c.evidence = []; });
   zero.losses = { allocation: 'holistic', totalLost: 4, items: [loss(['c1', 'c2'])] };
   assert.equal(confirmedProvenanceProblem(await sequence([zero, zero, auditor()]).run()), null);
+});
+
+test('provider switching preserves bound confirmed and provisional caches but never mixes recorded models', async () => {
+  const providers = require('../server/ai-provider');
+  const lower = proposal(); lower.mark = 3; lower.improve = ['Develop beta.'];
+  lower.losses = { allocation: 'holistic', totalLost: 1, items: [loss(['c2'])] };
+  const same = await sequence([proposal(), proposal(), auditor()]).run();
+  const resolved = await sequence([proposal(), lower, auditor()]).run();
+  const provisional = await sequence([proposal(), lower, veto()]).run();
+  const legacy = clone(same); delete legacy.audit.resolution;
+  for (const original of [same, resolved, provisional, legacy]) for (const savedModel of providers.KNOWN_MODELS) {
+    const saved = clone(original), validate = saved.status === 'provisional' ? provisionalProvenanceProblem : confirmedProvenanceProblem;
+    saved.audit.requestedModel = savedModel;
+    saved.audit.returnedModels = saved.audit.returnedModels.map(() => savedModel);
+    saved.audit.calls.forEach(call => { call.requestedModel = savedModel; call.returnedModel = savedModel; });
+    assert.equal(validate(saved), null, 'a supported cached provider remains valid after runtime provider selection changes');
+    const other = providers.KNOWN_MODELS.find(model => model !== savedModel);
+    for (const mutate of [r => { r.audit.calls[0].requestedModel = other; },
+      r => { r.audit.calls[0].returnedModel = other; r.audit.returnedModels[0] = other; },
+      r => { r.audit.requestedModel = 'unsupported-model'; }]) {
+      const invalid = clone(saved); mutate(invalid); assert.notEqual(validate(invalid), null);
+    }
+  }
+  const prefixed = await sequence([() => response(proposal(), { model: 'gateway/' + MODEL }),
+    () => response(proposal(), { model: MODEL.toUpperCase() }),
+    () => response(auditor(), { model: 'gateway/' + MODEL })]).run();
+  assert.equal(prefixed.status, 'marked'); assert.equal(confirmedProvenanceProblem(prefixed), null);
+  assert.deepEqual(prefixed.audit.returnedModels, [MODEL, MODEL, MODEL]);
 });
 
 test('confirmed provenance rejects missing or contradictory completion checks and provider stages', async () => {

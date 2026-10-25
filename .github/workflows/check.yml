@@ -42,8 +42,11 @@ jobs:
           node tests/marking_storage_transport_test.js
           node tests/d1_adapter_test.js
           node tests/archive_test.js
+          node tests/ai_provider_test.js
       - name: Comparison evidence, agent audit, sharing and regression harness (no network)
         run: npm run test:comparison
+      - name: Every AI engine again with OpenCode Go selected (mock key, no network)
+        run: OPENCODE_API_KEY=ci-placeholder-not-a-key sh tests/run_server_tests.sh
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install browser test dependencies

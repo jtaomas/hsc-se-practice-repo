@@ -5,6 +5,8 @@ const engine = require('../server/comparison-engine');
 const markingStore = require('../server/marking-store');
 const { digest } = require('../server/marking-input');
 const { canonicalDigest } = require('../server/feedback-integrity');
+// The key for whichever AI service is configured (OpenCode Go or DeepSeek). See server/ai-provider.js.
+const aiKey = env => require('../server/ai-provider').current(env).key();
 const jobs = markingStore.createStore({ kind: 'comparison', limits: { perUser: 12, site: 40 } });
 function reportDigest(result) {
   return canonicalDigest({ status: result.status, summary: result.summary, profiles: result.profiles, comparisons: result.comparisons, statistics: result.statistics });
@@ -46,7 +48,7 @@ function createHandler(deps = {}) {
   const store = deps.store || jobs, compareEngine = deps.engine || engine, env = deps.env || process.env;
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!env.DEEPSEEK_API_KEY, model: compareEngine.MODEL, harnessVersion: compareEngine.HARNESS_VERSION, requiresSignIn: true, maxParticipants: 8 });
+    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!aiKey(env), model: compareEngine.MODEL, harnessVersion: compareEngine.HARNESS_VERSION, requiresSignIn: true, maxParticipants: 8 });
     if (req.method !== 'POST') return res.status(405).json({ code: 'method', error: 'Use POST.' });
     let session, lease, inputDigest;
     try {
@@ -93,12 +95,12 @@ function createHandler(deps = {}) {
       };
       const cached = await store.getCached(session.id, inputDigest);
       if (cached) return res.status(200).json(withSharingDates(cached));
-      if (!env.DEEPSEEK_API_KEY) throw input.error(503, 'no_key', 'AI comparison is not configured. Your evidence files remain available.');
+      if (!aiKey(env)) throw input.error(503, 'no_key', 'AI comparison is not configured. Your evidence files remain available.');
       const reservation = await store.getOrReserve(session.id, inputDigest);
       if (reservation.state === 'cached') return res.status(200).json(withSharingDates(reservation.result));
       if (reservation.state === 'busy') { res.setHeader('Retry-After', '15'); return res.status(409).json({ code: 'comparison_busy', error: 'This comparison is already running. Try again shortly to retrieve its result.' }); }
       lease = reservation.leaseId;
-      const result = await compareEngine.compare(prepared, { apiKey: env.DEEPSEEK_API_KEY });
+      const result = await compareEngine.compare(prepared, { apiKey: aiKey(env) });
       result.statistics = prepared.statistics;
       result.audit = Object.assign({}, result.audit, { inputDigest, questionSetVersion: prepared.questionSetVersion, evidenceCreatedAt: snapshots.map(s => s.createdAt), evidenceExpiresAt: Math.min(...snapshots.map(s => s.expiresAt)), analysisCompletedAt: Date.now(), harnessVersion: compareEngine.HARNESS_VERSION, requestedModel: compareEngine.MODEL });
       result.audit.resultDigest = reportDigest(result);

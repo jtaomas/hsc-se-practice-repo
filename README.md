@@ -1,6 +1,6 @@
 # HSC Software Engineering practice exams
 
-Unofficial practice site for NSW HSC Software Engineering. Seven original 80-mark papers, 27 questions each, laid out like the 2025 HSC online exam, plus two school trial papers (PEM 2026 and NSW DoE 2026) converted to the same format, and a three-question mini paper. Not affiliated with NESA.
+Unofficial practice site for NSW HSC Software Engineering. Five original Syllabus Mocks (27 questions and 80 marks each, laid out like the 2025 HSC online exam) that together cover the whole Year 12 syllabus, school trial papers converted to the same format, an SQL practice paper and a three-question mini paper. The seven earlier original papers are archived. Not affiliated with NESA.
 
 Live site: https://hsc-se-practice-repo.vercel.app
 
@@ -30,6 +30,7 @@ public/            static site, served as-is (no build step)
   marking/pem2026.js PEM trial marking entries (loaded before banks)
   marking/doe2026.js DoE trial marking entries (loaded before banks)
   bank1..10.js     papers 1 to 7 are archived (hidden in the app, content in archive/); 8 and 9 are the converted trials, 10 the mini paper (push into BANKS)
+  bank14..18.js    Syllabus Mocks 1 to 5; docs/SYLLABUS_MOCKS.md maps every syllabus point to its questions
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)

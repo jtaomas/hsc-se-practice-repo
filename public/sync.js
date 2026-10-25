@@ -18,7 +18,10 @@ function syncPayload(){return {v:2,ts:S.ts||0,u:S.u,hist:S.hist,font:S.font,fg:S
 function mergeRemote(r,revisions){
   r=r||{};var remote=r.u||{};revisions=revisions||{};
   Object.keys(Object.assign({},S.u,remote,revisions)).forEach(function(id){
-    if(S.pending[id])return;
+    if(S.pending[id]){
+      if(!S.revisions[id]&&revisions[id])S.revisions[id]=revisions[id];
+      return;
+    }
     if(remote[id]){if(JSON.stringify(S.u[id])!==JSON.stringify(remote[id]))S.u[id]=remote[id]}else delete S.u[id];
     S.revisions[id]=revisions[id]||null;
   });
@@ -109,7 +112,11 @@ function queuedSync(load){
   }).then(function(){
     checkSession(epoch);
     if(Object.keys(SYNC.conflicts).length)throw new Error('Choose which paper version to keep on the Account page.');
-    var sent=Object.assign({},S.pending),changes=Object.keys(sent);
+    var sent=Object.assign({},S.pending),changes=Object.keys(sent).filter(function(id){return /^(?:[1-9]|1[0-9])$/.test(id)});
+    if(!changes.length&&!load){
+      SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
+      return;
+    }
     return api('save',{data:syncPayload(),changes:changes,revisions:S.revisions},token).then(function(r){
       checkSession(epoch);
       changes.forEach(function(id){S.revisions[id]=(r.revisions||{})[id]||null;if(S.pending[id]===sent[id])delete S.pending[id]});
@@ -118,8 +125,21 @@ function queuedSync(load){
       checkSession(epoch);
       var d=e.details;
       if(d&&d.code==='progress_conflict'){
-        (d.conflicts||[]).forEach(function(id){SYNC.conflicts[id]={data:(d.data.u||{})[id]||null,revision:d.revisions[id]||null}});
+        (d.conflicts||[]).forEach(function(id){
+          var rem=(d.data&&d.data.u&&d.data.u[id])||null;
+          if(JSON.stringify(S.u[id]||null)===JSON.stringify(rem)){
+            S.revisions[id]=(d.revisions&&d.revisions[id])||null;
+            delete S.pending[id];
+            delete SYNC.conflicts[id];
+          }else{
+            SYNC.conflicts[id]={data:rem,revision:(d.revisions&&d.revisions[id])||null};
+          }
+        });
         mergeRemote(d.data,d.revisions);
+        if(!Object.keys(SYNC.conflicts).length){
+          SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
+          return;
+        }
         if(location.hash==='#/account')render();
       }
       throw e;
@@ -179,7 +199,7 @@ function bkReadFile(f){
     if(epoch!==SYNC.epoch)return;
     var file;try{file=JSON.parse(rd.result)}catch(e){return bkSet('That file is not a backup file.')}
     if(!file||file.kind!=='sehsc-backup'||!file.data||typeof file.data.u!=='object'||file.data.u===null)return bkSet('That file is not a backup file.');
-    var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|10)$/.test(id)});
+    var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|1[0-9])$/.test(id)});
     if(!ids.length)return bkSet('That backup has no papers in it.');
     if(!confirm('Restore '+ids.length+' paper'+(ids.length===1?'':'s')+' from this backup? Papers in the file replace the same papers here. Other papers are not touched.'))return;
     ids.forEach(function(id){S.u[id]=file.data.u[id];S.pending[id]=(S.pending[id]||0)+1;delete SYNC.conflicts[id]});

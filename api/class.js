@@ -6,7 +6,7 @@ const classStore = require('../server/class-store');
 const synthesis = require('../server/class-synthesis');
 const { loadBanks } = require('../server/marking-input');
 
-const BANK_ID = /^(?:[1-9]|10)$/;
+const BANK_ID = /^(?:[1-9]|1[0-9])$/;
 function createHandler(deps) {
   deps = deps || {};
   const store = deps.store || classStore.createClassStore();

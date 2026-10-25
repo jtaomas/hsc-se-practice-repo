@@ -236,7 +236,7 @@ module.exports = async (req, res) => {
     if (p.action === 'save') {
       const incoming = p.data || {};
       if (Buffer.byteLength(JSON.stringify(incoming)) > MAX_PROGRESS) return fail(413, 'Your saved progress is too large to store.');
-      if (!Array.isArray(p.changes) || !p.revisions || p.changes.some(id => typeof id !== 'string' || !/^(?:[1-9]|10)$/.test(id))) {
+      if (!Array.isArray(p.changes) || !p.revisions || p.changes.some(id => typeof id !== 'string' || !/^(?:[1-9]|1[0-9])$/.test(id))) {
         return fail(409, 'Reload this page to use the updated progress-saving system.');
       }
       const today = dayOf(Date.now());

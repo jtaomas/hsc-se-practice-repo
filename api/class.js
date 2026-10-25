@@ -91,6 +91,7 @@ function createHandler(deps) {
                   papers[id] = papers[id] || [];
                   papers[id].push({
                     id: m.id,
+                    mine: m.id === sess.id,
                     name: m.name,
                     status: sp.done ? 'Submitted' : (sp.mode === 'exam' ? 'Sitting exam' : 'In progress')
                   });

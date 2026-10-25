@@ -118,38 +118,27 @@ function notionAvatarSVG(seed, sz, label){
 function getPaperStudents(b){
   var list = [];
   var u = S.u[b.id];
-  if(S.ae || S.owner || (u && (u.start || u.done))){
-    var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : 'student@student.det.nsw.edu.au');
+  if(u && (u.start || u.done)){
+    var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : '');
     var rawName = S.ae ? S.ae.split('@')[0].replace(/[._]/g, ' ') : (S.owner || 'You');
     var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
-    var status = u ? (u.done ? 'Submitted' : (u.start ? 'Sitting exam' : 'Viewing paper')) : 'Viewing paper';
+    if(typeof CV !== 'undefined' && CV.st && CV.st.name) name = CV.st.name;
+    var status = u.done ? 'Submitted' : 'In progress';
     list.push({ name: name, email: email, status: status, seed: email, isMe: true });
   }
   if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
     CV.over.papers[b.id].forEach(function(m){
-      if(!list.some(function(item){return item.name.toLowerCase() === m.name.toLowerCase()})){
+      if(!m.mine || !list.some(function(item){return item.isMe})){
         list.push({
           name: m.name,
-          email: m.name.toLowerCase().replace(/\s+/g, '.') + '@student.det.nsw.edu.au',
-          status: m.status || 'In progress',
+          email: m.mine ? (S.ae || '') : '',
+          status: m.status === 'Submitted' ? 'Submitted' : 'In progress',
           seed: m.id || m.name,
-          isMe: false
+          isMe: !!m.mine
         });
       }
     });
   }
-  var peers = [
-    { name: 'Joyce', email: 'joyce@education.nsw.gov.au', status: 'Sitting exam', seed: 'joyce@education.nsw.gov.au' },
-    { name: 'Sam', email: 'sam@student.det.nsw.edu.au', status: 'In progress', seed: 'sam@student.det.nsw.edu.au' },
-    { name: 'Priya', email: 'priya@student.det.nsw.edu.au', status: 'Submitted', seed: 'priya@student.det.nsw.edu.au' }
-  ];
-  var h = strHash(b.id + (b.name || ''));
-  var p1 = peers[h % peers.length], p2 = peers[(h + 1) % peers.length];
-  [p1, p2].forEach(function(p){
-    if(!list.some(function(item){return item.name.toLowerCase() === p.name.toLowerCase()})){
-      list.push(Object.assign({}, p, { isMe: false }));
-    }
-  });
   return list;
 }
 
@@ -164,10 +153,10 @@ function trialAvatarsHTML(b, isInline){
 
   var popList = students.map(function(s){
     return '<div class="notion-pop-row">' +
-      '<span class="notion-pop-av">' + notionAvatarSVG(s.seed, 28, s.name) + '<span class="presence-dot ' + (s.status === 'Submitted' ? 'sub' : 'live') + '"></span></span>' +
+      '<span class="notion-pop-av">' + notionAvatarSVG(s.seed, 28, s.name) + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
-        '<div class="notion-pop-email">' + esc(s.email) + '</div>' +
+        (s.email ? '<div class="notion-pop-email">' + esc(s.email) + '</div>' : '') +
       '</div>' +
       '<span class="notion-pop-badge ' + (s.status === 'Submitted' ? 'ok' : 'live') + '">' + esc(s.status) + '</span>' +
     '</div>';
@@ -175,11 +164,9 @@ function trialAvatarsHTML(b, isInline){
 
   return '<div class="notion-avatars' + (isInline ? ' inline' : '') + '" data-act="presence-toggle" tabindex="0" role="button" aria-label="Students on this paper">' +
     '<div class="notion-avatar-stack">' + stack + '</div>' +
-    '<span class="presence-pulse-dot" title="Active on this paper"></span>' +
     '<div class="notion-presence-pop">' +
       '<div class="notion-pop-hd">' +
         '<span class="notion-pop-hd-title">On this paper (' + students.length + ')</span>' +
-        '<span class="notion-pop-live-tag"><span class="presence-dot live"></span> Active</span>' +
       '</div>' +
       '<div class="notion-pop-list">' + popList + '</div>' +
     '</div>' +

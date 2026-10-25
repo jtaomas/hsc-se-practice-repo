@@ -19,6 +19,8 @@ jobs:
         run: node tests/sync_test.js
       - name: Code editor lifecycle regression
         run: node tests/ace_editor_test.js
+      - name: Real participant display
+        run: node tests/participants_test.js
       - name: Class sharing and analysis
         run: node tests/class_test.js
       - name: Marking evidence, blind assessment and API regressions (no network)

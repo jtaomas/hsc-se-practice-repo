@@ -101,6 +101,7 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await rest(h, { action: 'answers', bankId: '8' }, 'other')).body.code, 'not_member');
   assert.equal((await rest(h, { action: 'join', name: 'Joe', code: 'x' }, 'other')).body.code, 'bad_code');
   assert.deepEqual((await rest(h, { action: 'overview' })).body.counts, { 8: 2 });
+  assert.deepEqual((await rest(h, { action: 'overview' })).body.papers['8'].map(x => [x.name, x.mine]).sort(), [['Priya', false], ['Samuel', true]]);
   assert.equal((await rest(h, { action: 'answers', bankId: '1' })).body.code, 'invalid_bank', 'archived papers are not shared');
   const ans = (await rest(h, { action: 'answers', bankId: '8' })).body;
   assert.equal(ans.parts['17.0'].length, 2);

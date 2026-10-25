@@ -1,5 +1,0 @@
-1. Implement the admin API endpoint (`api/admin.js`) to load all user progress and meta information, enforcing authorization. (Done)
-2. Implement the admin UI (`public/admin.js`) showing a dashboard of all users and allowing inspection of individual users' papers and responses. (Done)
-3. Link the admin UI to the app by adding the script in `public/index.html` and a routing check in `public/pages.js`. (Done)
-4. Update `vercel.json` to configure the new endpoint. (Done)
-5. Review testing/validation steps.

@@ -14,7 +14,10 @@
       "maxDuration": 300,
       "includeFiles": "public/{helpers,kit,bank*,formats,marking-config,marking/*}.js"
     },
-    "api/admin.js": { "maxDuration": 300 }, "api/compare.js": {
+    "api/admin.js": {
+      "maxDuration": 300
+    },
+    "api/compare.js": {
       "maxDuration": 300,
       "includeFiles": "public/{helpers,kit,bank*,formats,marking-config,marking/*}.js"
     }

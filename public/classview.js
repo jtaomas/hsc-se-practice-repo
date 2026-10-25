@@ -90,7 +90,7 @@ function cvOverview(){
 }
 
 function cvStatus(force){
-  if(force){cvClearCache();CV.st=null}
+  if(force){CV.st=null;CV.loadSt=false}
   if(CV.loadSt||!S.tok)return Promise.resolve();
   CV.loadSt=true;
   var statusReq=cvApi({action:'status'});

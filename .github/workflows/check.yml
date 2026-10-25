@@ -17,6 +17,8 @@ jobs:
         run: sh tests/run_auth_test.sh
       - name: Progress and account isolation regression tests
         run: node tests/sync_test.js
+      - name: Code editor lifecycle regression
+        run: node tests/ace_editor_test.js
       - name: Class sharing and analysis
         run: node tests/class_test.js
       - name: Marking evidence, blind assessment and API regressions (no network)

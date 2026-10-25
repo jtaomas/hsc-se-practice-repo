@@ -35,7 +35,13 @@ function aceMount(){
         ta.dispatchEvent(new Event('input',{bubbles:true}));
       });
       holder();
-      if(window.ResizeObserver){var ro=new ResizeObserver(function(){ed.resize()});ro.observe(host)}
+      if(window.ResizeObserver){
+        var ro=new ResizeObserver(function(){
+          if(ed._hscDestroyed||ACE_ED[k]!==ed||!ed.session||!document.body.contains(host)||!document.body.contains(box))return;
+          ed.resize();
+        });
+        ed._hscResizeObserver=ro;ro.observe(host);
+      }
       host.dataset.ace='1';host.classList.add('ace-on');
       ACE_ED[k]=ed;
     }).catch(function(){host.dataset.ace=''});
@@ -44,6 +50,11 @@ function aceMount(){
 function aceCleanup(){
   Object.keys(ACE_ED).forEach(function(k){
     var ed=ACE_ED[k];
+    ed._hscDestroyed=true;
+    if(ed._hscResizeObserver){
+      try{ed._hscResizeObserver.disconnect()}catch(e){}
+      ed._hscResizeObserver=null;
+    }
     try{
       var box=ed.container,host=box.parentNode;
       ed.destroy();box.remove();

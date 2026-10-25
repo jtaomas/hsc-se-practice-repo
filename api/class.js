@@ -17,6 +17,9 @@ function createHandler(deps) {
   const engine = deps.synthesis || synthesis;
   const env = deps.env || process.env;
   const clock = deps.now || Date.now;
+  // Class admins (comma-separated emails in CLASS_ADMINS) can change other members' photos.
+  const adminList = () => String(env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au,thomas.lu@education.nsw.gov.au').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+  const isAdmin = sess => !!sess && !!sess.email && adminList().includes(String(sess.email).toLowerCase());
   const bankFor = id => banksOf().find(b => b.id === id && !b.hidden && !b.archived);
 
   const sharedPaper = paper => !!paper && (paper.done === true || paper.mode === 'practice');
@@ -64,7 +67,7 @@ function createHandler(deps) {
       const configured = store.configured();
       if (p.action === 'status') {
         const member = configured ? await store.getMember(sess.id) : null;
-        return res.status(200).json({ configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0 });
+        return res.status(200).json({ configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: !!member && isAdmin(sess) });
       }
       if (p.action === 'join') {
         const joined = await store.join(sess.id, p.name, p.code);
@@ -74,6 +77,22 @@ function createHandler(deps) {
       if (!me) return fail(403, 'not_member', 'Join the class with your class code first.');
       if (p.action === 'rename') return res.status(200).json(Object.assign({ ok: true }, await store.rename(sess.id, p.name)));
 
+      if (p.action === 'roster') {
+        const list = await store.members();
+        return res.status(200).json({ admin: isAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });
+      }
+      if (p.action === 'setphoto') {
+        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s photos.');
+        const photo = p.photo;
+        if (typeof p.memberId !== 'string' || !/^[a-f0-9]{64}$/.test(p.memberId)) return fail(400, 'bad_member', 'Choose a class member.');
+        if (typeof photo !== 'string' || photo.length > 44000 || (photo && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))) return fail(400, 'bad_photo', 'Choose a JPEG, PNG or WebP image using the photo picker.');
+        if (photo) {
+          const bytes = Buffer.from(photo.split(',')[1], 'base64');
+          if (bytes.length < 4 || bytes[0] !== 255 || bytes[1] !== 216 || bytes[bytes.length - 2] !== 255 || bytes[bytes.length - 1] !== 217) return fail(400, 'bad_photo', 'The picture is invalid.');
+        }
+        await store.setPhoto(p.memberId, photo);
+        return res.status(200).json({ ok: true, photo });
+      }
       if (p.action === 'overview') {
         const members = await store.members();
         const counts = {};

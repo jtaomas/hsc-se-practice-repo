@@ -22,6 +22,8 @@ def route(r):
         if a == 'join':
             if p['code'] != 'good-code': return r.fulfill(status=400, content_type='application/json', body=json.dumps({'code': 'bad_code', 'error': 'That class code is not right.'}))
             state['member'] = True; return ok({'ok': True, 'name': p['name']})
+        if a == 'roster': return ok({'admin': True, 'members': [{'id': 'a'*64, 'name': 'Sam', 'photo': '', 'mine': True, 'joined': 1}, {'id': 'b'*64, 'name': 'Priya', 'photo': '', 'mine': False, 'joined': 2}]})
+        if a == 'setphoto': return ok({'ok': True, 'photo': p['photo']})
         if a == 'overview': return ok({'members': 2, 'counts': {'8': 2}})
         if a == 'answers': return ok(ANSWERS)
         if a == 'analyse': return ok(RESULT)
@@ -45,6 +47,9 @@ with sync_playwright() as pw:
     expect(page.locator('#cvroot')).to_contain_text('not right')
     page.fill('#cvcode', 'good-code'); page.click('[data-cv=join]')
     expect(page.locator('#cvroot')).to_contain_text('You are in the class as')
+    expect(page.locator('.cv-person')).to_have_count(2)
+    expect(page.locator('.cv-person').nth(1)).to_contain_text('Priya')
+    assert page.locator('[data-cv=photo]').count() == 2, 'admin sees Change photo on everyone'
     page.click('a[href="#/class/8/1"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 1 ')
     assert page.locator('.nav-bar .nav-elem').count() > 5, 'question navigator'

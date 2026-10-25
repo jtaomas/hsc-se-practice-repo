@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -49,7 +49,7 @@ function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||''
 function cvStatus(){
   if(CV.st!==null||CV.loadSt||!S.tok)return Promise.resolve();
   CV.loadSt=true;
-  return cvApi({action:'status'}).then(function(r){CV.st=r;return r.member?cvApi({action:'overview'}).then(function(o){CV.over=o}).catch(function(){}):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
+  return cvApi({action:'status'}).then(function(r){CV.st=r;return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
 }
 function cvLoadAnswers(id,quiet){
   if(CV.loadAns)return Promise.resolve();
@@ -179,6 +179,44 @@ function cvNavHTML(b){
   }
   return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>';
 }
+/* Everyone in the class, like a Google Classroom people list. Admins can change anyone's photo. */
+function cvRosterHTML(){
+  var r=CV.roster;if(!r)return '';
+  var h='<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+(r.admin?'<p class="mut">You are a class admin. You can change anyone\'s photo.</p>':'')+
+    '<ul class="cv-people">'+r.members.map(function(m){
+      return '<li class="cv-person"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span>'+
+        (r.admin?'<span class="cv-padm"><button class="nb sm ol" data-cv="photo" data-id="'+esc(m.id)+'" type="button">Change photo</button>'+(m.photo?'<button class="nb sm ol" data-cv="photoclear" data-id="'+esc(m.id)+'" type="button">Remove</button>':'')+'</span>':'')+'</li>';
+    }).join('')+'</ul>'+(r.admin?'<input id="cvphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>':'')+
+    (CV.photoMsg?'<p class="acmsg" role="status">'+esc(CV.photoMsg)+'</p>':'');
+  return h;
+}
+function cvSetPhoto(id,photo){
+  CV.photoMsg='Saving photo...';cvDraw();
+  cvApi({action:'setphoto',memberId:id,photo:photo}).then(function(){
+    (CV.roster.members||[]).forEach(function(m){if(m.id===id)m.photo=photo});CV.photoMsg=photo?'Photo saved.':'Photo removed.';cvDraw();
+  }).catch(function(e){CV.photoMsg=e.message;cvDraw()});
+}
+function cvCropFile(file,id){
+  if(!file)return;
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>10*1024*1024){CV.photoMsg='Choose a JPEG, PNG or WebP image smaller than 10 MB.';cvDraw();return}
+  var url=URL.createObjectURL(file),img=new Image();
+  img.onerror=function(){URL.revokeObjectURL(url);CV.photoMsg='This image could not be opened.';cvDraw()};
+  img.onload=function(){
+    URL.revokeObjectURL(url);
+    try{
+      var c=document.createElement('canvas');c.width=128;c.height=128;
+      var x=c.getContext('2d'),side=Math.min(img.naturalWidth,img.naturalHeight);
+      x.fillStyle='#fff';x.fillRect(0,0,128,128);
+      x.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,128,128);
+      cvSetPhoto(id,c.toDataURL('image/jpeg',0.8));
+    }catch(e){CV.photoMsg='This image could not be prepared.';cvDraw()}
+  };
+  img.src=url;
+}
+document.addEventListener('change',function(ev){
+  var el=ev.target;if(!el||el.id!=='cvphoto')return;
+  var f=el.files&&el.files[0];el.value='';cvCropFile(f,CV.photoFor);
+});
 function cvPg(inner){return '<div class="pg"><h1 class="pt">Class</h1>'+inner+'</div>'}
 function cvHTML(){
   if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
@@ -189,6 +227,7 @@ function cvHTML(){
   if(!b){
     var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and diagrams are not shared.</p>'+
       '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
+    h+=cvRosterHTML();
     h+='<h2 class="pt" style="margin-top:18px">Papers</h2><p class="mut">Open a paper to read every question as it appears in the exam, with what your class wrote under each written part.</p><div class="acts">'+cvBanks().map(function(x){
       var n=CV.over&&CV.over.counts&&CV.over.counts[x.id]||0;
       return '<a class="nb ol" href="#/class/'+esc(x.id)+'/1">'+esc(x.name)+'<small>'+n+' shared</small></a>';
@@ -230,6 +269,8 @@ function cvResultHTML(res){
 document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
+  if(a==='photo'){CV.photoFor=el.getAttribute('data-id');var fi=document.getElementById('cvphoto');if(fi)fi.click();return}
+  if(a==='photoclear'){cvSetPhoto(el.getAttribute('data-id'),'');return}
   if(a==='goq'){location.hash='#/class/'+CV.bank+'/'+(+el.getAttribute('data-n')||1);return}
   if(a==='toggle'){var k=el.getAttribute('data-k');CV.open[k]=CV.open[k]===false;cvDraw();return}
   if(a==='join'){

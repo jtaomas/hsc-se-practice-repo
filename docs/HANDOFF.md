@@ -104,3 +104,7 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 ## Account profile pictures
 
 Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128×128 JPEG in the browser. Authenticated `profile` requests store only the session owner’s picture at `profiles/<id>.json`; an empty picture removes it. The server caps the data URL at 44,000 characters and rejects external URLs, SVG and non-JPEG payloads. No credentials or progress are changed. Account load returns the picture; class membership reads attach it to overview and answer rows. Browser account epochs and the sync queue protect against stale uploads after sign-out or account changes. Tests cover authentication, validation, isolation, sharing, upload, reload and removal.
+
+## Class roster and admin
+- Class page lists everyone in the class with avatars (`roster` action in `api/class.js`, `cvRosterHTML` in `public/classview.js`).
+- Admins (emails in env `CLASS_ADMINS`, comma separated; default `thomas.luu@education.nsw.gov.au,thomas.lu@education.nsw.gov.au`) see "Change photo" / "Remove" on every member (`setphoto` action, same JPEG validation as the profile photo).

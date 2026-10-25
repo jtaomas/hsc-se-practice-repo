@@ -143,7 +143,14 @@ function createClassStore(options) {
     await write('class/synth/' + digest + '.json', result, true);
   }
 
-  return { configured, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  // Admin action: set or clear a member's profile photo (a validated JPEG data URL, or '' to remove it).
+  async function setPhoto(id, photo) {
+    if (!(await getMember(id))) throw error(404, 'no_member', 'That person is not in the class.');
+    await update('profiles/' + id + '.json', current => Object.assign({}, current, { photo }));
+    return { photo };
+  }
+
+  return { configured, setPhoto, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, normaliseCode, QUOTA, MAX_MEMBERS, error };

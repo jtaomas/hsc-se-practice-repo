@@ -952,3 +952,10 @@ a.nb.dis{opacity:.45;pointer-events:none}
 .cvres p{margin:4px 0}.cvbox .acts{margin-top:6px}
 .mk-main .acts{margin-top:12px}
 .mk-item.part+.mk-item.part{margin-top:-1px;padding-top:6px;border-top:1px solid #002664}
+
+.cv-people{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0 16px}
+.cv-person{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #d0d0d0;min-width:0}
+.cv-pav{flex:none;display:inline-flex;width:40px;height:40px;border-radius:50%;overflow:hidden}
+.cv-pav img,.cv-pav svg{width:40px;height:40px;border-radius:50%;display:block}
+.cv-pname2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.cv-padm{display:flex;gap:6px;flex:none}

@@ -889,7 +889,8 @@ table.hoa.db{margin:12px 0}
 .acts.gi-acts{display:flex;flex-direction:column;margin:0;gap:0;width:100%}
 .gi-start-btn{background:#002664;color:#fff;border:none;border-radius:3px;font-size:1.12em;font-weight:700;padding:12px 24px;width:100%;cursor:pointer;display:inline-flex;justify-content:center;align-items:center;letter-spacing:.5px;text-decoration:none;box-sizing:border-box}
 .gi-start-btn:hover{background:#0a3a8a;color:#fff}
-.gi-mode-subbar{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;width:100%}
+.gi-mode-subbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px;width:100%}
+.gi-mode-subbar .nb{width:100%;box-sizing:border-box;justify-content:center;text-align:center;text-decoration:none}
 .gi-mode-subbar .gi-practice-btn{width:100%;text-align:center;font-size:.85em}
 .gi-mode-note{font-size:.8em;color:#555;text-align:center}
 

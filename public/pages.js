@@ -242,14 +242,14 @@ function landingPage(b){
   var leftHtml=
     '<div class="gi-header-row"><h1 class="gi-title">General Instructions</h1>'+(typeof trialAvatarsHTML==='function'?trialAvatarsHTML(b,true):'')+'</div>'+
     '<h2 class="gi-section">Reading time</h2>'+
-    '<p class="gi-p">There is no reading time given for viewing this past exam. You will be given 10 minutes reading time in the sample and real exams. During reading time in the sample and real exams you will not be able to answer questions, and exiting the exam at this stage is not possible. You can move freely between the questions, and you can flag questions. Highlighting of text is also permitted.</p>'+
+    '<p class="gi-p">This practice site gives no reading time. In the real examination you have 10 minutes of reading time first. During reading time you cannot answer questions or leave the examination, but you can move between questions, flag questions and highlight text.</p>'+
     '<h2 class="gi-section">Working time</h2>'+
-    '<p class="gi-p">There is no time limit to viewing this past exam. You will be given '+timeStr+' to attempt the questions in the sample and real exams.</p>'+
+    '<p class="gi-p">Working time for this paper is '+timeStr+'. In exam mode the countdown timer starts as soon as you begin. In practice mode there is no time limit.</p>'+
     '<h2 class="gi-section">Permitted equipment</h2>'+
-    '<p class="gi-p">During the real exams:</p>'+
+    '<p class="gi-p">During the real examination:</p>'+
     '<ul class="gi-list">'+
-      '<li>You <strong>must</strong> use headphones while viewing video content or listening to audio.</li>'+
       '<li>Pen and paper are permitted for planning. The supervisor will provide you with paper.</li>'+
+      '<li>Notes, calculators and other aids are not permitted.</li>'+
     '</ul>'+
     '<p class="gi-p"><strong>The number of words that is provided for each short-answer item gives an indication of the length of response.</strong></p>'+
     '<h2 class="gi-section">Exam navigation and tool bar functionality</h2>'+

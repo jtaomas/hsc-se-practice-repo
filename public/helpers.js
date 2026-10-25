@@ -119,8 +119,7 @@ function getPaperStudents(b){
   var list = [];
   var u = S.u[b.id];
   if(u && (u.start || u.done)){
-    var rawEmail = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : '');
-    var email = rawEmail ? rawEmail.replace(/@student\.det\.nsw\.edu\.au$/i, '@education.nsw.gov.au') : '';
+    var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : '');
     var rawName = S.ae ? S.ae.split('@')[0].replace(/[._]/g, ' ') : (S.owner || 'You');
     var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
     if(typeof CV !== 'undefined' && CV.st && CV.st.name) name = CV.st.name;
@@ -129,15 +128,12 @@ function getPaperStudents(b){
   }
   if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
     CV.over.papers[b.id].forEach(function(m){
-      var mName = String(m.name || '').trim();
-      if(!mName || /^(hi|hai|priya|sam|joyce|test)$/i.test(mName)) return;
       if(!m.mine || !list.some(function(item){return item.isMe})){
-        var mEmail = m.mine ? (S.ae || '').replace(/@student\.det\.nsw\.edu\.au$/i, '@education.nsw.gov.au') : (mName.toLowerCase().replace(/\s+/g, '.') + '@education.nsw.gov.au');
         list.push({
-          name: mName,
-          email: mEmail,
+          name: m.name,
+          email: m.mine ? (S.ae || '') : '',
           status: m.status === 'Submitted' ? 'Submitted' : 'In progress',
-          seed: m.id || mName,
+          seed: m.id || m.name,
           photo: m.mine ? (S.photo || '') : (m.photo || ''),
           isMe: !!m.mine
         });

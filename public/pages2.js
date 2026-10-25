@@ -31,7 +31,7 @@ function ansPreview(m){
   else if(it.t==='dr')h+='<pre class="yans">'+esc(xdText(a.e))+'</pre>';
   else h+='<pre class="yans">'+esc(String(a))+'</pre>';
   h+=aiBlock(m.b,m.n,m.i,it,bs,k,a,m.s);
-  h+='<details class="xdd"><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
+  h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
 /* My mistakes: a vertical list of every part that lost marks (left) and the selected one in the exam's own style (right). */
@@ -74,7 +74,7 @@ function mkDetail(list,m){
     '<p class="mut mk-where">'+esc(b.name)+' &middot; '+esc(q.tp)+'</p>'+
     '<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+
     '<div class="part"><p class="hoa-q">'+(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mkLabel+'</p>'+
-    '<div class="guide mk-guide"><h4>What you did wrong <span class="sc">'+m.s.g+' / '+m.s.m+'</span></h4>'+ansPreview(m)+crit+'</div>'+
+    '<div class="guide mk-guide">'+(AUTO[it.t]?'':'<h4>Your answer</h4>')+ansPreview(m)+crit+'</div>'+
     classSlot(b,m.n,m.i)+'</div></div>'+
     '<div class="acts"><a class="nb ol'+(prev?'':' dis')+'" '+(prev?'href="'+mkHref(prev)+'"':'aria-disabled="true"')+'>'+IC.left+'<span>Previous mistake</span></a>'+
     '<a class="nb'+(next?'':' dis')+'" '+(next?'href="'+mkHref(next)+'"':'aria-disabled="true"')+'><span>Next mistake</span>'+IC.right+'</a>'+

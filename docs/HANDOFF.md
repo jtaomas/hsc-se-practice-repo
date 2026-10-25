@@ -95,3 +95,8 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - In prose written for the owner, avoid em dashes, three-item lists and inflated claims.
 - The owner is a Year 12 student. Explain results, not internals, and say clearly when something could not be checked.
 - Tell the owner before doing anything that touches their accounts or deletes data.
+
+## Concise marking and class boxes
+- AI marking block (`aiBlock` in `public/ai.js`) shows one sentence of summary, up to 2 "Earned" and 2 "To gain" bullets. Advice, criterion evidence, losses, quality, provenance and re-mark sit in one collapsed "Details" drawer. It no longer repeats the score; the score shows once in the part header (or the question badge in My mistakes).
+- My mistakes shows the sample answer open by default, tighter list and detail spacing (CSS block "Concise My mistakes" at the end of `style.css`).
+- Class model answer builds automatically (`cvAutoBuild` in `public/classview.js`) for any part in view with 2+ shared answers, once per visit (cached server-side). It sits above the class answers; main points and gaps are in a collapsed drawer.

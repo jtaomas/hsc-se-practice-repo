@@ -129,6 +129,7 @@ function runAIQuestion(b,n){
   run.promise=aiWorkers(next,calls.length).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
   return run.promise;
 }
+function aiFirst(t){t=String(t||'').trim();var m=t.match(/^.*?[.!?](\s|$)/);t=m?m[0].trim():t;return t.length>170?t.slice(0,167).replace(/\s+\S*$/,'')+'...':t}
 function aiBlock(b,n,i,it,bs,k,a,sc){
   var ai=aiRecord(b,n,i),live=bs.done||(typeof pqShown==='function'&&pqShown(b,n));
   if(ai){
@@ -139,15 +140,17 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
     else if(audit.resolution==='adjudicated')provenance.push('Decision: confirmed after disagreement resolution and audit');
     if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
     if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
-    return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
+    return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':'AI marking')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(aiFirst(f.summary))+'</p>':'')+
       (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
 (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
-      (!provisional&&f.strengths&&f.strengths.length?'<p class="gh"><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (!provisional&&f.improve&&f.improve.length?'<p class="gh"><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (!provisional&&f.strengths&&f.strengths.length?'<p class="gh"><b>Earned</b></p><ul>'+f.strengths.slice(0,2).map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (!provisional&&f.improve&&f.improve.length?'<p class="gh"><b>To gain</b></p><ul>'+f.improve.slice(0,2).map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      '<details class="xdd"><summary>Details</summary>'+
       (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
       (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
       (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
-      (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+(!review&&!provisional?(legacy?'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>':'')+(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+
+      (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+(!review&&!provisional?(legacy?'':'')+(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+
+      '</details>'+
       (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
   }
   if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';

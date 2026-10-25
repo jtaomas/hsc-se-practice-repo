@@ -935,3 +935,19 @@ a.nb.dis{opacity:.45;pointer-events:none}
 .exb{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#fff3cd;border-bottom:2px solid #b26a00;color:#4a3300;padding:8px 22px}
 .exb .nb{margin:0}
 .lockbox a.nb,.mk-main a.nb,.exb a.nb{text-decoration:none}
+
+/* Concise My mistakes / marking / class boxes */
+.mk-list{gap:0}.mk-item{margin-top:-1px;padding:6px 10px}.mk-grp{margin:10px 0 6px}
+.mk-main .qwrap{margin:0;padding-top:12px}.mk-main .item{margin:0;padding:12px 16px}.mk-main .item .part{margin:0}
+.mk-main .guide{margin:8px 0 0;padding:10px 12px}.mk-main .guide h4{margin:0 0 6px;font-size:1em}
+.mk-main .guide .yans{margin:0 0 8px;padding:8px 10px}
+.mk-main .guide .xdd{margin:6px 0 0}.mk-main .guide .xdd summary{padding:4px 0}
+.mk-where{margin:0 0 8px}
+.guide .aib{margin:6px 0 0}.guide .aib>h5{margin:0 0 4px;font-size:.95em}
+.guide .aib p{margin:2px 0}.guide .aib p.gh{margin:6px 0 0}.guide .aib ul{margin:2px 0 4px 18px}.guide .aib li{margin:0 0 2px}
+.cvslot{margin-top:8px}.cvbox{padding:10px 12px}.cvbox .cvhd{margin:0 0 6px;font-size:.95em}
+.cvans{padding:8px 10px;margin:6px 0}.cvwho{margin-bottom:4px;padding-bottom:4px}.cvtxt{line-height:1.45}
+.cv-main-pts{padding:6px 10px;margin-top:6px}
+.cvagg{padding:10px 12px;margin:0 0 8px}.cvres{margin-top:4px;padding:8px 10px}.cvbest{padding:8px 10px}
+.cvres p{margin:4px 0}.cvbox .acts{margin-top:6px}
+.mk-main .acts{margin-top:12px}

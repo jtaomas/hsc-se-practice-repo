@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -54,13 +54,30 @@ function cvStatus(){
 function cvLoadAnswers(id,quiet){
   if(CV.loadAns)return Promise.resolve();
   CV.loadAns=true;if(!quiet){CV.ans=null;CV.ansBank=''}
-  return cvApi({action:'answers',bankId:id}).then(function(r){CV.ans=r;CV.ansBank=id;CV.ansAt=Date.now();CV.msg=''}).catch(function(e){CV.msg=e.message}).then(function(){CV.loadAns=false;cvDraw()});
+  return cvApi({action:'answers',bankId:id}).then(function(r){CV.ans=r;CV.ansBank=id;CV.ansAt=Date.now();CV.msg=''}).catch(function(e){CV.msg=e.message}).then(function(){CV.loadAns=false;cvDraw();var bk=BANKS.filter(function(x){return x.id===id})[0];if(bk)cvAutoBuild(bk)});
+}
+/* Builds (or fetches the cached) class model answer for one part. */
+function cvAnalyse(bankId,key,qn,pi){
+  if(CV.run[key]&&!CV.run[key].err)return;
+  CV.run[key]={};cvDraw();
+  cvApi({action:'analyse',bankId:bankId,questionNumber:qn,partIndex:pi}).then(function(r){delete CV.run[key];CV.res[key]=r;cvDraw()}).catch(function(e){CV.run[key]={err:e.message};cvDraw()});
+}
+/* Parts shown in a mistakes/review slot with 2+ shared answers build their model answer on their own, once per visit. */
+function cvAutoBuild(b){
+  if(!CV.ans||CV.ansBank!==b.id)return;
+  Array.prototype.forEach.call(document.querySelectorAll('.cvslot'),function(el){
+    if(el.getAttribute('data-b')!==b.id)return;
+    var n=+el.getAttribute('data-n'),i=+el.getAttribute('data-i'),key=n+'.'+i,k=b.id+'|'+key,list=CV.ans.parts[key]||[];
+    if(list.length<2||CV.res[k]||CV.run[k]||CV.auto[k])return;
+    CV.auto[k]=1;cvAnalyse(b.id,k,n,i);
+  });
 }
 /* Called after a question is drawn: loads the class state once and keeps the panels fresh. */
 function classEnsure(b){
   if(!S.tok||!b||!document.querySelector('.cvslot'))return;
   if(CV.st===null){if(!CV.loadSt)cvStatus().then(function(){classEnsure(b)});return}
   if(CV.st.member&&(CV.ansBank!==b.id||Date.now()-CV.ansAt>60000)&&!CV.loadAns)cvLoadAnswers(b.id,CV.ansBank===b.id);
+  cvAutoBuild(b);
 }
 function cvDraw(){
   var r=document.getElementById('cvroot');if(r&&/^#\/class/.test(location.hash))r.innerHTML=cvHTML();
@@ -88,7 +105,14 @@ function cvSlotInner(b,n,i){
 function cvPartBody(bankId,key,qn,pi,list){
   var k=bankId+'|'+key,r=CV.res[k],run=CV.run[k],isOpen=CV.open[k]!==false,busy=run&&!run.err;
   var bk=BANKS.filter(function(x){return x.id===bankId})[0],it=bk&&bk.qs[qn-1]&&bk.qs[qn-1].it[pi],code=!!it&&it.t!=='tx';
-  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
+  /* The aggregator: always shown, so it is clear where the model answer will appear. */
+  var g='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
+  if(r)g+=cvResultHTML(r);
+  else if(busy)g+='<p class="mut">Building the class model answer...</p>';
+  else g+='<p class="mut">The best points from everyone\'s answers, combined and checked against the syllabus.'+(list.length>=2?'':' It needs at least 2 shared answers ('+list.length+' so far).')+'</p>';
+  if(run&&run.err)g+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
+  g+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
+  var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
     (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
@@ -109,12 +133,6 @@ function cvPartBody(bankId,key,qn,pi,list){
       (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+
       ptsHTML+'</div>';
   }).join('');
-  /* The aggregator: always shown, so it is clear where the model answer will appear. */
-  h+='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
-  if(r)h+=cvResultHTML(r);
-  else h+='<p class="mut">The best points from everyone\'s answers combined into one model answer, checked against the syllabus.'+(list.length>=2?'':' It needs at least 2 shared answers ('+list.length+' so far).')+'</p>';
-  if(run&&run.err)h+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
-  h+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
   return h;
 }
 function classPage(bankId,n){
@@ -195,17 +213,18 @@ function cvList(items,fn){return items&&items.length?items.map(fn).join(''):''}
 function cvWho(r,letters){return (letters||[]).map(function(l){return esc(r.names&&r.names[l]||l)}).join(', ')}
 function cvResultHTML(res){
   var r=res.result||{},h='<div class="cvres">';
-  if(r.combined)h+='<div class="cvbest">'+esc(r.combined).replace(/\n/g,'<br>')+'</div><p class="mut">About '+cvPlain(r.combined).split(' ').length+' words (target about '+res.targetWords+'). Built only from points the class made, checked against the syllabus.</p>';
+  if(r.combined)h+='<div class="cvbest">'+esc(r.combined).replace(/\n/g,'<br>')+'</div><p class="mut">About '+cvPlain(r.combined).split(' ').length+' words (target '+res.targetWords+').</p>';
   if(res.keyword)h+='<p class="mut">NESA key word: <b>'+esc(res.keyword.word)+'</b> &mdash; '+esc(res.keyword.meaning)+'</p>';
   if(r.directive)h+='<p><b>What the question asks:</b> '+esc(r.directive)+'</p>';
-  h+='<h3>Main points behind it</h3><ul class="cvpts">'+cvList(r.mainPoints,function(p){
+  h+='<details class="xdd"><summary>Main points and gaps</summary><ul class="cvpts">'+cvList(r.mainPoints,function(p){
     var tag=p.answersQuestion==='yes'?'Answers the question':p.answersQuestion==='partly'?'Partly answers':'Off the question';
     return '<li><b>'+esc(p.point)+'</b> <span class="pill '+(p.answersQuestion==='yes'?'ok':p.answersQuestion==='partly'?'part':'bad')+'">'+tag+'</span>'+
       (p.syllabus?'<br><span class="mut">Syllabus: '+esc(p.syllabus)+'</span>':'')+
       '<br><span class="mut">Made by '+cvWho(res,p.madeBy)+'</span>'+(p.why?'<br>'+esc(p.why):'')+
       cvList(p.quotes,function(q){return '<blockquote class="cvquote">&ldquo;'+esc(q.text)+'&rdquo; <span class="mut">'+esc(res.names&&res.names[q.who]||q.who)+'</span></blockquote>'})+'</li>';
   })+'</ul>';
-  if(r.missed&&r.missed.length)h+='<h3>Missed by the class</h3><ul>'+r.missed.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul>';
+  if(r.missed&&r.missed.length)h+='<p class="gh"><b>Missed by the class</b></p><ul>'+r.missed.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul>';
+  h+='</details>';
   return h+'</div>';
 }
 document.addEventListener('click',function(ev){
@@ -224,9 +243,5 @@ document.addEventListener('click',function(ev){
     if(n)cvApi({action:'rename',name:n}).then(function(r){CV.st.name=r.name;CV.ans=null;CV.ansBank='';cvDraw();classBind()}).catch(function(e){CV.msg=e.message;cvDraw()});
     return;
   }
-  if(a==='analyse'){
-    var key=el.getAttribute('data-k');if(CV.run[key]&&!CV.run[key].err)return;
-    CV.run[key]={};cvDraw();
-    cvApi({action:'analyse',bankId:el.getAttribute('data-b')||CV.bank,questionNumber:+el.getAttribute('data-q'),partIndex:+el.getAttribute('data-p')}).then(function(r){delete CV.run[key];CV.res[key]=r;cvDraw()}).catch(function(e){CV.run[key]={err:e.message};cvDraw()});
-  }
+  if(a==='analyse')cvAnalyse(el.getAttribute('data-b')||CV.bank,el.getAttribute('data-k'),+el.getAttribute('data-q'),+el.getAttribute('data-p'));
 });

@@ -168,10 +168,11 @@ with sync_playwright() as playwright:
     # Agreed marks expose separate improvement/advice and the evidence/provenance drawers.
     page.goto(URL + '#/1/review/18')
     marking = page.locator('.guide .aib')
-    expect(marking.locator('h5')).to_contain_text('2 / 3')
-    expect(marking).to_contain_text('How to gain more marks')
+    expect(page.locator('.guide > h4 .sc').first).to_contain_text('2 / 3')
+    expect(marking).to_contain_text('To gain')
     expect(marking).to_contain_text('Further advice (not a mark deduction)')
     expect(marking).to_contain_text('Use a concrete password example when revising.')
+    marking.get_by_text('Details', exact=True).click()
     marking.get_by_text('Criterion evidence', exact=True).click()
     expect(marking).to_contain_text('C1: partial')
     expect(marking).to_contain_text('The salt protection link is incomplete.')
@@ -198,6 +199,7 @@ with sync_playwright() as playwright:
     assert page.evaluate("aiTodo(BANKS[0]).length") == 0
     capture(page, 'marking-needs-review.png')
     page.goto(URL + '#/mistakes/1')
+    page.wait_for_timeout(300); capture(page, 'mistakes-page.png')
     headers = page.locator('.mk-item .mk-q').all_text_contents()
     assert 'Q18' in headers
     assert 'Q20' not in headers
@@ -270,7 +272,7 @@ with sync_playwright() as playwright:
     assert len(mark_requests) == 3
     assert mark_requests[-1]['bankId'] == 'formats'
     page.goto(URL + '#/formats/review/3')
-    expect(page.locator('.guide .aib h5')).to_contain_text('3 / 3')
+    expect(page.locator('.guide > h4 .sc').first).to_contain_text('3 / 3')
     expect(page.locator('.guide .ftab')).to_contain_text('2500')
     page.goto(URL + '#/formats/q/3')
     cell = page.locator('.fti[data-c="0,0"]')
@@ -297,7 +299,7 @@ with sync_playwright() as playwright:
     page.click('[data-act=pqmark]')
     page.wait_for_function("BS('10').ai['1.0'] && !aiQuestionRun(CUR.b, 1)")
     marking = page.locator('.guide .aib').first
-    expect(marking.locator('h5')).to_have_text('Provisional mark 2 / 5')
+    expect(marking.locator('h5')).to_have_text('Provisional mark')
     expect(page.locator('.guide > h4 .sc')).to_have_text('Provisional: 2 / 5')
     expect(marking).to_contain_text('not a confirmed assessment')
     capture(page, 'marking-provisional-feedback.png')

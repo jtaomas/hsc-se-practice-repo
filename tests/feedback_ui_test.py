@@ -76,6 +76,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(Path(artifact_dir) / 'improvement-mobile.png'))
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), page.evaluate("Array.from(document.querySelectorAll('body *')).filter(x=>x.getBoundingClientRect().right>innerWidth+1).map(x=>[x.tagName,x.className,x.getBoundingClientRect().right]).slice(0,20)")
     page.evaluate("location.hash='#/1/review/18'")
+    page.locator('.guide .aib > details > summary').first.click()
     expect(page.get_by_text('Where marks were lost', exact=True)).to_be_visible()
     expect(page.get_by_text('Response quality', exact=True)).to_be_visible()
     page.get_by_text('Clarity', exact=True).click()

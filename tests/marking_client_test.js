@@ -73,7 +73,7 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.deepEqual([t.rows[0].g,t.rows[0].markedM,t.rows[0].provisionalG,t.tp.Project.g,t.tp.Project.provisionalM],[2,3,1,2,3]);
     assert.deepEqual(clone(c.mistakeList().map(m=>m.i)),[1]);
     const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
-    assert(html.includes('Provisional mark'));assert(html.includes('1 / 3'));assert(html.includes('lower valid proposed mark'));assert(html.includes('not a confirmed assessment'));
+    assert(html.includes('Provisional mark'));assert(html.includes('lower valid proposed mark'));assert(html.includes('not a confirmed assessment'));
     assert(html.includes('Provisional criterion evidence'));assert(!html.includes('What earned marks'));assert(!html.includes('How to gain more marks'));assert(!html.includes('data-act="airetry"'));
     // Even a malformed local copy must not display unaudited diagnostics as facts.
     bs.ai['1.0'].fb.strengths=['UNCONFIRMED_DIAGNOSIS'];c.feedbackDetails=()=>{throw new Error('Provisional diagnostics rendered')};

@@ -34,6 +34,12 @@ function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return
     const {c,b,bs}=client();c.S.tok='';await c.runImprovement(b);assert(c.improvementPanel(b).includes('Sign in'));c.S.tok='session';bs.done=false;await c.runImprovement(b);assert(c.improvementPanel(b).includes('Submit the paper'));
   }
   {
+    const {c,b,bs}=client();bs.ai['1.0'].status='provisional';bs.ai['1.0'].g=1;
+    assert(c.improvementPanel(b).includes('Provisional AI marks and their criterion feedback are excluded'));
+    const payload=c.improvementPayload(b);assert.equal(payload.answers[0].markingReference,'a'.repeat(64));assert(!('mark' in payload.answers[0]));assert(!('feedback' in payload.answers[0]));
+    assert(c.improvementReport(b,report()).includes('provisional AI marks and any marks you set yourself are excluded'));
+  }
+  {
     const {c,b,bs}=client();c.fetch=async()=>response({error:'Unavailable'},503);await c.runImprovement(b);assert.equal(bs.improvementError,'Unavailable');assert.equal(bs.improvement,undefined);
     c.fetch=async()=>response({...report(),status:'needs_review',plan:[]});await c.runImprovement(b);assert(c.improvementPanel(b).includes('could not confirm'));assert(!c.improvementPanel(b).includes('Explain the mechanism'));
     assert(c.improvementPanel(b).includes('Response-quality profile'),'verified aggregate ratings remain visible when the narrative plan needs review');

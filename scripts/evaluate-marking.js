@@ -11,6 +11,10 @@ const feedback = require('../server/feedback-policy');
 const DEFAULT_FIXTURE = path.join(__dirname, '../tests/fixtures/marking-calibration.json');
 const AI = require('../server/ai-provider').current();
 const ENDPOINT = AI.endpoint;
+// Reserve every logical stage before starting a case. The optional shared
+// connection retry may use only otherwise-unreserved explicit budget.
+const MAX_LOGICAL_CALLS = engine.MAX_LOGICAL_CALLS ?? 5;
+const MAX_NETWORK_ATTEMPTS = engine.MAX_NETWORK_ATTEMPTS ?? 6;
 const safeCode = value => typeof value === 'string' && /^[a-z_]{1,80}$/.test(value) ? value : 'evaluation_failed';
 function fail(message) { throw new Error(message); }
 function integer(value, minimum, maximum) { return Number.isSafeInteger(value) && value >= minimum && value <= maximum; }
@@ -71,12 +75,14 @@ function deterministicResult(prepared) {
     audit: { calls: [], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, reasons: [prepared.reviewReason ? 'evidence_requires_review' : 'blank_answer'] } };
 }
 function feedbackIssues(result, input, expected, deterministic) {
-  if (result.status !== 'marked') return [];
+  if (!['marked', 'provisional'].includes(result.status)) return [];
   const issues = [];
   if (!deterministic) {
-    if (result.mark === input.maxMarks && result.improve && result.improve.length) issues.push('full_marks_with_scored_improvement');
-    if (result.mark < input.maxMarks && (!Array.isArray(result.improve) || !result.improve.length)) issues.push('missing_scored_improvement');
-    if (result.mark === 0 && result.strengths && result.strengths.length) issues.push('zero_with_credited_strength');
+    if (result.status === 'marked') {
+      if (result.mark === input.maxMarks && result.improve && result.improve.length) issues.push('full_marks_with_scored_improvement');
+      if (result.mark < input.maxMarks && (!Array.isArray(result.improve) || !result.improve.length)) issues.push('missing_scored_improvement');
+      if (result.mark === 0 && result.strengths && result.strengths.length) issues.push('zero_with_credited_strength');
+    }
     const policy = feedback.feedbackProblem(result, input);
     if (policy) issues.push(policy);
     for (const criterion of result.criteria || []) {
@@ -84,7 +90,9 @@ function feedbackIssues(result, input, expected, deterministic) {
       if ((criterion.evidence || []).some(quote => input.type === 'diagram' ? !input.diagramScene.elements.some(el => el.id === quote) : !input.answer.includes(quote))) issues.push('unsupported_criterion_evidence');
     }
   }
-  for (const expectation of expected.qualityExpectations || []) {
+  // Provisional results deliberately withhold losses/quality and educational
+  // feedback. Absence there is not a failed quality rating or a confirmed audit.
+  for (const expectation of result.status === 'marked' ? expected.qualityExpectations || [] : []) {
     const actual = (result.quality || []).find(item => item.id === expectation.factor);
     if (!actual || actual.rating === null || actual.rating < expectation.range[0] || actual.rating > expectation.range[1]) issues.push('quality_expectation_' + expectation.factor);
   }
@@ -93,18 +101,29 @@ function feedbackIssues(result, input, expected, deterministic) {
 function compareTrial(item, result, durationMs, deterministic = false) {
   const expected = item.expected, input = prepare(item.request).input;
   const scored = result.status === 'marked' && integer(result.mark, 0, input.maxMarks);
+  const provisional = result.status === 'provisional' && integer(result.mark, 0, input.maxMarks);
   const numeric = expected.status === 'marked' && scored;
+  const provisionalNumeric = expected.status === 'marked' && provisional;
+  const outsideRange = mark => mark < expected.range[0] ? 'under' : mark > expected.range[1] ? 'over' : null;
   return { id: item.id, split: item.split, paper: item.request.bankId, type: item.source.type, tags: item.tags,
     expectedStatus: expected.status, expectedMark: expected.mark, expectedRange: expected.range,
-    status: result.status, mark: scored ? result.mark : null, deterministic, durationMs,
+    status: result.status, mark: scored || provisional ? result.mark : null, deterministic, durationMs,
+    confirmedScore: scored, provisionalScore: provisional, numericReleased: scored || provisional,
     exactAgreement: expected.status === 'marked' ? (scored ? result.mark === expected.mark : false) : result.status === 'needs_review',
     rangeAgreement: expected.status === 'marked' ? (scored ? result.mark >= expected.range[0] && result.mark <= expected.range[1] : false) : result.status === 'needs_review',
     signedError: numeric ? result.mark - expected.mark : null,
-    outsideRange: numeric ? result.mark < expected.range[0] ? 'under' : result.mark > expected.range[1] ? 'over' : null : null,
+    outsideRange: numeric ? outsideRange(result.mark) : null,
+    provisionalExactAgreement: provisionalNumeric ? result.mark === expected.mark : null,
+    provisionalRangeAgreement: provisionalNumeric ? outsideRange(result.mark) === null : null,
+    provisionalSignedError: provisionalNumeric ? result.mark - expected.mark : null,
+    provisionalOutsideRange: provisionalNumeric ? outsideRange(result.mark) : null,
+    feedbackAssessment: result.status === 'provisional' ? 'unavailable_provisional' : scored ? 'mechanical_only' : 'not_assessed',
     feedbackIssues: feedbackIssues(result, input, expected, deterministic), result };
 }
 function metrics(trials, prices) {
-  const labelled = trials.filter(t => t.expectedStatus === 'marked'), scored = labelled.filter(t => t.signedError !== null);
+  const labelled = trials.filter(t => t.expectedStatus === 'marked');
+  const scored = labelled.filter(t => t.status === 'marked' && Number.isFinite(t.signedError));
+  const provisional = labelled.filter(t => t.status === 'provisional' && Number.isFinite(t.provisionalSignedError));
   const reviews = trials.filter(t => t.expectedStatus === 'needs_review');
   const latencies = trials.map(t => t.durationMs).sort((a, b) => a - b);
   const rate = (n, d) => d ? n / d : null;
@@ -121,6 +140,18 @@ function metrics(trials, prices) {
   return {
     trials: trials.length, scoreLabelledTrials: labelled.length, confirmedScores: scored.length,
     scoreCoverage: rate(scored.length, labelled.length),
+    provisionalScores: provisional.length, releasedScores: scored.length + provisional.length,
+    releasedRate: rate(scored.length + provisional.length, labelled.length),
+    unscoredLabelledTrials: labelled.length - scored.length - provisional.length,
+    unexpectedNumericReleases: trials.filter(t => t.expectedStatus !== 'marked' && t.numericReleased).length,
+    provisionalRate: rate(provisional.length, labelled.length),
+    provisionalExactAgreement: rate(provisional.filter(t => t.provisionalExactAgreement).length, provisional.length),
+    provisionalRangeAgreement: rate(provisional.filter(t => t.provisionalRangeAgreement).length, provisional.length),
+    provisionalMeanAbsoluteError: rate(provisional.reduce((sum, t) => sum + Math.abs(t.provisionalSignedError), 0), provisional.length),
+    provisionalSignedBias: rate(provisional.reduce((sum, t) => sum + t.provisionalSignedError, 0), provisional.length),
+    provisionalOverAwards: provisional.filter(t => t.provisionalOutsideRange === 'over').length,
+    provisionalUnderAwards: provisional.filter(t => t.provisionalOutsideRange === 'under').length,
+    unscoredProvisionalResults: trials.filter(t => t.status === 'provisional' && t.mark === null).length,
     exactAgreementAmongScored: rate(scored.filter(t => t.exactAgreement).length, scored.length),
     rangeAgreementAmongScored: rate(scored.filter(t => t.rangeAgreement).length, scored.length),
     rangeAgreementIncludingAbstentions: rate(labelled.filter(t => t.rangeAgreement).length, labelled.length),
@@ -185,7 +216,7 @@ function parseArgs(args) {
 function reportBase(data, coverage, mode) {
   return { schemaVersion: 1, mode, labelSource: data.labelSource, teacherCertified: false, fixtureDigest: digest(data),
     harnessVersion: engine.HARNESS_VERSION, requestedModel: engine.MODEL, coverage,
-    limitations: ['Labels are assistant-authored hypotheses, not teacher-certified marks.', 'Mechanical feedback checks do not judge educational usefulness or factual accuracy.', 'Same-model blind agreement is not independent human adjudication.', 'Five complete PNG/scene diagrams are synthetic development cases; live visual accuracy requires measured provider results.'], trials: [] };
+    limitations: ['Labels are assistant-authored hypotheses, not teacher-certified marks.', 'Mechanical feedback checks do not judge educational usefulness or factual accuracy.', 'Same-model blind agreement is not independent human adjudication.', 'Provisional numeric results are separate from confirmed-score coverage and agreement; they withhold educational diagnostics and may under-award.', 'Five complete PNG/scene diagrams are synthetic development cases; live visual accuracy requires measured provider results.'], trials: [] };
 }
 async function run(options, dependencies = {}) {
   const data = readJson(options.fixture), coverage = validateDataset(data);
@@ -211,18 +242,19 @@ async function run(options, dependencies = {}) {
     const key = dependencies.apiKey || (options.envFile ? readEvaluationKey(options.envFile) : AI.key());
     if (!key) fail(AI.keyEnv + ' is absent; live evaluation was not run.');
     const bounded = budgetedFetch(dependencies.fetch || globalThis.fetch, options);
-    report.budget = { maxCalls: options.maxCalls, maxOutputTokens: options.maxOutputTokens, maxUsd: options.maxUsd == null ? null : options.maxUsd, prices: options.prices || null };
+    report.budget = { maxCalls: options.maxCalls, maxOutputTokens: options.maxOutputTokens, maxUsd: options.maxUsd == null ? null : options.maxUsd, prices: options.prices || null,
+      perJobLogicalCalls: MAX_LOGICAL_CALLS, perJobMaxNetworkAttempts: MAX_NETWORK_ATTEMPTS };
     const concurrency = options.concurrency || 1;
     report.concurrency = concurrency;
     const jobs = selected.flatMap(item => Array.from({ length: options.repeats }, (_, repetition) => ({ item, repetition, prepared: prepare(item.request) })));
     const running = new Set();
     let stopped = false, next = 0, pendingCalls = 0, pendingOutputTokens = 0;
     function capacityAvailable() {
-      return bounded.state.calls + pendingCalls + 3 <= options.maxCalls &&
-        bounded.state.reservedOutputTokens + pendingOutputTokens + 3 * engine.LIMITS.maxTokens <= options.maxOutputTokens;
+      return bounded.state.calls + pendingCalls + MAX_LOGICAL_CALLS <= options.maxCalls &&
+        bounded.state.reservedOutputTokens + pendingOutputTokens + MAX_LOGICAL_CALLS * engine.LIMITS.maxTokens <= options.maxOutputTokens;
     }
     function reserve() {
-      const reservation = { calls: 3, outputTokens: 3 * engine.LIMITS.maxTokens, sent: 0 };
+      const reservation = { calls: MAX_LOGICAL_CALLS, outputTokens: MAX_LOGICAL_CALLS * engine.LIMITS.maxTokens, sent: 0 };
       pendingCalls += reservation.calls; pendingOutputTokens += reservation.outputTokens;
       return reservation;
     }
@@ -230,10 +262,10 @@ async function run(options, dependencies = {}) {
       const { item, repetition, prepared } = job, initial = deterministicResult(prepared), began = Date.now();
       function jobFetch(url, request) {
         const generated = JSON.parse(request.body).max_tokens;
-        // A connection-only recovery may need a fourth physical request. Use
+        // A connection-only recovery may need a sixth physical request. Use
         // only spare explicit budget, never another active job's reservation.
-        // Normal cases still reserve three; neither CLI ceiling is increased.
-        if (reservation && reservation.calls === 0 && reservation.sent === 3 && integer(generated, 1, engine.LIMITS.maxTokens) &&
+        // Every logical stage is reserved; neither CLI ceiling is increased.
+        if (reservation && reservation.calls === 0 && reservation.sent < MAX_NETWORK_ATTEMPTS && integer(generated, 1, engine.LIMITS.maxTokens) &&
             bounded.state.calls + pendingCalls + 1 <= options.maxCalls &&
             bounded.state.reservedOutputTokens + pendingOutputTokens + generated <= options.maxOutputTokens) {
           reservation.calls++; pendingCalls++; reservation.outputTokens += generated; pendingOutputTokens += generated;

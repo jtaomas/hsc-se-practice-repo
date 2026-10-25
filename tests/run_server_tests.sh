@@ -4,7 +4,7 @@
 # AI engine is checked against both OpenCode Go and DeepSeek.
 set -e
 cd "$(dirname "$0")/.."
-for t in assessment_audit_test marking_input_test deployment_bundle_test marking_engine_test feedback_policy_test \
+for t in assessment_audit_test marking_input_test deployment_bundle_test marking_format_test marking_engine_test marking_resolution_test feedback_policy_test \
          marking_api_test marking_client_test feedback_client_test improvement_input_test improvement_engine_test \
          improvement_api_test improvement_evaluator_test marking_evaluator_test marking_summary_test \
          marking_storage_transport_test d1_adapter_test archive_test class_test ai_provider_test; do

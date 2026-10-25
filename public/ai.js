@@ -28,7 +28,7 @@ function aiCall(payload,token){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
       j=j||{};
       if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
-      if((j.status!=='marked'&&j.status!=='needs_review')||(j.status==='marked'&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
+      if((j.status!=='marked'&&j.status!=='provisional'&&j.status!=='needs_review')||((j.status==='marked'||j.status==='provisional')&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
       return j;
     });
   }).then(function(r){clearTimeout(timer);return r},function(e){clearTimeout(timer);if(e.name==='AbortError')throw new Error('AI marking timed out. Try again when the service is available.');throw e});
@@ -39,10 +39,11 @@ function aiTodo(b){
   return t;
 }
 function aiReviews(b){var count=0;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var a=aiRecord(b,qi+1,i);if(a&&a.status==='needs_review')count++})});return count}
+function aiProvisionals(b){var count=0;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){if(score(b,qi+1,i).src==='provisional')count++})});return count}
 function aiPaperStamp(b){return JSON.stringify(b.qs.map(function(q,qi){return q.it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,qi+1,i)})}))}
 /* Stores one finished AI result in the paper, in the shape the review pages read. */
 function aiStore(bs,k,it,stamp,r){
-  if(r.status==='marked'&&(r.mark<0||r.mark>it.m))throw new Error('The marking service returned a mark outside the available range.');
+  if((r.status==='marked'||r.status==='provisional')&&(r.mark<0||r.mark>it.m))throw new Error('The marking service returned a mark outside the available range.');
   function strings(a){return Array.isArray(a)?a.filter(function(x){return typeof x==='string'}):[]}
   bs.ai[k]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};
   delete bs.aiErr[k];
@@ -131,18 +132,21 @@ function runAIQuestion(b,n){
 function aiBlock(b,n,i,it,bs,k,a,sc){
   var ai=aiRecord(b,n,i),live=bs.done||(typeof pqShown==='function'&&pqShown(b,n));
   if(ai){
-    var f=ai.fb||{},review=ai.status==='needs_review',legacy=!ai.stamp,audit=ai.audit||{};
+    var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp,audit=ai.audit||{};
     var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(aiPayload(b,n,i).answer):null;
     var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];
+    if(provisional)provenance.push('Decision: provisional lower-mark fallback');
+    else if(audit.resolution==='adjudicated')provenance.push('Decision: confirmed after disagreement resolution and audit');
     if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
     if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
-    return '<div class="aib'+(review?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
+    return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
       (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-      (f.strengths&&f.strengths.length?'<p class="gh"><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.improve&&f.improve.length?'<p class="gh"><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.criteria&&f.criteria.length?'<details class="xdd"><summary>Criterion evidence</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
-      (typeof feedbackDetails==='function'&&!review?feedbackDetails(f,scene):'')+
+      (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
+      (!provisional&&f.strengths&&f.strengths.length?'<p class="gh"><b>What earned marks</b></p><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (!provisional&&f.improve&&f.improve.length?'<p class="gh"><b>How to gain more marks</b></p><ul>'+f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+      (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
+      (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
       (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'<p>Re-marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+(S.tok?'<button class="nb sm" data-act="airemark" data-k="'+esc(k)+'">Re-mark with current process</button>':'<a href="#/account">Sign in to re-mark</a>'))+
       (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
   }
@@ -168,7 +172,7 @@ function closedCompare(it,a){
 }
 function mistakeList(){
   var out=[];
-  BANKS.forEach(function(b){var u=S.u[b.id];if(!u||!u.done||b.hidden)return;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var s=score(b,qi+1,i);if(s.set&&s.g<s.m)out.push({b:b,n:qi+1,i:i,q:q,it:it,s:s})})})});
+  BANKS.forEach(function(b){var u=S.u[b.id];if(!u||!u.done||b.hidden)return;b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var s=score(b,qi+1,i);if(s.set&&s.src!=='provisional'&&s.g<s.m)out.push({b:b,n:qi+1,i:i,q:q,it:it,s:s})})})});
   return out;
 }
 function itemClass(it){return AUTO[it.t]?'closed':QT[it.t]&&QT[it.t].cls?QT[it.t].cls:it.t==='tx'?'written':it.t==='dr'?'diagram':'code'}

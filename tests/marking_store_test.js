@@ -90,7 +90,7 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   await a.fail(user(1), digest('diagnostic'), job.leaseId, diagnostic);
   const diagnosticPath = [...globalThis.__M.keys()].find(p => p.includes('/jobs/'));
   let captured = JSON.parse(globalThis.__M.get(diagnosticPath)).diagnostics;
-  assert.equal(captured.code, 'marking_timeout'); assert.equal(captured.audit.durationMs, 120000); assert.equal(captured.audit.calls.length, 3);
+  assert.equal(captured.code, 'marking_timeout'); assert.equal(captured.audit.durationMs, 120000); assert.equal(captured.audit.calls.length, 5);
   assert.equal(captured.audit.usage.reasoning_tokens, 1000); assert.equal(captured.audit.returnedModels[1], 'unexpected_model');
   assert(Buffer.byteLength(JSON.stringify(captured)) <= 8192); assert(!JSON.stringify(captured).includes('PRIVATE'));
   assert.equal(await a.getCached(user(1), digest('diagnostic')), null);
@@ -122,7 +122,7 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   ]);
   assert(!JSON.stringify(transportDiagnostic).includes('PRIVATE'));
   job = await a.getOrReserve(user(1), digest('transport-diagnostic'));
-  await a.fail(user(1), digest('transport-diagnostic'), job.leaseId, { code: 'provider_unavailable', audit: { networkAttempts: 5, calls: [] } });
+  await a.fail(user(1), digest('transport-diagnostic'), job.leaseId, { code: 'provider_unavailable', audit: { networkAttempts: 7, calls: [] } });
   assert.equal(JSON.parse(globalThis.__M.get(transportPath)).diagnostics.audit.networkAttempts, undefined);
   reset();
 
@@ -231,5 +231,15 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   reset();
   await blob.put('marking/v1/quota/' + day + '.json', JSON.stringify({ version: 1, day, total: 0, users: { [sha(user(1))]: 120 } }), { access: 'private', allowOverwrite: false });
   await assert.rejects(a.getOrReserve(user(2), digest(5)), code('marking_storage_invalid'), 'inconsistent quota counters must fail closed');
+  reset();
+  const provisionalJob = await a.getOrReserve(user(1), digest('provisional'));
+  const provisional = { ...result(), status: 'provisional', mark: 1 };
+  await a.finish(user(1), digest('provisional'), provisionalJob.leaseId, provisional);
+  assert.deepEqual(await a.getCached(user(1), digest('provisional')), provisional);
+  assert.equal((await a.getOrReserve(user(1), digest('provisional'))).state, 'cached');
+  assert.equal(ledger()[0].total, 1, 'terminal provisional results must not reserve another paid job');
+  const comparisons = createStore({ kind: 'comparison', blob: provider, now: () => clock });
+  const comparisonJob = await comparisons.getOrReserve(user(1), digest('provisional'));
+  await assert.rejects(comparisons.finish(user(1), digest('provisional'), comparisonJob.leaseId, provisional), code('invalid_marking_result'));
   console.log('marking store OK: shared sessions, durable deduplication, UTC quotas, concurrent reservations, terminal cache, stale leases, bounded results and storage failure safety');
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

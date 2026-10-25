@@ -24,6 +24,11 @@ function reply(body,status=200){return {ok:status<400,status,json:async()=>clone
 function defer(){let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve}}
 async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolve();assert(check())}
 (async()=>{
+  // A numeric fallback is not verified comparison evidence, even with a current stamp.
+  {
+    const c=client(),{b,bs}=fixture(c);bs.ai['1.1'].status='provisional';
+    const data=c.comparisonExportData(b);assert.deepEqual(clone(data.payload.parts),[{questionNumber:1,partIndex:0,answer:0}]);assert(data.excluded.unverified>=1);
+  }
   // Canonical answers and only verified marking digests leave the client; overrides and diagrams do not.
   {
     const c=client(),{b,bs}=fixture(c);let request;c.fetch=async(url,options)=>{assert.equal(url,'/api/compare');request=options;return reply({export:pack()})};

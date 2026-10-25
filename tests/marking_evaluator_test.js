@@ -111,6 +111,44 @@ async function main() {
   const unknown = metrics([{ ...correct, result: { audit: { calls: [{ status: 'failed' }] } } }], { input: 1, output: 2 });
   assert.equal(unknown.estimatedReportedUsageUsd, null); assert.equal(unknown.incompleteUsageCalls, 1);
 
+  // A provisional lower fallback is a numeric release, never confirmed
+  // agreement. Track its own exact/range errors even when the mark is correct.
+  const fullCase = fixture.cases.find(item => item.id === 'p1-q18-0-full');
+  const partialCase = fixture.cases.find(item => item.id === 'p1-q18-0-partial');
+  function provisionalResult(mark) {
+    return { status: 'provisional', mark, summary: 'A provisional mark is available.', strengths: [], improve: [], advice: [], criteria: [],
+      ...require('../server/feedback-policy').unavailableFeedback(), audit: { calls: [], reasons: ['lower_fallback'] } };
+  }
+  const provisionalExact = compareTrial(fullCase, provisionalResult(3), 12);
+  const provisionalUnder = compareTrial(partialCase, provisionalResult(1), 14);
+  const provisionalOver = compareTrial(partialCase, provisionalResult(3), 16);
+  assert.equal(provisionalExact.mark, 3); assert.equal(provisionalExact.numericReleased, true);
+  assert.equal(provisionalExact.confirmedScore, false); assert.equal(provisionalExact.provisionalScore, true);
+  assert.equal(provisionalExact.exactAgreement, false); assert.equal(provisionalExact.rangeAgreement, false);
+  assert.equal(provisionalExact.signedError, null); assert.equal(provisionalExact.provisionalExactAgreement, true);
+  assert.equal(provisionalExact.provisionalSignedError, 0); assert.equal(provisionalExact.feedbackAssessment, 'unavailable_provisional');
+  assert.deepEqual(provisionalExact.feedbackIssues, []); // Deliberate absence of quality is not a failed rating.
+  const provisionalSummary = metrics([correct, provisionalExact, provisionalUnder, provisionalOver, abstain, error]);
+  assert.equal(provisionalSummary.confirmedScores, 1); assert.equal(provisionalSummary.scoreCoverage, 1 / 6);
+  assert.equal(provisionalSummary.exactAgreementAmongScored, 1); assert.equal(provisionalSummary.rangeAgreementIncludingAbstentions, 1 / 6);
+  assert.equal(provisionalSummary.provisionalScores, 3); assert.equal(provisionalSummary.releasedScores, 4);
+  assert.equal(provisionalSummary.releasedRate, 4 / 6); assert.equal(provisionalSummary.provisionalRate, .5);
+  assert.equal(provisionalSummary.provisionalExactAgreement, 1 / 3); assert.equal(provisionalSummary.provisionalRangeAgreement, 1 / 3);
+  assert.equal(provisionalSummary.provisionalMeanAbsoluteError, 2 / 3); assert.equal(provisionalSummary.provisionalSignedBias, 0);
+  assert.equal(provisionalSummary.provisionalUnderAwards, 1); assert.equal(provisionalSummary.provisionalOverAwards, 1);
+  for (const mark of [null, '1', NaN, Infinity, -1, 4]) {
+    const invalid = compareTrial(fullCase, provisionalResult(mark), 1);
+    assert.equal(invalid.mark, null); assert.equal(invalid.numericReleased, false);
+    assert.equal(invalid.provisionalSignedError, null); assert.equal(invalid.provisionalExactAgreement, null);
+    assert.equal(metrics([invalid]).releasedScores, 0); assert.equal(metrics([invalid]).confirmedScores, 0);
+  }
+  const trueZero = compareTrial(sample, provisionalResult(0), 1);
+  assert.equal(trueZero.mark, 0); assert.equal(metrics([trueZero]).provisionalExactAgreement, 1);
+  assert.equal(metrics([trueZero]).confirmedScores, 0);
+  const unscoredReview = compareTrial(sample, { status: 'needs_review', mark: 0 }, 1);
+  assert.equal(unscoredReview.mark, null); assert.equal(unscoredReview.numericReleased, false);
+  assert.equal(metrics([unscoredReview]).releasedScores, 0); // A failure-shaped zero is not a mark.
+
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'marking-evaluator-'));
   try {
     const output = path.join(temp, 'offline.json');
@@ -125,7 +163,7 @@ async function main() {
     const selected = await run(parseArgs(['--validate', '--split', 'all', '--cases', 'p7-q14-0-blank']));
     assert.equal(selected.trials.length, 1);
     await assert.rejects(run(parseArgs(['--validate', '--cases', 'not-a-case'])), /Unknown/);
-    const simulated = await run(parseArgs(['--live', '--limit', '1', '--env-file', envFile, '--max-calls', '3', '--max-output-tokens', '98304']), {
+    const simulated = await run(parseArgs(['--live', '--limit', '1', '--env-file', envFile, '--max-calls', '5', '--max-output-tokens', '163840']), {
       fetch: async () => ({ ok: true }),
       mark: async (input, options) => {
         assert.equal(options.apiKey, 'TEST_ONLY_KEY');
@@ -137,25 +175,42 @@ async function main() {
     assert.equal(simulated.budgetUsage.calls, 1); assert.equal(simulated.metrics.providerCalls, 1);
     assert.equal(simulated.metrics.abstentions, 1);
     assert(!JSON.stringify(simulated).includes('TEST_ONLY_KEY'));
+    assert.equal(simulated.budget.maxCalls, 5); assert.equal(simulated.budget.perJobLogicalCalls, 5);
+    assert.equal(simulated.budget.perJobMaxNetworkAttempts, 6);
+    const provisionalOutput = path.join(temp, 'provisional.json');
+    const provisionalLive = await run(parseArgs(['--live', '--cases', fullCase.id, '--split', 'all', '--max-calls', '5', '--max-output-tokens', '163840', '--output', provisionalOutput]), {
+      apiKey: 'TEST_ONLY', fetch: async () => ({ ok: true }),
+      mark: async (input, options) => {
+        assert.equal(input.expected, undefined); assert.equal(input.rationale, undefined);
+        await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 10 }), headers: {} });
+        return provisionalResult(3);
+      }
+    });
+    assert.equal(provisionalLive.metrics.confirmedScores, 0); assert.equal(provisionalLive.metrics.releasedRate, 1);
+    assert.equal(provisionalLive.providerOnlyMetrics.provisionalScores, 1); assert.equal(provisionalLive.metrics.providerCalls, 1);
+    const provisionalReplay = await run(parseArgs(['--replay', provisionalOutput, '--split', 'all']));
+    assert.equal(provisionalReplay.trials[0].status, 'provisional'); assert.equal(provisionalReplay.trials[0].mark, 3);
+    assert.equal(provisionalReplay.metrics.provisionalExactAgreement, 1); assert.equal(provisionalReplay.metrics.confirmedScores, 0);
+    assert.equal(provisionalReplay.metrics.exactAgreementAmongScored, null);
     let activeJobs = 0, peakJobs = 0, startedJobs = 0;
-    const concurrent = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '6', '--max-output-tokens', '196608']), {
+    const concurrent = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '10', '--max-output-tokens', '327680']), {
       apiKey: 'TEST_ONLY', fetch: async () => { await new Promise(resolve => setTimeout(resolve, 2)); return { ok: true }; },
       mark: async (input, options) => {
         startedJobs++; activeJobs++; peakJobs = Math.max(peakJobs, activeJobs);
         assert.equal(input.expected, undefined); assert.equal(input.rationale, undefined);
         try {
-          for (let stage = 0; stage < 3; stage++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
+          for (let stage = 0; stage < 5; stage++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
           return { status: 'needs_review', mark: null, audit: { calls: [] } };
         } finally { activeJobs--; }
       }
     });
     assert.equal(startedJobs, 2); assert.equal(peakJobs, 2);
-    assert.equal(concurrent.budgetUsage.calls, 6); assert.equal(concurrent.budgetUsage.reservedOutputTokens, 196608);
+    assert.equal(concurrent.budgetUsage.calls, 10); assert.equal(concurrent.budgetUsage.reservedOutputTokens, 327680);
     assert.equal(concurrent.stoppedAtBudget, true); assert.equal(concurrent.trials.length, 2);
-    assert(concurrent.trials.every(trial => trial.result.audit.evaluatorProviderCalls === 3));
-    assert.equal(concurrent.metrics.providerCalls, 6);
+    assert(concurrent.trials.every(trial => trial.result.audit.evaluatorProviderCalls === 5));
+    assert.equal(concurrent.metrics.providerCalls, 10);
     let shortJobs = 0;
-    const released = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '5', '--max-output-tokens', '163840']), {
+    const released = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '7', '--max-output-tokens', '229376']), {
       apiKey: 'TEST_ONLY', fetch: async () => ({ ok: true }),
       mark: async (_input, options) => {
         shortJobs++;
@@ -165,19 +220,19 @@ async function main() {
     });
     assert.equal(shortJobs, 3); assert.equal(released.budgetUsage.calls, 3); assert.equal(released.stoppedAtBudget, false);
     let tokenJobs = 0;
-    const outputLimited = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '99', '--max-output-tokens', '98304']), {
+    const outputLimited = await run(parseArgs(['--live', '--limit', '3', '--concurrency', '3', '--max-calls', '99', '--max-output-tokens', '163840']), {
       apiKey: 'TEST_ONLY', fetch: async () => ({ ok: true }),
       mark: async (_input, options) => {
         tokenJobs++;
-        for (let stage = 0; stage < 3; stage++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
+        for (let stage = 0; stage < 5; stage++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
         return { status: 'needs_review', mark: null, audit: { calls: [] } };
       }
     });
     assert.equal(tokenJobs, 1); assert.equal(outputLimited.stoppedAtBudget, true);
 
     // Recovery cannot silently increase explicit budgets or consume an active
-    // neighbour's reserved calls. Even an injected engine is capped at four.
-    for (const [maxCalls, maxTokens, requested, sent, failed] of [[3, 131072, 4, 3, true], [4, 131072, 4, 4, false], [5, 163840, 5, 4, true], [4, 98304, 4, 3, true]]) {
+    // neighbour's reserved calls. Even an injected engine is capped at six.
+    for (const [maxCalls, maxTokens, requested, sent, failed] of [[5, 196608, 6, 5, true], [6, 196608, 6, 6, false], [7, 229376, 7, 6, true], [6, 163840, 6, 5, true]]) {
       let physical = 0;
       const recovery = await run(parseArgs(['--live', '--limit', '1', '--max-calls', String(maxCalls), '--max-output-tokens', String(maxTokens)]), {
         apiKey: 'TEST_ONLY', fetch: async () => { physical++; return { ok: true }; },
@@ -192,30 +247,30 @@ async function main() {
     }
     let runningJobs = 0, firstJobExtraRejected = false, releaseOther;
     const otherWaiting = new Promise(resolve => { releaseOther = resolve; });
-    const neighbours = await run(parseArgs(['--live', '--limit', '2', '--concurrency', '2', '--max-calls', '6', '--max-output-tokens', '196608']), {
+    const neighbours = await run(parseArgs(['--live', '--limit', '2', '--concurrency', '2', '--max-calls', '10', '--max-output-tokens', '327680']), {
       apiKey: 'TEST_ONLY', fetch: async () => ({ ok: true }),
       mark: async (_input, options) => {
         const index = runningJobs++;
         if (index === 1) await otherWaiting;
         try {
-          for (let call = 0; call < (index === 0 ? 4 : 3); call++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
+          for (let call = 0; call < (index === 0 ? 6 : 5); call++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
         } catch (error) { if (index === 0 && error.code === 'evaluation_budget') firstJobExtraRejected = true; throw error; }
         finally { if (index === 0) releaseOther(); }
         return { status: 'needs_review', mark: null, audit: { calls: [] } };
       }
     });
-    assert(firstJobExtraRejected); assert.equal(neighbours.budgetUsage.calls, 6);
-    assert(neighbours.trials.every(trial => trial.result.audit.evaluatorProviderCalls === 3));
+    assert(firstJobExtraRejected); assert.equal(neighbours.budgetUsage.calls, 10);
+    assert(neighbours.trials.every(trial => trial.result.audit.evaluatorProviderCalls === 5));
 
     const offline = await run(parseArgs(['--validate', '--split', 'all', '--output', output]), { fetch: () => { throw Error('offline must not request provider'); } });
     assert.equal(offline.mode, 'offline_validation'); assert.equal(offline.liveMetrics, null); assert.equal(offline.metrics.providerCalls, 0); assert.equal(offline.trials.length, 11);
     const replay = await run(parseArgs(['--replay', output, '--split', 'all'])); assert.equal(replay.trials.length, 11);
     // Even an injected engine must receive the bounded transport; budget exit
-    // precedes any model call when a full three-call attempt does not fit.
-    const none = await run(parseArgs(['--live', '--limit', '1', '--max-calls', '2', '--max-output-tokens', '98304']), { apiKey: 'TEST_ONLY', mark: () => { throw Error('must not start'); } });
+    // precedes any model call when a full five-call attempt does not fit.
+    const none = await run(parseArgs(['--live', '--limit', '1', '--max-calls', '4', '--max-output-tokens', '163840']), { apiKey: 'TEST_ONLY', mark: () => { throw Error('must not start'); } });
     assert.equal(none.stoppedAtBudget, true); assert.equal(none.trials.length, 0); assert.equal(none.budgetUsage.calls, 0);
     assert(!fs.readFileSync(output, 'utf8').includes('DO_NOT_LOG'));
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
-  console.log('marking evaluator: 105 fixture cases, 11 deterministic checks, 5 matching visual cases, budget/split/metric/replay regressions passed');
+  console.log('marking evaluator: 105 fixtures, 11 deterministic checks, 5 visuals, five-stage/six-attempt budget isolation, separate provisional metrics and replay passed');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

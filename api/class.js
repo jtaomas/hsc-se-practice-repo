@@ -77,11 +77,29 @@ function createHandler(deps) {
       if (p.action === 'overview') {
         const members = await store.members();
         const counts = {};
+        const papers = {};
         for (let i = 0; i < members.length; i += 6) {
-          const done = await Promise.all(members.slice(i, i + 6).map(m => store.papersOf(m.id).catch(() => ({}))));
-          done.forEach(u => Object.keys(u).forEach(id => { if (BANK_ID.test(id) && sharedPaper(u[id])) counts[id] = (counts[id] || 0) + 1; }));
+          const slice = members.slice(i, i + 6);
+          const done = await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
+          slice.forEach((m, idx) => {
+            const u = done[idx] || {};
+            Object.keys(u).forEach(id => {
+              if (BANK_ID.test(id)) {
+                if (sharedPaper(u[id])) counts[id] = (counts[id] || 0) + 1;
+                const sp = u[id];
+                if (sp && (sp.done || sp.start)) {
+                  papers[id] = papers[id] || [];
+                  papers[id].push({
+                    id: m.id,
+                    name: m.name,
+                    status: sp.done ? 'Submitted' : (sp.mode === 'exam' ? 'Sitting exam' : 'In progress')
+                  });
+                }
+              }
+            });
+          });
         }
-        return res.status(200).json({ members: members.length, counts });
+        return res.status(200).json({ members: members.length, counts, papers });
       }
 
       const bank = typeof p.bankId === 'string' && BANK_ID.test(p.bankId) ? bankFor(p.bankId) : null;

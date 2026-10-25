@@ -132,10 +132,18 @@ function expireExams(){
 /* ---------- page frames ---------- */
 function frame(title,main,opt){
   opt=opt||{};
+  var b=CUR.b||(opt.bid?bank(opt.bid):null);
+  var presenceHtml=(b&&typeof trialAvatarsHTML==='function')?trialAvatarsHTML(b,true):'';
   var right;
-  if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
-  else if(opt.landing){right=''}
-  else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(S.ae?'<span class="hdr-av">'+notionAvatarSVG(S.ae,20,S.ae)+'</span>':'')+acctText()+'</a></nav>';
+  if(opt.timer){
+    right='<span class="hr">'+presenceHtml+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>';
+  }
+  else if(opt.landing){
+    right='<div class="hr" style="display:flex;align-items:center;gap:12px">'+presenceHtml+'<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav></div>';
+  }
+  else {
+    right='<nav class="hn">'+presenceHtml+'<a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(typeof acctPillHTML==='function'?acctPillHTML():acctText())+'</a></nav>';
+  }
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+(opt.timer?'':examBanner())+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+
     main+
@@ -232,7 +240,7 @@ function landingPage(b){
   }
 
   var leftHtml=
-    '<h1 class="gi-title">General Instructions</h1>'+
+    '<div class="gi-header-row"><h1 class="gi-title">General Instructions</h1>'+(typeof trialAvatarsHTML==='function'?trialAvatarsHTML(b,true):'')+'</div>'+
     '<h2 class="gi-section">Reading time</h2>'+
     '<p class="gi-p">There is no reading time given for viewing this past exam. You will be given 10 minutes reading time in the sample and real exams. During reading time in the sample and real exams you will not be able to answer questions, and exiting the exam at this stage is not possible. You can move freely between the questions, and you can flag questions. Highlighting of text is also permitted.</p>'+
     '<h2 class="gi-section">Working time</h2>'+
@@ -524,6 +532,30 @@ function applyHL(c){
 /* ---------- events ---------- */
 function itemOf(k){var p=k.split('.');return CUR.b.qs[+p[0]-1].it[+p[1]]}
 document.addEventListener('click',function(e){
+  var inPop = e.target && e.target.closest && e.target.closest('.notion-presence-pop');
+  if(inPop){
+    e.stopPropagation();
+    return;
+  }
+  var pr = e.target && e.target.closest && e.target.closest('[data-act="presence-toggle"]');
+  if(pr){
+    e.preventDefault();
+    e.stopPropagation();
+    var wasOpen = pr.classList.contains('pop-open');
+    document.querySelectorAll('.notion-avatars.pop-open').forEach(function(el){
+      el.classList.remove('pop-open');
+      var c=el.closest('.bk-card');if(c)c.classList.remove('has-pop-open');
+    });
+    if(!wasOpen){
+      pr.classList.add('pop-open');
+      var card=pr.closest('.bk-card');if(card)card.classList.add('has-pop-open');
+    }
+    return;
+  }
+  document.querySelectorAll('.notion-avatars.pop-open').forEach(function(el){
+    el.classList.remove('pop-open');
+    var c=el.closest('.bk-card');if(c)c.classList.remove('has-pop-open');
+  });
   var el=e.target.closest('[data-act]');
   if((Object.keys(MENU).length||CPK)&&!e.target.closest('.tb')){MENU={};CPK='';redrawTools()}
   if(!el)return;
@@ -687,7 +719,17 @@ document.addEventListener('scroll',function(e){var t=e.target;if(t&&t.dataset&&t
 document.addEventListener('keydown',function(e){
   var t=e.target;
   if(t.dataset&&t.dataset.code&&!t.readOnly&&e.key==='Tab'){e.preventDefault();var s=t.selectionStart;t.value=t.value.slice(0,s)+'    '+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;t.dispatchEvent(new Event('input',{bubbles:true}))}
-  if(e.key==='Escape'&&INFO){INFO=false;var m=$('.modal');if(m)m.remove()}
+  if(e.key==='Escape'){
+    if(INFO){INFO=false;var m=$('.modal');if(m)m.remove()}
+    document.querySelectorAll('.notion-avatars.pop-open').forEach(function(el){
+      el.classList.remove('pop-open');
+      var c=el.closest('.bk-card');if(c)c.classList.remove('has-pop-open');
+    });
+  }
+  if((e.key==='Enter'||e.key===' ')&&t&&t.matches&&t.matches('[data-act="presence-toggle"]')){
+    e.preventDefault();
+    t.click();
+  }
 });
 document.addEventListener('change',function(e){
   var t=e.target;

@@ -74,47 +74,114 @@ function strHash(s){
 function isEduEmail(e){
   return /^[^\s@]+@(?:[^\s@]+\.)*(?:edu(?:\.[a-z]{2})?|education\.nsw\.gov\.au|det\.nsw\.edu\.au|test)$/i.test(String(e||'').trim());
 }
-function notionAvatarSVG(seed,sz,label){
-  sz=sz||26;
-  var h=strHash(seed||'guest');
-  var bgs=['#f4f1ea','#eaeef4','#f5eceb','#edf5ed','#f5efe6','#ecebf5','#e8eaf6','#fff3e0'];
-  var bg=bgs[h%bgs.length];
-  var st=h%5;
-  var hair='';
-  if(st===0){
-    hair='<path d="M10 16 C8 11 12 7 18 7 C24 7 28 11 26 16 C28 17 29 20 27 22 C28 25 24 26 23 25 C21 27 15 27 13 25 C12 26 8 25 9 22 C7 20 8 17 10 16 Z" fill="#1a1a1a"/>';
-  }else if(st===1){
-    hair='<path d="M11 20 C10 14 13 8 18 8 C23 8 26 14 25 20 C25 24 23 27 23 27 C23 27 21 21 21 16 C21 13 15 13 15 16 C15 21 13 27 13 27 C13 27 11 24 11 20 Z" fill="#1a1a1a"/>';
-  }else if(st===2){
-    hair='<path d="M11 18 C11 12 14 8 18 8 C24 8 26 12 26 17 C24 15 20 13 16 14 C13 15 12 17 11 18 Z" fill="#1a1a1a"/>';
-  }else if(st===3){
-    hair='<circle cx="18" cy="6" r="4" fill="#1a1a1a"/><path d="M12 17 C12 11 14 9 18 9 C22 9 24 11 24 17 C22 15 19 14 18 14 C17 14 14 15 12 17 Z" fill="#1a1a1a"/>';
-  }else{
-    hair='<path d="M10 18 C10 11 13 8 18 8 C23 8 26 11 26 18 C27 21 26 25 25 25 C24 21 24 16 23 15 C21 14 15 14 13 15 C12 16 12 21 11 25 C10 25 9 21 10 18 Z" fill="#1a1a1a"/>';
+function notionAvatarSVG(seed, sz, label){
+  sz = sz || 28;
+  var h = strHash(seed || 'guest');
+  var bgs = ['#dbeafe','#dcfce7','#fef3c7','#ede9fe','#fee2e2','#ffedd5','#e0e7ff'];
+  var skins = ['#fbd7c2','#f6c8a8','#e8b788','#c88f5a','#f3bf98'];
+  var blushes = ['#f4a896','#ee9b85','#d89668','#b87948','#e49b78'];
+  var hairs = ['#2b1d0c','#5e3219','#8a3b14','#deb056','#1e1b18','#3f2b1d'];
+  var shirts = ['#002664','#059669','#b91c1c','#2563eb','#d97706','#7c3aed','#0891b2'];
+  var bg = bgs[h % bgs.length];
+  var skin = skins[h % skins.length];
+  var blush = blushes[h % blushes.length];
+  var hair = hairs[(h >> 2) % hairs.length];
+  var shirt = shirts[(h >> 4) % shirts.length];
+  var st = h % 5;
+  var hairSvg = '';
+  if (st === 0) {
+    hairSvg = '<path d="M9 16 C7 10 11 6 18 6 C25 6 29 10 27 16 C29 18 30 21 28 23 C29 26 25 27 24 26 C22 28 14 28 12 26 C11 27 7 26 8 23 C6 21 7 18 9 16 Z" fill="' + hair + '"/>';
+  } else if (st === 1) {
+    hairSvg = '<path d="M10 22 C9 14 12 7 18 7 C24 7 27 14 26 22 C26 26 24 29 24 29 C24 29 22 22 22 16 C22 12 14 12 14 16 C14 22 12 29 12 29 C12 29 10 26 10 22 Z" fill="' + hair + '"/>';
+  } else if (st === 2) {
+    hairSvg = '<path d="M11 18 C11 11 13 7 18 7 C25 7 27 11 27 17 C25 14 20 12 15 13 C12 14 11 16 11 18 Z" fill="' + hair + '"/>';
+  } else if (st === 3) {
+    hairSvg = '<circle cx="18" cy="5" r="4.5" fill="' + hair + '"/><path d="M11 17 C11 10 13 8 18 8 C23 8 25 10 25 17 C23 14 19 13 18 13 C17 13 13 14 11 17 Z" fill="' + hair + '"/>';
+  } else {
+    hairSvg = '<path d="M9 19 C9 11 12 7 18 7 C24 7 27 11 27 19 C28 22 27 26 26 26 C25 22 24 16 23 15 C21 13 15 13 13 15 C12 16 11 22 10 26 C9 26 8 22 9 19 Z" fill="' + hair + '"/>';
   }
-  var face='<path d="M13 16 C13 22 15 25 18 25 C21 25 23 22 23 16" fill="#fff" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>';
-  var eyes=(st%2===0)?
-    '<circle cx="15.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="20.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="15.5" cy="18" r="2.5" fill="none" stroke="#1a1a1a" stroke-width="0.9"/><circle cx="20.5" cy="18" r="2.5" fill="none" stroke="#1a1a1a" stroke-width="0.9"/><line x1="18" y1="18" x2="18" y2="18" stroke="#1a1a1a" stroke-width="1"/>':
-    '<circle cx="15.5" cy="18" r="1.1" fill="#1a1a1a"/><circle cx="20.5" cy="18" r="1.1" fill="#1a1a1a"/>';
-  var smile='<path d="M16.5 21.5 Q18 23 19.5 21.5" fill="none" stroke="#1a1a1a" stroke-width="1.1" stroke-linecap="round"/>';
-  var shoulders='<path d="M10 33 C10 28 14 26 18 26 C22 26 26 28 26 33" fill="#1a1a1a"/>';
-  return '<svg class="notion-av" viewBox="0 0 36 36" width="'+sz+'" height="'+sz+'" role="img" aria-label="'+esc(label||'Profile')+'"><circle cx="18" cy="18" r="18" fill="'+bg+'"/>'+hair+shoulders+face+eyes+smile+'</svg>';
+  var shoulders = '<path d="M9 34 C9 27 13 25 18 25 C23 25 27 27 27 34 Z" fill="' + shirt + '"/><path d="M16 25 L18 28 L20 25 Z" fill="' + skin + '"/>';
+  var neck = '<rect x="16" y="22" width="4" height="4" fill="' + skin + '"/>';
+  var face = '<path d="M13 15 C13 22 15 24.5 18 24.5 C21 24.5 23 22 23 15 C23 11 21 9 18 9 C15 9 13 11 13 15 Z" fill="' + skin + '"/>';
+  var blushCheeks = '<circle cx="14" cy="20" r="1.5" fill="' + blush + '" opacity="0.6"/><circle cx="22" cy="20" r="1.5" fill="' + blush + '" opacity="0.6"/>';
+  var eyes = '';
+  if (st % 2 === 0) {
+    eyes = '<circle cx="15.5" cy="17" r="1.2" fill="#1e293b"/><circle cx="15.9" cy="16.6" r="0.4" fill="#fff"/><circle cx="20.5" cy="17" r="1.2" fill="#1e293b"/><circle cx="20.9" cy="16.6" r="0.4" fill="#fff"/><circle cx="15.5" cy="17" r="2.8" fill="none" stroke="#334155" stroke-width="0.9"/><circle cx="20.5" cy="17" r="2.8" fill="none" stroke="#334155" stroke-width="0.9"/><line x1="18.3" y1="17" x2="17.7" y2="17" stroke="#334155" stroke-width="0.9"/>';
+  } else {
+    eyes = '<circle cx="15.5" cy="17.2" r="1.2" fill="#1e293b"/><circle cx="15.9" cy="16.8" r="0.4" fill="#fff"/><circle cx="20.5" cy="17.2" r="1.2" fill="#1e293b"/><circle cx="20.9" cy="16.8" r="0.4" fill="#fff"/>';
+  }
+  var nose = '<path d="M18 17.5 L17.5 19 L18.5 19" fill="none" stroke="' + blush + '" stroke-width="0.7" stroke-linecap="round"/>';
+  var smile = '<path d="M16.5 21 Q18 22.8 19.5 21" fill="none" stroke="#b91c1c" stroke-width="1.1" stroke-linecap="round"/>';
+  return '<svg class="notion-av" viewBox="0 0 36 36" width="' + sz + '" height="' + sz + '" role="img" aria-label="' + esc(label || 'Profile') + '"><circle cx="18" cy="18" r="18" fill="' + bg + '"/>' + hairSvg + shoulders + neck + face + blushCheeks + eyes + nose + smile + '</svg>';
 }
-function trialAvatarsHTML(b){
-  var u=S.u[b.id],active=[];
-  if(u&&(u.start||u.done)){
-    var myName=(S.ae?S.ae.split('@')[0]:(S.owner||'You'));
-    active.push({name:myName,seed:S.ae||S.owner||'You'});
+
+function getPaperStudents(b){
+  var list = [];
+  var u = S.u[b.id];
+  if(S.ae || S.owner || (u && (u.start || u.done))){
+    var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : 'student@student.det.nsw.edu.au');
+    var rawName = S.ae ? S.ae.split('@')[0].replace(/[._]/g, ' ') : (S.owner || 'You');
+    var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
+    var status = u ? (u.done ? 'Submitted' : (u.start ? 'Sitting exam' : 'Viewing paper')) : 'Viewing paper';
+    list.push({ name: name, email: email, status: status, seed: email, isMe: true });
   }
-  if(b.trial){
-    var peers=[{name:'Joyce',seed:'joyce@education.nsw.gov.au'},{name:'Sam',seed:'sam@student.det.nsw.edu.au'}];
-    peers.forEach(function(p){
-      if(!active.some(function(a){return a.name.toLowerCase()===p.name.toLowerCase()}))active.push(p);
+  if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
+    CV.over.papers[b.id].forEach(function(m){
+      if(!list.some(function(item){return item.name.toLowerCase() === m.name.toLowerCase()})){
+        list.push({
+          name: m.name,
+          email: m.name.toLowerCase().replace(/\s+/g, '.') + '@student.det.nsw.edu.au',
+          status: m.status || 'In progress',
+          seed: m.id || m.name,
+          isMe: false
+        });
+      }
     });
   }
-  if(!active.length)return '';
-  var avs=active.slice(0,3).map(function(p){
-    return '<span class="notion-avatar" title="'+esc(p.name)+' on this trial">'+notionAvatarSVG(p.seed,26,p.name)+'</span>';
+  var peers = [
+    { name: 'Joyce', email: 'joyce@education.nsw.gov.au', status: 'Sitting exam', seed: 'joyce@education.nsw.gov.au' },
+    { name: 'Sam', email: 'sam@student.det.nsw.edu.au', status: 'In progress', seed: 'sam@student.det.nsw.edu.au' },
+    { name: 'Priya', email: 'priya@student.det.nsw.edu.au', status: 'Submitted', seed: 'priya@student.det.nsw.edu.au' }
+  ];
+  var h = strHash(b.id + (b.name || ''));
+  var p1 = peers[h % peers.length], p2 = peers[(h + 1) % peers.length];
+  [p1, p2].forEach(function(p){
+    if(!list.some(function(item){return item.name.toLowerCase() === p.name.toLowerCase()})){
+      list.push(Object.assign({}, p, { isMe: false }));
+    }
+  });
+  return list;
+}
+
+function trialAvatarsHTML(b, isInline){
+  var students = getPaperStudents(b);
+  if(!students.length) return '';
+  var display = students.slice(0, 3);
+  var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
+  var stack = display.map(function(s){
+    return '<span class="notion-avatar" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + notionAvatarSVG(s.seed, 26, s.name) + '</span>';
+  }).join('') + more;
+
+  var popList = students.map(function(s){
+    return '<div class="notion-pop-row">' +
+      '<span class="notion-pop-av">' + notionAvatarSVG(s.seed, 28, s.name) + '<span class="presence-dot ' + (s.status === 'Submitted' ? 'sub' : 'live') + '"></span></span>' +
+      '<div class="notion-pop-meta">' +
+        '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
+        '<div class="notion-pop-email">' + esc(s.email) + '</div>' +
+      '</div>' +
+      '<span class="notion-pop-badge ' + (s.status === 'Submitted' ? 'ok' : 'live') + '">' + esc(s.status) + '</span>' +
+    '</div>';
   }).join('');
-  return '<div class="notion-avatars" title="Active on this trial">'+avs+'</div>';
+
+  return '<div class="notion-avatars' + (isInline ? ' inline' : '') + '" data-act="presence-toggle" tabindex="0" role="button" aria-label="Students on this paper">' +
+    '<div class="notion-avatar-stack">' + stack + '</div>' +
+    '<span class="presence-pulse-dot" title="Active on this paper"></span>' +
+    '<div class="notion-presence-pop">' +
+      '<div class="notion-pop-hd">' +
+        '<span class="notion-pop-hd-title">On this paper (' + students.length + ')</span>' +
+        '<span class="notion-pop-live-tag"><span class="presence-dot live"></span> Active</span>' +
+      '</div>' +
+      '<div class="notion-pop-list">' + popList + '</div>' +
+    '</div>' +
+  '</div>';
 }

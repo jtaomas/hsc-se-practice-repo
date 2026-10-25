@@ -6,7 +6,11 @@ function acctText(){
   var st=SYNC.state==='saving'?'Saving...':SYNC.state==='ok'?'Saved':SYNC.state==='error'?'Sync error':SYNC.state==='paused'?'Sign in again':'Signed in';
   return esc(S.ae)+' &middot; '+st;
 }
-function refreshAcct(){$$('.acct').forEach(function(e){e.innerHTML=acctText()});var s=$('#syncst');if(s)s.innerHTML=syncStatusHTML()}
+function acctPillHTML(){
+  var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="hdr-av">'+notionAvatarSVG(S.ae,20,S.ae)+'</span>':'';
+  return av+'<span class="acct-lbl">'+acctText()+'</span>';
+}
+function refreshAcct(){$$('.acct').forEach(function(e){e.innerHTML=acctPillHTML()});var s=$('#syncst');if(s)s.innerHTML=syncStatusHTML()}
 function syncStatusHTML(){
   if(!S.tok)return SYNC.state==='paused'?'Your sign-in expired. Sign in again to keep saving.':'Not signed in. Your progress is saved in this browser only.';
   if(SYNC.state==='saving')return 'Saving your progress...';
@@ -241,7 +245,8 @@ function accountPage(){
   CUR={b:null,n:0};
   var body;
   if(S.tok&&S.ae){
-    body='<h2 class="pt">Your account</h2><p>Signed in as <b>'+esc(S.ae)+'</b>.</p><p id="syncst">'+syncStatusHTML()+'</p>'+
+    var av=(S.ae&&typeof notionAvatarSVG==='function')?'<span class="acct-av-lg">'+notionAvatarSVG(S.ae,54,S.ae)+'</span>':'';
+    body='<div class="acct-profile-hdr">'+av+'<div><h2 class="pt" style="margin:0">Your account</h2><p style="margin:4px 0 0">Signed in as <b>'+esc(S.ae)+'</b></p></div></div><p id="syncst">'+syncStatusHTML()+'</p>'+
       '<div class="acts"><button class="nb" data-act="acsync">Save now</button><button class="nb ol" data-act="acsignout">Sign out</button></div>'+
       '<p class="note"><a href="#/class">Class page</a>: join your class with the class code and see classmates\' answers.</p>'+
       conflictHTML()+backupHTML()+'<p class="note">Signing out saves your progress to your account, then clears it from this browser so the next person on a shared computer cannot see it.</p>';

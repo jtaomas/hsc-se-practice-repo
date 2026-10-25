@@ -173,8 +173,7 @@ qs.push(Q(SEP,'The following context diagram describes a food ordering app.'+fig
 
 /* Q13: Match Security Testing Strategy */
 qs.push(Q(SSA,'',[
-  mt('Match each feature with its correct security testing strategy.',[
-    'Feature',
+  dm('Match each feature with its correct security testing strategy.',[
     'Static Analysis (SAST)',
     'Dynamic Testing (DAST)',
     'Fuzz Testing',
@@ -184,13 +183,12 @@ qs.push(Q(SSA,'',[
     ['Testing a running application by sending unexpected, malformed, or random inputs',2],
     ['Simulating real-world cyberattacks on a live deployed system from an external perspective',1],
     ['Automated inspection of system configurations, open ports, and unpatched known exploits',3]
-  ],2,'SAST inspects static source code. Fuzz testing sends malformed random input to break code. DAST tests running applications externally. Vulnerability scanning audits systems and ports for known flaws.')
+  ],2,{why:'SAST inspects static source code. Fuzz testing sends malformed random input to break code. DAST tests running applications externally. Vulnerability scanning audits systems and ports for known flaws.'})
 ]));
 
 /* Q14: Match W3C Initiatives */
 qs.push(Q(PW,'',[
-  mt('Match each web development role with the W3C initiative or focus area to which it belongs.',[
-    'Web development role / feature',
+  dm('Match each web development role with the W3C initiative or focus area to which it belongs.',[
     'Web Accessibility (WCAG)',
     'Internationalization (i18n)',
     'Web Standards (HTML/CSS)',
@@ -200,13 +198,12 @@ qs.push(Q(PW,'',[
     ['Adapting web architecture and typography to support multiple human languages, scripts, and locales',1],
     ['Standardising markup, layout stylesheets, and DOM APIs across browser engines',2],
     ['Developing secure browser authentication APIs and Content Security Policies',3]
-  ],2,'WCAG focuses on accessibility for disabled users, i18n supports diverse languages/locales, HTML/CSS standards govern browser rendering, and security/privacy initiatives safeguard web APIs.')
+  ],2,{why:'WCAG focuses on accessibility for disabled users, i18n supports diverse languages/locales, HTML/CSS standards govern browser rendering, and security/privacy initiatives safeguard web APIs.'})
 ]));
 
 /* Q15: Match Machine Learning Models */
 qs.push(Q(SA,'',[
-  mt('Match each application scenario to the most appropriate machine learning model.',[
-    'Application scenario',
+  dm('Match each application scenario to the most appropriate machine learning model.',[
     'Linear Regression',
     'Logistic Regression',
     'Decision Tree',
@@ -216,13 +213,12 @@ qs.push(Q(SA,'',[
     ['Classifying whether a bank transaction is fraudulent (Yes/No)',1],
     ['Diagnosing disease risk through transparent, human-readable branching rules',2],
     ['Grouping website visitors into unlabelled demographic clusters based on browsing habits',3]
-  ],2,'Linear regression predicts continuous amounts; logistic regression performs binary classification; decision trees provide interpretable branching rules; K-means performs unsupervised clustering.')
+  ],2,{why:'Linear regression predicts continuous amounts; logistic regression performs binary classification; decision trees provide interpretable branching rules; K-means performs unsupervised clustering.'})
 ]));
 
 /* Q16: Match Software Project Phases */
 qs.push(Q(SEP,'',[
-  mt('Match each task with the correct software project phase.',[
-    'Task',
+  dm('Match each task with the correct software project phase.',[
     'Requirements Analysis',
     'System Design',
     'Implementation',
@@ -232,7 +228,7 @@ qs.push(Q(SEP,'',[
     ['Creating structure charts, class diagrams, and database schemas',1],
     ['Writing modular source code and implementing backend algorithms',2],
     ['Conducting boundary-value test cases and tracking defect resolution',3]
-  ],2,'Requirements analysis identifies user needs; design architects models and schemas; implementation writes the code; testing validates correctness.')
+  ],2,{why:'Requirements analysis identifies user needs; design architects models and schemas; implementation writes the code; testing validates correctness.'})
 ]));
 
 /* ==========================================================================

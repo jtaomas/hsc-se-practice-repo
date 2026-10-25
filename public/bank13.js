@@ -110,15 +110,12 @@ qs.push(Q(SA,'The diagram in the Stimulus (left) represents an artificial neural
   <text x="300" y="235" text-anchor="middle" font-weight="bold" fill="#b06000">Layer #2</text>
   <text x="520" y="215" text-anchor="middle" font-weight="bold" fill="#1e8e3e">Layer #3</text>
 </svg>`),[
-  dm('The diagram in the Stimulus (left) represents an artificial neural network.<br>Place the Layers in the correct order that matches the diagram.<br>(Note: The top description will represent Layer #1.)',[
-    'Input Layer',
-    'Hidden Layer',
-    'Output Layer'
-  ],[
-    ['Layer #1 (Receives raw input features)',0],
-    ['Layer #2 (Processes inputs using weights, biases, and activation functions)',1],
-    ['Layer #3 (Produces final network output or classification)',2]
-  ],2,{why:'A feedforward neural network begins with an Input Layer, passes data through one or more Hidden Layers for feature transformation, and terminates at an Output Layer.'})
+  od('The diagram in the Stimulus (left) represents an artificial neural network.<br>Place the Layers in the correct order that matches the diagram by dragging the descriptions into position.<br>(Note: The top description will represent Layer #1.)',`
+# BEGIN Neural network layers
+    Input Layer: receives the raw input features
+    Hidden Layer: processes inputs using weights, biases, and activation functions
+    Output Layer: produces the final network output or classification
+# END Neural network layers`,2,{why:'A feedforward neural network begins with an Input Layer, passes data through one or more Hidden Layers for feature transformation, and terminates at an Output Layer.'})
 ],{two:true}));
 
 /* Q8: Client-side programming */

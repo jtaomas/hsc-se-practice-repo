@@ -38,7 +38,7 @@ function frame(title,main,opt){
   else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
-    (opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>');
+    (opt.bar?'<div class="bar"></div>':'');
 }
 function infoHTML(){
   function nb(t,x,c){return '<span class="nav-elem'+(c?' '+c:'')+'">'+t+(x||'')+'</span>'}

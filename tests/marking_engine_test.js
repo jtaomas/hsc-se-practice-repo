@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { mark, MODEL, HARNESS_VERSION, LIMITS, AUDIT_CHECKS, confirmedProvenanceProblem, selectedFeedbackDigest } = require('../server/marking-engine');
 const { parse } = require('../server/marking-json');
 const { canonicalDigest } = require('../server/feedback-integrity');
+const { prepare } = require('../server/marking-input');
 const { QUALITY_FACTORS, LOSS_CATEGORIES, scoringModel, evidenceCatalog, blankFeedback, unavailableFeedback, feedbackProblem } = require('../server/feedback-policy');
 const tests = [];
 function test(name, run) { tests.push({ name, run }); }
@@ -62,6 +63,70 @@ test('two blind calls are concurrent and blind; audit sees both scoring cores an
   assert.deepEqual(result.audit.calls.map(call => call.reasoningEffort), ['high', 'high', 'low']);
   assert.equal(result.audit.usage.total_tokens, 420); assert.equal(result.audit.checks.auditorApproved, true);
   assert(!JSON.stringify(result).includes('Private model reasoning'));
+});
+
+// These fixtures reproduce the canonical shape of two trial answers observed
+// in production. Responses/auditor are mocked: release here verifies the
+// contract, not live model accuracy or a retrospective approval of old output.
+function trialProposal(question, score) {
+  const selected = (scoringModel(question).bands || []).find(band => score >= band.minMarks && score <= band.maxMarks);
+  const quote = question.answer.slice(0, 350);
+  return { status: 'marked', mark: score,
+    summary: score === 0 ? 'The answer does not identify a valid difference between AI and ML.' : score === 1 ? 'You identify confidentiality as a benefit, with limited explanation.' : 'You clearly outline a valid difference between AI and ML.',
+    strengths: score === 0 ? [] : [score === 1 ? 'You identify confidentiality as a data-protection benefit.' : 'You distinguish the broader AI field from learning patterns using data.'],
+    improve: score === question.maxMarks ? [] : [score === 0 ? 'Outline a valid difference: machine learning learns patterns from data and is one approach within AI.' : 'Explain how preventing unauthorised access protects personal information.'], advice: [],
+    criteria: question.criteria.map(c => ({ id: c.id, assessment: score === 0 ? 'not_met' : c.id === selected.id ? 'met' : 'context',
+      evidence: score > 0 && c.id === selected.id ? [quote] : [],
+      basis: score === 0 ? 'The response states an incorrect equivalence and no valid difference.' : c.id === selected.id ? 'The response demonstrates the achievement described in this band.' : 'Unselected whole-answer band.' })),
+    uncertainties: [], losses: { allocation: 'holistic', totalLost: question.maxMarks - score,
+      items: score === question.maxMarks ? [] : [{ category: score === 0 ? 'knowledge_gap' : 'insufficient_explanation', marksLost: null,
+        criterionIds: [question.criteria[0].id], evidence: score === 0 ? [quote] : [],
+        explanation: score === 0 ? 'The stated equivalence between AI and ML is incorrect.' : 'The benefit is named without explaining how data protection provides it.',
+        action: score === 0 ? 'Distinguish the broader AI field from learning patterns using data.' : 'Connect prevention of unauthorised access to the confidentiality benefit.' }] }, quality: quality() };
+}
+
+test('trial guidance is preserved outside scored criteria through both markers and audit; zero, partial and full fixtures release', async () => {
+  for (const fixture of [
+    { questionNumber: 17, answer: 'AI and ML are exactly the same thing. Neither uses data; both just store pictures.', score: 0 },
+    { questionNumber: 18, answer: 'Data protection keeps personal information confidential.', score: 1 },
+    { questionNumber: 17, answer: 'AI is the broader field of building systems that perform tasks requiring intelligence. Machine learning is an approach within AI that learns patterns from data.', score: 2 }
+  ]) {
+    const question = prepare({ bankId: '8', questionNumber: fixture.questionNumber, partIndex: 0, answer: fixture.answer }).input;
+    assert.equal(question.criteria.length, 2);
+    const value = trialProposal(question, fixture.score), mock = sequence([value, clone(value), auditor()]), result = await mock.run(question);
+    assert.equal(result.status, 'marked'); assert.equal(result.mark, fixture.score); assert.equal(mock.requests.length, 3);
+    assert.equal(confirmedProvenanceProblem(result), null);
+    const canonical = JSON.parse(mock.requests[0].body.messages[1].content).canonicalAssessment;
+    assert.deepEqual(canonical.rubricGuidance, question.rubricGuidance);
+    assert.deepEqual(canonical.criteria, question.criteria);
+    assert.deepEqual(canonical.scoringModel.bands, [{ id: 'c1', minMarks: 2, maxMarks: 2 }, { id: 'c2', minMarks: 1, maxMarks: 1 }]);
+    assert.deepEqual(JSON.parse(mock.requests[1].body.messages[1].content).canonicalAssessment, canonical);
+    const audit = JSON.parse(mock.requests[2].body.messages[1].content);
+    assert.deepEqual(audit.originalEvidence.canonicalAssessment, canonical);
+    assert(mock.requests[0].body.messages[0].content.includes('never invent criterion entries'));
+    assert(mock.requests[2].body.messages[0].content.includes('never require a criterion assessment or loss target for guidance'));
+  }
+});
+
+test('guidance separation never salvages extra criterion IDs, invalid band labels or actual blind score disagreement', async () => {
+  const question = prepare({ bankId: '8', questionNumber: 18, partIndex: 0, answer: 'Data protection keeps personal information confidential.' }).input;
+  const partial = trialProposal(question, 1), full = trialProposal(question, 2);
+  let mock = sequence([partial, full]);
+  assert.deepEqual((await mock.run(question)).audit.reasons, ['blind_score_disagreement']); assert.equal(mock.requests.length, 2);
+  const extra = clone(partial); extra.criteria.push({ id: 'guidance1', assessment: 'context', evidence: [], basis: 'The rubric application instruction.' });
+  mock = sequence([extra, partial]);
+  assert.deepEqual((await mock.run(question)).audit.reasons, ['criterion_coverage']); assert.equal(mock.requests.length, 2);
+  const wrong = clone(partial); wrong.criteria[0].assessment = 'not_met';
+  mock = sequence([partial, wrong]);
+  assert.deepEqual((await mock.run(question)).audit.reasons, ['band_assessment_mismatch']); assert.equal(mock.requests.length, 2);
+});
+
+test('rubric guidance is a bounded array of source strings, with invalid metadata rejected before provider calls', async () => {
+  for (const rubricGuidance of ['award marks', {}, [null], [''], ['x'.repeat(10001)], Array(9).fill('guidance')]) {
+    const mock = sequence([]);
+    await assert.rejects(mock.run({ ...input(), rubricGuidance }), error => error.code === 'invalid_marking_input');
+    assert.equal(mock.requests.length, 0);
+  }
 });
 
 test('score disagreement is withheld without averaging or another grading call', async () => {

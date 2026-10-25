@@ -82,7 +82,7 @@ function createHandler(deps = {}) {
       if (lease) { try { await storage.fail(session.id, inputDigest, lease, { code: e.code, audit: e.audit }); } catch (_) {} }
       const status = [400, 401, 403, 409, 413, 429, 502, 503, 504].includes(e.status) ? e.status : 503;
       const code = typeof e.code === 'string' && /^[a-z_]+$/.test(e.code) ? e.code : 'marking_unavailable';
-      if (status === 429) res.setHeader('Retry-After', '3600');
+      if (status === 429) res.setHeader('Retry-After', code === 'provider_rate_limit' ? '20' : '3600');
       const safe = e.status && e.code ? e.message : 'AI marking is temporarily unavailable. Your answer remains saved.';
       return res.status(status).json({ code, error: safe });
     }

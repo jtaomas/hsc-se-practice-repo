@@ -21,17 +21,27 @@ function aiRecord(b,n,i){
   if(ai.stamp)return ai.stamp===aiStamp(b,n,i)?ai:null;
   return !ai.status&&typeof ai.g==='number'&&isFinite(ai.g)?ai:null;
 }
-function aiCall(payload,token){
+/* The AI service answers "busy" (HTTP 429, code provider_rate_limit) when many answers are marked at once.
+   That is temporary, unlike the daily allowance (also 429), so it is retried a few times with a growing wait
+   and never stops the rest of the paper. */
+var AI_BUSY_WAITS=[12000,30000,60000];
+function aiCall(payload,token,attempt,current){
+  attempt=attempt||0;
   if(!token){var missing=new Error('Sign in to use AI marking. You can still mark this answer yourself.');missing.fatal=true;return Promise.reject(missing)}
   var control=new AbortController(),timer=setTimeout(function(){control.abort()},250000);
   return fetch('/api/mark',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(payload),signal:control.signal}).then(function(r){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
       j=j||{};
-      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
+      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.busy=r.status===429&&j.code==='provider_rate_limit';e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||(r.status===429&&!e.busy)||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
       if((j.status!=='marked'&&j.status!=='provisional'&&j.status!=='needs_review')||((j.status==='marked'||j.status==='provisional')&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
       return j;
     });
-  }).then(function(r){clearTimeout(timer);return r},function(e){clearTimeout(timer);if(e.name==='AbortError')throw new Error('AI marking timed out. Try again when the service is available.');throw e});
+  }).then(function(r){clearTimeout(timer);return r},function(e){
+    clearTimeout(timer);
+    if(e.name==='AbortError')throw new Error('AI marking timed out. Try again when the service is available.');
+    if(e.busy&&attempt<AI_BUSY_WAITS.length)return new Promise(function(go){setTimeout(go,AI_BUSY_WAITS[attempt]+Math.floor(Math.random()*4000))}).then(function(){return current&&!current()?null:aiCall(payload,token,attempt+1,current)});
+    throw e;
+  });
 }
 function aiTodo(b){
   var bs=BS(b.id),t=[];
@@ -68,7 +78,7 @@ function aiDrain(){
       if(!job.current()||!aiUnlocked()){job.resolve(null);return}
       if(job.prog&&!job.prog.sent)job.prog.sent=Date.now();
       AIWORK.active++;
-      Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
+      Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token,0,function(){return job.current()&&aiUnlocked()}):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
     })(AIWORK.queue.shift());
   }
 }

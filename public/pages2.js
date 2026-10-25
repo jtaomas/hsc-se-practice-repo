@@ -3,8 +3,8 @@ var MF={bank:'',topic:'',kind:'',sel:''};
 function fmtD(t){if(!t)return '';var d=new Date(t);return d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}
 function aiState(b){
   var bs=BS(b.id);if(!bs.done)return '';
-  var todo=aiTodo(b).length,errs=Object.keys(bs.aiErr||{}).filter(function(k){return bs.aiErr[k]}).length;
-  return errs?'AI marking incomplete':todo?(S.tok?'Not AI marked yet':'Sign in for AI marking'):aiReviews(b)?'Needs review':aiProvisionals(b)?'Provisional marks need review':'AI marking finished';
+  var todo=aiTodo(b).length,errKeys=Object.keys(bs.aiErr||{}).filter(function(k){return bs.aiErr[k]}),errs=errKeys.length;
+  return errs?'AI marking incomplete'+(errs>1?' ('+errs+' answers)':'')+'<br><span class="note">Reason: '+esc(String(bs.aiErr[errKeys[0]]).slice(0,240))+'</span>':todo?(S.tok?'Not AI marked yet':'Sign in for AI marking'):aiReviews(b)?'Needs review':aiProvisionals(b)?'Provisional marks need review':'AI marking finished';
 }
 /* Whole-paper marking from the Papers page: a paper submitted while signed out, or whose marking never finished, can be marked here without opening it. */
 function paperRunBox(b,run){return '<div class="aib" data-airun="'+esc(b.id)+'" role="status"><b>Marking: '+(run.done||0)+' of '+(run.total||0)+' answers</b>'+aiRunBarHTML(run)+'</div>'}

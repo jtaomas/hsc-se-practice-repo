@@ -150,6 +150,20 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     await c.ensureMarked(b);assert.equal(requests.length,5,'navigation must not retry the busy answer');assert.equal(c.aiTodo(b).length,1);
     c.fetch=async()=>reply({error:'A different conflict',code:'other_conflict'},409);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal===true);
   }
+  // A busy AI service (429 provider_rate_limit) is temporary: the answer is retried after a wait and no other answer is stopped.
+  // The daily allowance (429 quota_exceeded) is still fatal, and the Papers page says why marking did not finish.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:3},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const seen={};c.fetch=async(_,r)=>{const part=JSON.parse(r.body).partIndex;seen[part]=(seen[part]||0)+1;return part===0&&seen[0]===1?reply({error:'The marking service is busy. Try again later.',code:'provider_rate_limit'},429):reply(result())};
+    const run=c.runAI(b);
+    await until(()=>c.timers.some(t=>t.ms>=12000&&t.ms<17000&&!t.ran));
+    const wait=c.timers.find(t=>t.ms>=12000&&t.ms<17000&&!t.ran);wait.ran=true;wait.fn();
+    await run;assert.equal(seen[0],2,'the busy answer is sent again once');assert.equal(c.aiTodo(b).length,0);assert.deepEqual(Object.keys(bs.aiErr),[]);
+    const q=client(),pq=paper(q,[written()]);pq.bs.ans['1.0']='Answer';
+    q.fetch=async()=>reply({error:'Your daily AI marking allowance has been reached.',code:'quota_exceeded'},429);
+    await q.runAI(pq.b);assert.equal(q.aiTodo(pq.b).length,1);assert(/allowance has been reached/.test(pq.bs.aiErr['1.0']));
+    assert(/AI marking incomplete/.test(q.aiState(pq.b))&&/allowance has been reached/.test(q.aiState(pq.b)),'the Papers page shows the reason');
+  }
   // Completed answers render while other requests are pending; final render clears the running status.
   {
     const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.checked=1;

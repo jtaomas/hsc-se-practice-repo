@@ -13,9 +13,9 @@ function client(){
   c.S.tok='test-session';c.S.owner='student@example.test';c.timers=timers;c.listeners=listeners;
   return c;
 }
-function paper(c,items){
-  const b={id:'1',name:'Test paper',qs:[{tp:'Project',st:'<p>Canonical stimulus</p>',db:null,it:items}]};
-  c.BANKS.push(b);const bs=c.BS('1');bs.done=true;bs.start=10;bs.doneAt=20;c.CUR={b,n:1,rv:true};return {b,bs};
+function paper(c,items,id='1'){
+  const b={id,name:'Test paper',qs:[{tp:'Project',st:'<p>Canonical stimulus</p>',db:null,it:items}]};
+  c.BANKS.push(b);const bs=c.BS(id);bs.done=true;bs.start=10;bs.doneAt=20;c.CUR={b,n:1,rv:true};return {b,bs};
 }
 function written(){return {t:'tx',q:'Explain one thing.',m:3,w:50,model:'Sample answer',crit:['3 marks for explanation.']}}
 function practice(c,items){const p=paper(c,items);p.bs.done=false;p.bs.mode='practice';delete p.bs.doneAt;p.bs.pq={1:1};c.CUR.rv=false;c.location.hash='#/1/q/1';return p}
@@ -87,13 +87,15 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const latest=c.AIRUN['1'];first.resolve(reply(result(1)));await one;assert.equal(c.AIRUN['1'],latest);assert.equal(bs.ai['1.0'],undefined);
     second.resolve(reply(result(3)));await two;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIRUN['1'],undefined);
   }
-  // At most three answer requests are active. Concurrent callers share a batch.
+  // A whole-paper batch fills all ten slots; the eleventh waits until one
+  // finishes. Concurrent callers still share the same batch.
   {
-    const c=client(),{b,bs}=paper(c,[written(),written(),written(),written(),written()]);Object.keys(b.qs[0].it).forEach(i=>bs.ans['1.'+i]='Answer '+i);
+    const c=client(),{b,bs}=paper(c,Array.from({length:12},written));Object.keys(b.qs[0].it).forEach(i=>bs.ans['1.'+i]='Answer '+i);
     const pending=[];let active=0,peak=0;c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(x=>{active--;return x})};
-    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===3);assert.equal(peak,3);
-    for(let i=0;i<5;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}
-    await run;assert.equal(peak,3);assert.equal(c.aiTodo(b).length,0);
+    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===10);assert.equal(peak,10);
+    pending[0].resolve(reply(result()));await until(()=>pending.length===11);assert.equal(active,10);
+    for(let i=1;i<12;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}
+    await run;assert.equal(peak,10);assert.equal(active,0);assert.equal(c.AIWORK.active,0);assert.equal(c.aiTodo(b).length,0);
   }
   // Transport failures are retryable. A 401 stops the queue and explains sign-in; null/boolean marks fail validation.
   {
@@ -116,18 +118,18 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.checked=1;
     const pending=[],frames=[],app={set innerHTML(value){frames.push(value)}};c.$=s=>s==='#app'?app:null;c.window.scrollY=47;c.window.scrollTo=(x,y)=>assert.equal(y,47);c.CUR.rv=false;
     c.resultsPage=()=>JSON.stringify({marks:Object.keys(bs.ai).length,running:!!c.AIRUN[b.id]});
-    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===3);
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===4);
     pending[0].resolve(reply(result()));await until(()=>frames.length>0);assert.deepEqual(JSON.parse(frames[0]),{marks:1,running:true});assert.equal(c.aiTodo(b).length,3);
     for(let i=1;i<4;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await run;
     assert.deepEqual(JSON.parse(frames.at(-1)),{marks:4,running:false});
   }
   // Global auth/quota/conflict failures still stop dispatching queued answers; in-flight results are retained.
   for(const status of [401,429,409]){
-    const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
-    const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.runAI(b);await until(()=>pending.length===3);
+    const c=client(),{b,bs}=paper(c,Array.from({length:12},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.runAI(b);await until(()=>pending.length===10);
     pending[0].resolve(reply({error:'Global failure',code:'global_failure'},status));await until(()=>!!bs.aiErr['1.0']);
     const block=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));assert(block.includes('when the batch finishes'));assert(!block.includes('data-act="airetry"'));
-    pending[1].resolve(reply(result()));pending[2].resolve(reply(result()));await run;assert.equal(pending.length,3);assert.equal(Object.keys(bs.ai).length,2);
+    for(let i=1;i<10;i++)pending[i].resolve(reply(result()));await run;assert.equal(pending.length,10);assert.equal(Object.keys(bs.ai).length,9);
     assert(c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('data-act="airetry"'));
   }
   // Progress can follow navigation between review questions, but never redraw an unrelated route/account/attempt.
@@ -206,13 +208,48 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     pending[0].resolve(reply(result(1)));await first;assert.equal(c.AIQ['1/1'],latest);assert.equal(bs.ai['1.0'],undefined);
     pending[1].resolve(reply(result(3)));await second;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIQ['1/1'],undefined);
   }
-  // The shared three-request ceiling also covers practice on several questions.
+  // Practice workers also fill ten slots and share that ceiling across questions.
   {
-    const c=client(),{b,bs}=practice(c,[written(),written(),written()]);b.qs.push({...b.qs[0],it:[written(),written(),written()]});
+    const c=client(),{b,bs}=practice(c,Array.from({length:11},written));b.qs.push({...b.qs[0],it:[written(),written()]});
     b.qs.forEach((q,qi)=>q.it.forEach((_,i)=>bs.ans[(qi+1)+'.'+i]='Answer'));const pending=[];let active=0,peak=0;
     c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(r=>{active--;return r})};
-    const first=c.runAIQuestion(b,1),second=c.runAIQuestion(b,2);await until(()=>pending.length===3);assert.equal(peak,3);
-    for(let i=0;i<6;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await Promise.all([first,second]);assert.equal(peak,3);assert.equal(Object.keys(bs.ai).length,6);
+    const first=c.runAIQuestion(b,1);await until(()=>pending.length===10);assert.equal(c.runAIQuestion(b,1),first);
+    const second=c.runAIQuestion(b,2);await until(()=>c.AIWORK.queue.length===2);assert.equal(pending.length,10);assert.equal(peak,10);
+    for(let i=0;i<13;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await Promise.all([first,second]);assert.equal(peak,10);assert.equal(Object.keys(bs.ai).length,13);
+  }
+  // Mixed practice and submitted-paper work share ten active requests rather
+  // than getting ten each. Queued requests start as a slot finishes, or are
+  // discarded before sending if the account context has changed.
+  for(const stale of [false,true]){
+    const c=client(),p=practice(c,Array.from({length:6},written)),s=paper(c,Array.from({length:6},written),'2');
+    for(const x of [p,s])x.b.qs[0].it.forEach((_,i)=>x.bs.ans['1.'+i]='Answer '+i);
+    const pending=[];let active=0,peak=0;
+    c.fetch=(_,r)=>{active++;peak=Math.max(peak,active);const d=defer();pending.push({...d,bank:JSON.parse(r.body).bankId});return d.promise.then(value=>{active--;return value})};
+    const practiceRun=c.runAIQuestion(p.b,1);await until(()=>pending.length===6);
+    const submittedRun=c.runAI(s.b);assert.equal(c.runAI(s.b),submittedRun);assert.equal(c.runAIQuestion(p.b,1),practiceRun);
+    await until(()=>pending.length===10&&c.AIWORK.queue.length===2);assert.equal(active,10);assert.equal(peak,10);
+    if(stale)c.S.owner='another@example.test';
+    pending[0].resolve(reply(result()));
+    if(!stale){await until(()=>pending.length===11);assert.equal(active,10);assert.equal(c.AIWORK.queue.length,1);}
+    else await until(()=>c.AIWORK.queue.length===0);
+    for(let i=1;i<(stale?10:12);i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}
+    await Promise.all([practiceRun,submittedRun]);assert.equal(peak,10);assert.equal(active,0);assert.equal(c.AIWORK.active,0);assert.equal(c.AIWORK.queue.length,0);
+    assert.equal(pending.length,stale?10:12);assert.equal(Object.keys(p.bs.ai).length,stale?0:6);assert.equal(Object.keys(s.bs.ai).length,stale?0:6);
+  }
+  // A fatal response cancels that batch's already-queued dispatches in either
+  // workflow while preserving results from requests which are already in flight.
+  for(const failedMode of ['practice','wholepaper']){
+    const c=client(),p=practice(c,Array.from({length:6},written)),s=paper(c,Array.from({length:6},written),'2');
+    for(const x of [p,s])x.b.qs[0].it.forEach((_,i)=>x.bs.ans['1.'+i]='Answer '+i);
+    const pending=[];c.fetch=(_,r)=>{const d=defer();pending.push({...d,bank:JSON.parse(r.body).bankId});return d.promise};
+    const first=failedMode==='practice'?c.runAI(s.b):c.runAIQuestion(p.b,1);await until(()=>pending.length===6);
+    const second=failedMode==='practice'?c.runAIQuestion(p.b,1):c.runAI(s.b),failed=failedMode==='practice'?p:s;
+    await until(()=>pending.length===10&&c.AIWORK.queue.length===2);
+    pending[6].resolve(reply({error:'Expired',code:'unauthorized'},401));await until(()=>!!failed.bs.aiErr['1.0']);
+    assert.equal(pending.length,10,'a queued request started after its batch received a fatal response');
+    for(let i=0;i<10;i++)if(i!==6)pending[i].resolve(reply(result()));
+    await Promise.all([first,second]);assert.equal(pending.length,10);assert.equal(c.AIWORK.active,0);assert.equal(c.AIWORK.queue.length,0);
+    assert.equal(Object.keys(failed.bs.ai).length,3,'in-flight successes must remain available after a fatal sibling');
   }
   // Submitting the same attempt reuses an in-flight practice result instead of
   // racing it with a duplicate POST; a later submitted batch reuses both marks.

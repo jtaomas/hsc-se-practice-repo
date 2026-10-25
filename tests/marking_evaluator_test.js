@@ -7,7 +7,7 @@ const { readEvaluationKey, validateDataset, deterministicResult, compareTrial, m
 const { prepare } = require('../server/marking-input');
 const fixture = require('./fixtures/marking-calibration.json');
 const clone = value => JSON.parse(JSON.stringify(value));
-const endpoint = 'https://api.deepseek.com/chat/completions';
+const endpoint = require('../server/ai-provider').current().endpoint;
 async function main() {
   const coverage = validateDataset(fixture);
   assert.equal(coverage.cases, 105);
@@ -115,13 +115,13 @@ async function main() {
   try {
     const output = path.join(temp, 'offline.json');
     const envFile = path.join(temp, 'evaluation.env');
-    fs.writeFileSync(envFile, '# Fixture credential, never a real key\nDEEPSEEK_API_KEY="TEST_ONLY_KEY"\n');
+    fs.writeFileSync(envFile, '# Fixture credential, never a real key\n' + require('../server/ai-provider').current().keyEnv + '="TEST_ONLY_KEY"\n');
     assert.equal(readEvaluationKey(envFile), 'TEST_ONLY_KEY');
     assert.throws(() => parseArgs(['--env-file', envFile]), /explicit live/);
     assert.throws(() => parseArgs(['--cases', 'id,id']), /duplicate/);
-    fs.writeFileSync(envFile, 'DEEPSEEK_API_KEY=$(echo should_never_execute)\n');
+    fs.writeFileSync(envFile, require('../server/ai-provider').current().keyEnv + '=$(echo should_never_execute)\n');
     assert.throws(() => readEvaluationKey(envFile), /unsupported/);
-    fs.writeFileSync(envFile, 'DEEPSEEK_API_KEY=TEST_ONLY_KEY\n');
+    fs.writeFileSync(envFile, require('../server/ai-provider').current().keyEnv + '=TEST_ONLY_KEY\n');
     const selected = await run(parseArgs(['--validate', '--split', 'all', '--cases', 'p7-q14-0-blank']));
     assert.equal(selected.trials.length, 1);
     await assert.rejects(run(parseArgs(['--validate', '--cases', 'not-a-case'])), /Unknown/);

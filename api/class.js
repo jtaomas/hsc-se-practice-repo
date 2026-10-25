@@ -5,6 +5,8 @@ const { verifySession } = require('./auth');
 const classStore = require('../server/class-store');
 const synthesis = require('../server/class-synthesis');
 const { loadBanks } = require('../server/marking-input');
+// The key for whichever AI service is configured (OpenCode Go or DeepSeek). See server/ai-provider.js.
+const aiKey = env => require('../server/ai-provider').current(env).key();
 
 const BANK_ID = /^(?:[1-9]|1[0-9])$/;
 function createHandler(deps) {
@@ -103,9 +105,9 @@ function createHandler(deps) {
         const decorate = result => ({ status: 'ready', result, names, count: labelled.length, keyword: context.keyword, targetWords: engine.targetWords(context.marks), model: engine.MODEL, harness: engine.HARNESS_VERSION });
         const hit = await store.cached(digest);
         if (hit) return res.status(200).json(decorate(hit));
-        if (!env.DEEPSEEK_API_KEY) return fail(503, 'no_key', 'AI analysis is not configured on this site.');
+        if (!aiKey(env)) return fail(503, 'no_key', 'AI analysis is not configured on this site.');
         await store.spend(sess.id);
-        const result = await engine.analyse(context, labelled, { apiKey: env.DEEPSEEK_API_KEY });
+        const result = await engine.analyse(context, labelled, { apiKey: aiKey(env) });
         await store.remember(digest, result);
         return res.status(200).json(decorate(result));
       }

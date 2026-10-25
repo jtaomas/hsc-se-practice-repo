@@ -6,10 +6,12 @@ const crypto = require('node:crypto');
 const { plain } = require('./marking-input');
 const { SYLLABUS, keywordFor } = require('./syllabus-context');
 
-const MODEL = 'deepseek-flash';
+const provider = require('./ai-provider');
+const PROVIDER = provider.current();
+const MODEL = PROVIDER.model;
 const REASONING_EFFORT = 'low';
 const HARNESS_VERSION = 'hsc-class-1';
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const ENDPOINT = PROVIDER.endpoint;
 const LIMITS = Object.freeze({ timeoutMs: 200000, maxTokens: 16384, requestBytes: 400000, responseBytes: 400000, answerChars: 6000, minAnswerChars: 12 });
 const OPEN_TYPES = new Set(['tx', 'py', 'ps', 'sq']);
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -140,22 +142,22 @@ async function boundedBody(response, maximum) {
 
 async function analyse(context, labelled, options) {
   options = options || {};
-  const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY, fetcher = options.fetch || globalThis.fetch, limits = Object.assign({}, LIMITS, options.limits);
+  const apiKey = options.apiKey || PROVIDER.key(), fetcher = options.fetch || globalThis.fetch, limits = Object.assign({}, LIMITS, options.limits);
   if (!apiKey) throw error(503, 'no_key', 'AI analysis is not configured.');
   const system = POLICY + '\n\nSYLLABUS AND COURSE SPECIFICATION REFERENCE:\n' + SYLLABUS + '\n\nNESA KEY WORD for this question: ' + (context.keyword ? context.keyword.word + ' = ' + context.keyword.meaning : 'none identified; judge by what the prompt asks.');
-  const body = JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(buildPayload(context, labelled)) }], thinking: { type: 'enabled' }, reasoning_effort: REASONING_EFFORT, max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
+  const body = JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(buildPayload(context, labelled)) }], ...PROVIDER.reasoning(REASONING_EFFORT), max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
   if (Buffer.byteLength(body) > limits.requestBytes) throw error(413, 'class_request_too_large', 'These answers are too long to analyse together.');
   const controller = new AbortController(); let timer;
   try {
     const response = await Promise.race([
-      fetcher(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }, body, signal: controller.signal }),
+      fetcher(ENDPOINT, { method: 'POST', headers: PROVIDER.headers(apiKey), body, signal: controller.signal }),
       new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(error(504, 'marking_timeout', 'The analysis took too long. Try again.')); }, limits.timeoutMs); })
     ]);
     if (!response.ok) throw error(response.status === 429 ? 429 : 502, response.status === 429 ? 'provider_rate_limit' : 'provider_error', 'The analysis service could not complete this request.');
     let envelope; try { envelope = JSON.parse(await boundedBody(response, limits.responseBytes)); } catch (e) { if (e.status) throw e; throw error(502, 'provider_envelope', 'The analysis service sent an unreadable reply.'); }
     const choice = envelope && Array.isArray(envelope.choices) && envelope.choices.length === 1 ? envelope.choices[0] : null;
     if (!choice || choice.finish_reason !== 'stop' || !choice.message || typeof choice.message.content !== 'string') throw error(502, 'class_incomplete', 'The analysis did not finish. Try again.');
-    if (envelope.model !== MODEL) throw error(502, 'model_mismatch', 'The analysis service answered with an unexpected model.');
+    if (!provider.sameModel(MODEL, envelope.model)) throw error(502, 'model_mismatch', 'The analysis service answered with an unexpected model.');
     let value; try { value = JSON.parse(choice.message.content); } catch (_) { throw error(502, 'class_invalid_json', 'The analysis was not in the expected form. Try again.'); }
     const problem = validate(value, labelled, context);
     if (problem) throw error(502, 'class_invalid_' + problem, 'The analysis did not pass its checks. Try again.');

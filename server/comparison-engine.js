@@ -5,8 +5,10 @@ const assessmentAudit = require('./assessment-audit');
 const { LOSS_CATEGORIES, scoringModel, scoreProblem } = require('./feedback-policy');
 const { HARNESS_VERSION, UNCERTAINTY_LIMIT, CATEGORIES, ERROR_TYPES, AUDIT_FLAGS, EXTRACTOR_POLICY, SYNTHESIS_POLICY, AUDITOR_POLICY } = require('./comparison-policy');
 // This is the provider's rolling alias, not an immutable dated snapshot.
-const MODEL = 'deepseek-flash';
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const provider = require('./ai-provider');
+const PROVIDER = provider.current();
+const MODEL = PROVIDER.model;
+const ENDPOINT = PROVIDER.endpoint;
 const LIMITS = Object.freeze({ participants: 8, concurrency: 2, calls: 10, profileMs: 100000, stageMs: 100000,
   synthesisMs: 70000, auditorMs: 70000, overallMs: 240000, maxTokens: 32768,
   inputBytes: 350 * 1024, requestBytes: 768 * 1024, responseBytes: 1024 * 1024, profileBytes: 5000, synthesisBytes: 8000, resultBytes: 56000 });
@@ -293,7 +295,7 @@ async function compare(input, options = {}) {
     limits[key] = value;
   }
   if (data.participants.length > limits.participants || byteLength(data) > limits.inputBytes) throw failure(413, 'comparison_input_too_large', 'Select fewer responses or participants for this comparison.');
-  const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+  const apiKey = options.apiKey || PROVIDER.key();
   if (!apiKey) throw failure(503, 'no_key', 'AI comparison is not configured.');
   const started = now(), deadline = started + limits.overallMs, controllers = new Set();
   const audit = { harnessVersion: HARNESS_VERSION, requestedModel: MODEL, returnedModels: [], calls: [],
@@ -311,7 +313,7 @@ async function compare(input, options = {}) {
   }
   async function request(stage, policy, content, stageDeadline) {
     const requestBody = JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: policy }, { role: 'user', content: JSON.stringify(content) }],
-      thinking: { type: 'enabled' }, reasoning_effort: 'high', max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
+      ...PROVIDER.reasoning('high'), max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
     if (Buffer.byteLength(requestBody, 'utf8') > limits.requestBytes) throw failure(413, 'comparison_request_too_large', 'Select fewer responses or participants for this comparison.');
     if (audit.calls.length >= Math.min(limits.calls, data.participants.length + 2)) throw failure(502, 'comparison_call_budget', 'The comparison reached its call limit.');
     const available = Math.min(stageDeadline, deadline) - now();
@@ -324,7 +326,7 @@ async function compare(input, options = {}) {
       return await Promise.race([
         (async () => {
           const response = await fetcher(ENDPOINT, { method: 'POST', signal: controller.signal,
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }, body: requestBody });
+            headers: PROVIDER.headers(apiKey), body: requestBody });
           const body = await boundedBody(response, limits.responseBytes);
           if (!active || controller.signal.aborted) throw failure(502, 'provider_cancelled', 'The comparison request was cancelled.');
           if (!response.ok) {
@@ -337,7 +339,7 @@ async function compare(input, options = {}) {
           try { envelope = parse(body); } catch (_) { throw failure(502, 'provider_envelope', 'The comparison service returned an unreadable response.'); }
           if (!object(envelope)) throw failure(502, 'provider_envelope', 'The comparison service returned an unreadable response.');
           record.status = 'completed';
-          record.returnedModel = typeof envelope.model === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.model) ? envelope.model : null;
+          record.returnedModel = typeof envelope.model === 'string' ? (provider.canonicalModel(MODEL, envelope.model) || (/^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.model) ? envelope.model : null)) : null;
           audit.returnedModels.push(record.returnedModel);
           if (typeof envelope.system_fingerprint === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.system_fingerprint)) record.systemFingerprint = envelope.system_fingerprint;
           const choice = Array.isArray(envelope.choices) && envelope.choices.length === 1 ? envelope.choices[0] : null;

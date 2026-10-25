@@ -12,7 +12,7 @@ const { parse } = require('../server/marking-json');
 const marker = require('../server/marking-engine');
 const comparator = require('../server/comparison-engine');
 const DEFAULT_FIXTURE = path.join(__dirname, '../tests/fixtures/comparison-short-answer.json');
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const ENDPOINT = require('../server/ai-provider').current().endpoint;
 const MAX_CALLS_PER_RUN = 22; // Six marks at three calls, then two profiles + synthesis + audit.
 const clone = value => JSON.parse(JSON.stringify(value));
 
@@ -236,11 +236,11 @@ async function main(argv) {
     console.log(JSON.stringify({ passed: true, mode: 'offline_fixture_lint', dataset: dataset.id, writtenResponses: 6, teacherReviewed: dataset.provenance.teacherReviewed,
       modelCalls: 0, notice: 'Original synthetic expectations are structurally valid; no model accuracy was measured.' }, null, 2)); return;
   }
-  assert(typeof process.env.DEEPSEEK_API_KEY === 'string' && process.env.DEEPSEEK_API_KEY.trim(), '--live requires DEEPSEEK_API_KEY.');
+  assert(require('../server/ai-provider').current().key(), '--live requires ' + require('../server/ai-provider').current().keyEnv + '.');
   const fd = fs.openSync(path.resolve(options.output), 'wx', 0o600);
   try {
     console.error('Live synthetic written pipeline: maximum ' + MAX_CALLS_PER_RUN * options.repeat + ' provider calls; fixed repeats, no retries, no application endpoints.');
-    const result = await run(dataset, { apiKey: process.env.DEEPSEEK_API_KEY, repeat: options.repeat,
+    const result = await run(dataset, { apiKey: require('../server/ai-provider').current().key(), repeat: options.repeat,
       write: bundle => { fs.ftruncateSync(fd, 0); fs.writeSync(fd, JSON.stringify(bundle, null, 2) + '\n', 0, 'utf8'); fs.fsyncSync(fd); },
       progress: item => console.error(JSON.stringify(item)) });
     console.log(JSON.stringify(result.evaluation, null, 2)); if (!result.evaluation.passed) process.exitCode = 1;

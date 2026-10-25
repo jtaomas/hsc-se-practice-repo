@@ -4,7 +4,9 @@ const { parse } = require('./marking-json');
 const assessmentAudit = require('./assessment-audit');
 const { canonicalDigest } = require('./feedback-integrity');
 const { scoringModel, unavailableFeedback, scoreProblem, feedbackProblem, FEEDBACK_POLICY, QUALITY_FACTORS, evidenceCatalog, resolveEvidenceReferences } = require('./feedback-policy');
-const MODEL = 'deepseek-flash';
+const provider = require('./ai-provider');
+const PROVIDER = provider.current();
+const MODEL = PROVIDER.model;
 const HARNESS_VERSION = require('../public/marking-config').version;
 const LIMITS = Object.freeze({ stageMs: 120000, auditorMs: 105000, overallMs: 240000, maxTokens: 32768, requestBytes: 2 * 1024 * 1024, responseBytes: 1024 * 1024, resultBytes: 60 * 1024 });
 const PRECONNECT_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED']);
@@ -16,7 +18,7 @@ function transportCode(error) {
   for (const value of [error, error && error.cause]) if (value && TRANSPORT_CODES.has(value.code)) return value.code;
   return 'unknown';
 }
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const ENDPOINT = PROVIDER.endpoint;
 const AUDIT_CHECKS = Object.freeze({
   rubricAlignment: 'Both independent scoring cores support the same exact score and criterion assessments under the supplied rubric, with no invented requirement or unresolved scoring ambiguity.',
   evidenceGrounding: 'Credited evidence in both scoring cores is genuine and supports the claimed achievement; the selected feedback also uses genuine evidence in context.',
@@ -167,12 +169,12 @@ function selectedFeedbackDigest(result) {
 function confirmedProvenanceProblem(result) {
   if (!object(result) || result.status !== 'marked' || !Number.isInteger(result.mark) || result.mark < 0 || result.mark > 20 || !object(result.audit)) return 'confirmed_result_schema';
   const audit = result.audit;
-  if (audit.harnessVersion !== HARNESS_VERSION || audit.requestedModel !== MODEL) return 'confirmed_provenance_version';
+  if (audit.harnessVersion !== HARNESS_VERSION || !provider.knownModel(audit.requestedModel)) return 'confirmed_provenance_version';
   if (!object(audit.checks) || !['completed', 'modelMatch', 'outputSchema', 'evidenceSupported', 'blindAgreement', 'auditorApproved'].every(key => audit.checks[key] === true) ||
       !Array.isArray(audit.reasons) || audit.reasons.length) return 'confirmed_provenance_checks';
   const stages = ['marker1', 'marker2', 'auditor'];
-  if (!Array.isArray(audit.calls) || audit.calls.length !== stages.length || audit.calls.some((call, i) => !object(call) || call.stage !== stages[i] || call.status !== 'completed' || call.finishReason !== 'stop' || call.requestedModel !== MODEL || call.returnedModel !== MODEL || call.errorCode != null) ||
-      !Array.isArray(audit.returnedModels) || audit.returnedModels.length !== stages.length || audit.returnedModels.some(model => model !== MODEL)) return 'confirmed_provenance_calls';
+  if (!Array.isArray(audit.calls) || audit.calls.length !== stages.length || audit.calls.some((call, i) => !object(call) || call.stage !== stages[i] || call.status !== 'completed' || call.finishReason !== 'stop' || call.requestedModel !== audit.requestedModel || call.returnedModel !== audit.requestedModel || call.errorCode != null) ||
+      !Array.isArray(audit.returnedModels) || audit.returnedModels.length !== stages.length || audit.returnedModels.some(model => model !== audit.requestedModel)) return 'confirmed_provenance_calls';
   // Older synthetic/cache fixtures may omit optional transport metadata. When
   // supplied, it must account for every physical attempt without hiding retries.
   if (audit.networkAttempts != null || audit.calls.some(call => call.attemptCount != null || call.retryCause != null)) {
@@ -233,7 +235,7 @@ async function mark(input, options = {}) {
   const data = canonicalData(input), fetcher = options.fetch || globalThis.fetch, now = options.now || Date.now;
   const timers = { set: options.setTimeout || setTimeout, clear: options.clearTimeout || clearTimeout };
   const limits = Object.assign({}, LIMITS, options.limits || {});
-  const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+  const apiKey = options.apiKey || PROVIDER.key();
   if (!apiKey) throw failure(503, 'no_key', 'AI marking is not configured.');
   const started = now(), deadline = started + limits.overallMs, controllers = new Set();
   let retryAvailable = true;
@@ -246,7 +248,7 @@ async function mark(input, options = {}) {
   }
   async function request(stage, messages, duration) {
     const reasoningEffort = stage === 'auditor' ? 'low' : 'high';
-    const requestBody = JSON.stringify({ model: MODEL, messages, thinking: { type: 'enabled' }, reasoning_effort: reasoningEffort, max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
+    const requestBody = JSON.stringify({ model: MODEL, messages, ...PROVIDER.reasoning(reasoningEffort), max_tokens: limits.maxTokens, response_format: { type: 'json_object' } });
     if (Buffer.byteLength(requestBody, 'utf8') > limits.requestBytes) throw failure(413, 'marking_request_too_large', 'This response is too large for automatic marking.');
     const available = Math.min(duration, deadline - now());
     if (available <= 0) throw failure(504, 'marking_timeout', 'AI marking exceeded its time limit. Try again later.');
@@ -275,7 +277,7 @@ async function mark(input, options = {}) {
         record.attemptCount++; audit.networkAttempts++;
         try {
           const response = await fetcher(ENDPOINT, { method: 'POST', signal: controller.signal,
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey }, body: requestBody });
+            headers: PROVIDER.headers(apiKey), body: requestBody });
           transportPhase = 'body';
           if (!active || controller.signal.aborted || now() >= stageDeadline) {
             // A fetch that ignores cancellation must not resume into body reads,
@@ -312,7 +314,7 @@ async function mark(input, options = {}) {
           try { envelope = parse(body); } catch (_) { throw failure(502, 'provider_envelope', 'The marking service returned an unreadable response.'); }
           if (!object(envelope)) throw failure(502, 'provider_envelope', 'The marking service returned an unreadable response.');
           record.status = 'completed';
-          record.returnedModel = typeof envelope.model === 'string' ? envelope.model : null;
+          record.returnedModel = typeof envelope.model === 'string' ? (provider.canonicalModel(MODEL, envelope.model) || envelope.model) : null;
           if (typeof envelope.system_fingerprint === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(envelope.system_fingerprint)) record.systemFingerprint = envelope.system_fingerprint;
           audit.returnedModels.push(record.returnedModel);
           const choice = Array.isArray(envelope.choices) && envelope.choices.length === 1 ? envelope.choices[0] : null;

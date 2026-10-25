@@ -1,6 +1,6 @@
 # AI marking design and verification
 
-The marker uses the official `deepseek-flash` API alias with `thinking: { type: "enabled" }` and `max_tokens: 32768`. Version `blind-marking-v8-rubric-guidance` keeps both blind markers at `reasoning_effort: "high"` and uses `"low"` for the auditor. The alias is rolling; it does not pin an immutable 1017 snapshot. Do not treat agreement between repeated calls as measured marking accuracy.
+The marker calls DeepSeek-V4.1-Flash through the service chosen in `server/ai-provider.js`: OpenCode Go (`https://opencode.ai/inference/go/openai/v1/chat/completions`, model `deepseek-v4.1-flash`) when `OPENCODE_API_KEY` is set, otherwise DeepSeek's official `deepseek-flash` API alias. A live end-to-end run through OpenCode Go on 25 October 2026 returned the exact model name, accepted the thinking and JSON settings, and produced a confirmed mark with all six checks passing. Both paths send `thinking: { type: "enabled" }` and `max_tokens: 32768`. Version `blind-marking-v8-rubric-guidance` keeps both blind markers at `reasoning_effort: "high"` and uses `"low"` for the auditor. The alias is rolling; it does not pin an immutable 1017 snapshot. Do not treat agreement between repeated calls as measured marking accuracy.
 
 ## Decision process
 

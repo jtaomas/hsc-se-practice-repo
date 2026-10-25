@@ -9,7 +9,8 @@ const { prepare, digest, loadBanks } = require('../server/marking-input');
 const engine = require('../server/marking-engine');
 const feedback = require('../server/feedback-policy');
 const DEFAULT_FIXTURE = path.join(__dirname, '../tests/fixtures/marking-calibration.json');
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const AI = require('../server/ai-provider').current();
+const ENDPOINT = AI.endpoint;
 const safeCode = value => typeof value === 'string' && /^[a-z_]{1,80}$/.test(value) ? value : 'evaluation_failed';
 function fail(message) { throw new Error(message); }
 function integer(value, minimum, maximum) { return Number.isSafeInteger(value) && value >= minimum && value <= maximum; }
@@ -20,9 +21,9 @@ function readJson(file) {
 function readEvaluationKey(file) {
   if (fs.statSync(file).size > 65536) fail('Evaluation environment file exceeds 64 KiB.');
   const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
-  const matches = lines.filter(line => /^\s*(?:export\s+)?DEEPSEEK_API_KEY\s*=/.test(line));
-  if (matches.length !== 1) fail('Evaluation environment file must contain exactly one DEEPSEEK_API_KEY assignment.');
-  let value = matches[0].replace(/^\s*(?:export\s+)?DEEPSEEK_API_KEY\s*=\s*/, '').trim();
+  const matches = lines.filter(line => new RegExp('^\\s*(?:export\\s+)?' + AI.keyEnv + '\\s*=').test(line));
+  if (matches.length !== 1) fail('Evaluation environment file must contain exactly one ' + AI.keyEnv + ' assignment.');
+  let value = matches[0].replace(new RegExp('^\\s*(?:export\\s+)?' + AI.keyEnv + '\\s*=\\s*'), '').trim();
   if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
   // Deliberately no interpolation, command substitution, escape processing or
   // shell evaluation. Only the one requested credential is read into memory.
@@ -207,8 +208,8 @@ async function run(options, dependencies = {}) {
     report.liveMetrics = null;
     report.liveEvaluation = 'Not run. No provider requests were made. Nonblank responses were labelled by reasoning, not measured against the live model.';
   } else {
-    const key = dependencies.apiKey || (options.envFile ? readEvaluationKey(options.envFile) : process.env.DEEPSEEK_API_KEY);
-    if (!key) fail('DEEPSEEK_API_KEY is absent; live evaluation was not run.');
+    const key = dependencies.apiKey || (options.envFile ? readEvaluationKey(options.envFile) : AI.key());
+    if (!key) fail(AI.keyEnv + ' is absent; live evaluation was not run.');
     const bounded = budgetedFetch(dependencies.fetch || globalThis.fetch, options);
     report.budget = { maxCalls: options.maxCalls, maxOutputTokens: options.maxOutputTokens, maxUsd: options.maxUsd == null ? null : options.maxUsd, prices: options.prices || null };
     const concurrency = options.concurrency || 1;

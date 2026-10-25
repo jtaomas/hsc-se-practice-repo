@@ -14,7 +14,7 @@ An unofficial HSC Software Engineering practice site for NSW Year 12 students. P
 | Storage | Cloudflare D1, database named `hsc-se-practice`, database ID `0eef12ae-ddaf-422a-9687-c08f2ca4af9a` | In the owner's own Cloudflare account (shown as `Icescreambobcat@...` in the dashboard). The table `blobs` is created automatically by the code. |
 | Storage code | `server/d1-blob.js` | Blob-style `get`, `put`, `list`, `del` over the D1 REST API. Bodies are gzipped and base64 encoded to fit D1's 2 MB row limit. Every write gets a fresh random etag; `ifMatch` is a compare-and-swap. |
 | Storage settings | Vercel environment variables `CF_ACCOUNT_ID`, `D1_DATABASE_ID`, `CF_API_TOKEN` | The token has Account, D1, Edit permission only. Never print or commit it. `BLOB_READ_WRITE_TOKEN` is no longer used. |
-| AI marking | `api/mark.js`, `api/improve.js`, `api/compare.js` use DeepSeek | Key is `DEEPSEEK_API_KEY` in Vercel. |
+| AI marking | `api/mark.js`, `api/improve.js`, `api/compare.js`, `api/class.js` call DeepSeek-V4.1-Flash via `server/ai-provider.js` | Set `OPENCODE_API_KEY` in Vercel to use OpenCode Go; otherwise `DEEPSEEK_API_KEY` is used. Check a key with `node scripts/check-ai-provider.js`. |
 
 Storage moved from Vercel Blob to D1 on 24 October (commit `2d249ce`). The owner wanted a free tier that hard-caps and needs no card. The old Vercel Blob store and an older Vercel project (`andrew-b92c`) still exist. Do not delete either unless the owner says so in plain words.
 

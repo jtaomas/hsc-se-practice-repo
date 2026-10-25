@@ -7,7 +7,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const testCase = fixture.cases[0];
 const tests = [];
 const test = (name, execute) => tests.push({ name, execute });
-const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const ENDPOINT = require('../server/ai-provider').current().endpoint;
 let actualNetworkCalls = 0;
 globalThis.fetch = async () => { actualNetworkCalls++; throw new Error('Actual network is forbidden.'); };
 

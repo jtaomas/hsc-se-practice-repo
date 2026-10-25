@@ -1,6 +1,7 @@
 // Private marking results, distributed leases and daily paid-job reservations.
 // A single daily ledger reserves account and site quotas in the same CAS write.
 const crypto = require('crypto');
+const provider = require('./ai-provider');
 const { performance } = require('node:perf_hooks');
 const { verifySession } = require('../api/auth');
 
@@ -33,7 +34,7 @@ function failureDiagnostics(value, kind) {
     if (source && typeof source === 'object') for (const key of ['prompt_tokens', 'completion_tokens', 'total_tokens', 'reasoning_tokens']) if (number(source[key])) out[key] = source[key];
     return out;
   };
-  const model = value => value === 'deepseek-flash' ? value : value == null ? null : 'unexpected_model';
+  const model = value => provider.knownModel(value) ? value : value == null ? null : 'unexpected_model';
   const audit = value.audit;
   if (audit && typeof audit === 'object' && !Array.isArray(audit)) {
     clean.audit = { usage: usage(audit.usage), calls: [] };

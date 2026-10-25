@@ -4,12 +4,14 @@ const inputTools = require('../server/improvement-input');
 const { digest } = require('../server/marking-input');
 const engine = require('../server/improvement-engine');
 const store = require('../server/marking-store');
+// The key for whichever AI service is configured (OpenCode Go or DeepSeek). See server/ai-provider.js.
+const aiKey = env => require('../server/ai-provider').current(env).key();
 
 function createHandler(deps = {}) {
   const coaching = deps.engine || engine, storage = deps.store || store, inputs = deps.input || inputTools, env = deps.env || process.env;
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!env.DEEPSEEK_API_KEY, model: coaching.MODEL, harnessVersion: coaching.HARNESS_VERSION, requiresSignIn: true });
+    if (req.method === 'GET') return res.status(200).json({ ok: true, serverKey: !!aiKey(env), model: coaching.MODEL, harnessVersion: coaching.HARNESS_VERSION, requiresSignIn: true });
     if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
     let session, lease, inputDigest, timer, prepared;
     function cached(record) {
@@ -33,12 +35,12 @@ function createHandler(deps = {}) {
         result.summary = 'There is no confirmed nonblank response evidence for a personalised improvement plan yet. Complete and mark some answers, then try again.';
         return res.status(200).json(result);
       }
-      if (!env.DEEPSEEK_API_KEY) return res.status(503).json({ code: 'no_key', error: 'AI improvement planning is not configured. Your answers and marks remain saved.' });
+      if (!aiKey(env)) return res.status(503).json({ code: 'no_key', error: 'AI improvement planning is not configured. Your answers and marks remain saved.' });
       const reservation = await storage.getOrReserve(session.id, inputDigest);
       if (reservation.state === 'cached') return res.status(200).json(cached(reservation.result));
       if (reservation.state === 'busy') { res.setHeader('Retry-After', '15'); return res.status(409).json({ code: 'improvement_busy', error: 'This paper already has an improvement plan being prepared. Try again shortly.' }); }
       lease = reservation.leaseId;
-      const result = await coaching.improve(prepared, { apiKey: env.DEEPSEEK_API_KEY });
+      const result = await coaching.improve(prepared, { apiKey: aiKey(env) });
       result.audit = { ...result.audit, ...provenance };
       if (result.status === 'ready') {
         result.audit.resultDigest = engine.publicResultDigest(result);

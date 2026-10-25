@@ -95,7 +95,7 @@ test('blind extraction, matched synthesis and independent audit preserve origina
   const before = clone(original), m = mock(), result = await m.run(original);
   assert.equal(result.status, 'complete'); assert.deepEqual(original, before); assert.equal(m.requests.length, 4);
   for (const request of m.requests) {
-    assert.equal(request.url, 'https://api.deepseek.com/chat/completions'); assert.equal(request.body.model, 'deepseek-flash');
+    assert.equal(request.url, require('../server/ai-provider').current().endpoint); assert.equal(request.body.model, engine.MODEL);
     assert.deepEqual(request.body.thinking, { type: 'enabled' }); assert.equal(request.body.reasoning_effort, 'high');
     assert.equal(request.body.max_tokens, 32768); assert.deepEqual(request.body.response_format, { type: 'json_object' });
     assert(!JSON.stringify(request.body).includes('SECRET_NAME')); assert(!JSON.stringify(request.body).includes('secret@example.test'));

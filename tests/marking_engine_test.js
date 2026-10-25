@@ -53,7 +53,7 @@ test('two blind calls are concurrent and blind; audit sees both scoring cores an
   gates[0].resolve(response(proposal())); gates[1].resolve(response(second));
   const result = await operation;
   assert.equal(result.status, 'marked'); assert.equal(result.mark, 4); assert.equal(requests.length, 3);
-  requests.forEach((request, index) => { assert.equal(request.model, 'deepseek-flash'); assert.deepEqual(request.thinking, { type: 'enabled' }); assert.equal(request.reasoning_effort, index === 2 ? 'low' : 'high'); assert.equal(request.max_tokens, 32768); });
+  requests.forEach((request, index) => { assert.equal(request.model, MODEL); assert.deepEqual(request.thinking, { type: 'enabled' }); assert.equal(request.reasoning_effort, index === 2 ? 'low' : 'high'); assert.equal(request.max_tokens, 32768); });
   const original = JSON.parse(requests[0].messages[1].content), audit = JSON.parse(requests[2].messages[1].content);
   assert.equal(original.independentProposals, undefined); assert.deepEqual(audit.originalEvidence, original);
   assert.deepEqual(audit.independentProposals, [proposal(), second].map(p => ({status:p.status,mark:p.mark,criteria:p.criteria,uncertainties:p.uncertainties})));
@@ -560,9 +560,9 @@ test('auditor deadline aborts hung fetch and body without an extra call or retry
 test('invalid canonical input and missing key do not make model calls', async () => {
   const question = input(); question.criteria[1].id = 'c1';
   await assert.rejects(sequence([]).run(question), error => error.status === 400);
-  const old = process.env.DEEPSEEK_API_KEY; delete process.env.DEEPSEEK_API_KEY;
+  const keyEnv = require('../server/ai-provider').current().keyEnv, old = process.env[keyEnv]; delete process.env[keyEnv];
   try { await assert.rejects(mark(input(), { fetch() { throw new Error('must not fetch'); } }), error => error.code === 'no_key'); }
-  finally { if (old !== undefined) process.env.DEEPSEEK_API_KEY = old; }
+  finally { if (old !== undefined) process.env[keyEnv] = old; }
 });
 
 function additive() {

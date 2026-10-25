@@ -31,7 +31,7 @@ async function invoke(handler,body,auth='Bearer mock',method='POST'){
  const exported=await invoke(handler,{action:'export',bankId:'1',parts:[{questionNumber:1,partIndex:0,answer:bank.qs[0].it[0].a}]});
  assert.equal(exported.code,200);assert(exported.value.export);assert(!c.calls.includes('model'));
  let r=await invoke(handler,request);assert.equal(r.code,200);assert.equal(r.headers['Cache-Control'],'no-store');assert.equal(r.value.statistics.commonMaxMarks,1);assert(c.calls.indexOf('verify')<c.calls.indexOf('cache'));
- assert.equal(c.calls.at(-1),'finish');assert.equal(r.value.audit.requestedModel,'deepseek-flash');
+ assert.equal(c.calls.at(-1),'finish');assert.equal(r.value.audit.requestedModel,realEngine.MODEL);
   await invoke(handler,request);assert.equal(c.calls.filter(v=>v==='model').length,1,'cached result avoids provider');
   const refreshed=JSON.parse(JSON.stringify(request));refreshed.exports.forEach(v=>{v.snapshot.createdAt=200;v.snapshot.expiresAt=10000000000000});
   const cachedAgain=await invoke(handler,refreshed);assert.equal(cachedAgain.value.audit.evidenceCreatedAt[0],200);assert.equal(cachedAgain.value.audit.analysisCompletedAt,r.value.audit.analysisCompletedAt);assert.equal(c.calls.filter(v=>v==='model').length,1,'fresh export of same work reuses analysis and refreshes sharing dates');

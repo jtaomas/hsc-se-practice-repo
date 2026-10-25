@@ -110,6 +110,7 @@ function tick(){
     if(LOCKVIEW||ended.some(function(b){return b.id===id}))render();
     return;
   }
+  var xt=$('#exbt'),xs=examSitting();if(xt&&xs)xt.textContent=examLeft(xs);
   var t=$('#tmr');if(!t||!CUR.b)return;var bs=BS(CUR.b.id);t.textContent=fmtT(paperDuration(CUR.b)-(bs.start?Math.floor((Date.now()-bs.start)/1000):0));
 }
 setInterval(tick,1000);
@@ -135,17 +136,9 @@ function frame(title,main,opt){
   if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
   else if(opt.landing){right=''}
   else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+(S.ae?'<span class="hdr-av">'+notionAvatarSVG(S.ae,20,S.ae)+'</span>':'')+acctText()+'</a></nav>';
-  var lock=typeof examLock==='function'?examLock():null;
-  var banner='';
-  if(lock&&(!opt.timer||opt.bid!==lock.id)){
-    banner='<div class="exam-notice" style="background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:12px 18px;margin:12px auto;border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-size:14px;box-sizing:border-box;">'+
-      '<div><strong>Exam in progress:</strong> You are currently sitting <b>'+esc(lock.name)+'</b> in exam mode.</div>'+
-      '<a class="nb sm" href="#/'+esc(lock.id)+'/q/'+(BS(lock.id).cur||1)+'" style="text-decoration:none;padding:6px 14px;font-size:13px">Return to the exam</a>'+
-    '</div>';
-  }
-  return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
+  return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+(opt.timer?'':examBanner())+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+
-    banner+main+
+    main+
     (opt.footer||(opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>'));
 }
 function infoHTML(){
@@ -364,10 +357,12 @@ function render(){
   // A paper whose working time ended goes to its results, not back into the exam.
   if(b&&TIMEUP[b.id]&&BS(b.id).done&&(h[1]==='q'||h[1]==='finish')){stopPython();location.replace('#/'+b.id+'/results');return}
   xdCleanup();
+  if(b&&h[1]==='q'&&examSitting()===b)EXAMOK='';
   var lock=examLock();LOCKVIEW=false;
-  if(h[0]==='papers')html=papersPage();
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
+  else if(h[0]==='papers')html=papersPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
-  else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
+  else if(h[0]==='mistakes'){MF.bank=h[1]==='all'?'':(h[1]||'');MF.sel=h[2]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
   else if(h[0]==='class')html=classPage(h[1]||'',h[2]);
   else if(h[0]==='compare')html=comparisonPage();
@@ -380,23 +375,37 @@ function render(){
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
-  if(h[0]==='class')classBind();
+  if(!lock&&h[0]==='class')classBind();
+  if(!lock&&h[0]==='mistakes')mistakesBind();
   if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review')&&CUR.b===b){afterQ();navArrows(true)}
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();
 }
 /* ---------- exam lock, review hub, practice marking ---------- */
-/* The paper being sat in exam mode right now (started, not submitted, inside its working time), or null. */
-function examLock(){
+/* The paper being sat in exam mode right now (started, not submitted, inside its working time), or null.
+   Archived papers cannot be sat, so an old test attempt on one never counts. A student who chose "Continue anyway" is not held. */
+var EXAMOK='';
+function examSitting(){
   var out=null;
   BANKS.forEach(function(b){var u=S.u[b.id];
-    if(!out&&!b.hidden&&u&&u.mode==='exam'&&u.start&&!u.done&&Date.now()-u.start<paperDuration(b)*1000)out=b});
+    if(!out&&!b.hidden&&!b.archived&&u&&u.mode==='exam'&&u.start&&!u.done&&Date.now()-u.start<paperDuration(b)*1000)out=b});
   return out;
 }
+function examLock(){var b=examSitting();return b&&EXAMOK!==b.id?b:null}
+function examLeft(b){var s=Math.max(0,paperDuration(b)-Math.floor((Date.now()-BS(b.id).start)/1000));return fmtT(s)}
 function lockedPage(b){
   CUR={b:null,n:0};
-  return frame('Exam in progress','<div class="pg"><h1 class="pt">Exam in progress</h1><div class="feature"><p>Review, marking guides, sample answers and class answers are locked while you sit <b>'+esc(b.name)+'</b> in exam mode.</p><p>They unlock when you submit the paper or when its working time ends.</p><div class="acts"><a class="nb" href="#/'+b.id+'/q/'+(BS(b.id).cur||1)+'">Return to the exam</a></div></div></div>');
+  var go='#/'+b.id+'/q/'+(BS(b.id).cur||1);
+  return frame('Exam in progress','<div class="pg"><h1 class="pt">You are in an exam</h1><div class="feature lockbox"><div class="kv"><b>Paper</b><span>'+esc(b.name)+'</span><b>Mode</b><span>Exam mode</span><b>Time left</b><span>'+examLeft(b)+'</span></div>'+
+    '<p>This page shows marking guides, sample answers or classmates\' answers. Your exam timer keeps running while you look, and the paper is submitted automatically when the time ends.</p>'+
+    '<div class="acts"><a class="nb" href="'+go+'">Return to the exam</a><button class="nb ol" data-act="examgo" type="button">Continue anyway</button></div></div></div>');
+}
+/* Shown on every page while the student is looking around during their own exam. */
+function examBanner(){
+  var b=examSitting();
+  if(!b||EXAMOK!==b.id)return '';
+  return '<div class="exb" role="status"><span><b>Exam in progress:</b> '+esc(b.name)+', <span id="exbt">'+examLeft(b)+'</span> left.</span><a class="nb sm" href="#/'+b.id+'/q/'+(BS(b.id).cur||1)+'">Return to the exam</a></div>';
 }
 function reviewStatus(b){
   var u=S.u[b.id];
@@ -542,7 +551,8 @@ document.addEventListener('click',function(e){
   else if(a==='fs'){S.font=+d.v;save();applyTheme();redrawTools()}
   else if(a==='creset'){S.fg=0;S.bg=0;CPK='';save();applyTheme();redrawTools()}
   else if(a==='info'){INFO=true;var w=document.createElement('div');w.innerHTML=infoHTML();document.body.appendChild(w.firstChild)}
-  else if(a==='start'){delete TIMEUP[CUR.b.id];var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
+  else if(a==='examgo'){var xb=examSitting();if(xb){EXAMOK=xb.id;render()}}
+  else if(a==='start'){EXAMOK='';delete TIMEUP[CUR.b.id];var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
   else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){delete TIMEUP[CUR.b.id];var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.markedM,pending:ot.P,provisionalG:ot.provisionalG,provisionalM:ot.provisionalM,provisionalParts:ot.provisionalParts})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
@@ -681,7 +691,7 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('change',function(e){
   var t=e.target;
-  if(t.dataset&&t.dataset.mf){if(t.dataset.mf==='bank'){location.hash='#/mistakes'+(t.value?'/'+t.value:'')}else{MF[t.dataset.mf]=t.value;render()}return}
+  if(t.dataset&&t.dataset.mf){if(t.dataset.mf==='bank'){location.hash='#/mistakes/'+(t.value||'all')}else{MF[t.dataset.mf]=t.value;render()}return}
   var k=t.dataset&&t.dataset.k;if(!k||!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   var bs=BS(CUR.b.id),it=itemOf(k),a=bs.ans[k];
   if(it.t==='mc')bs.ans[k]=+t.dataset.v;

@@ -92,7 +92,7 @@ function syncFail(e){
 }
 /* True while a paper is open for answering, or an exam-mode paper is still running. */
 function sittingPaper(){
-  if(typeof examLock==='function'&&examLock())return true;
+  if(typeof examSitting==='function'&&examSitting())return true;
   return typeof CUR!=='undefined'&&!!CUR.b&&!CUR.rv&&!!S.u[CUR.b.id]&&!S.u[CUR.b.id].done;
 }
 function draftKey(owner){return KEY+':draft:'+encodeURIComponent(owner)}

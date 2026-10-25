@@ -72,10 +72,20 @@ with sync_playwright() as pw:
     expect(page).to_have_url(SITE + '/#/9/q/1')
     for route_hash in ['#/class', '#/review', '#/8/review/1', '#/mistakes', '#/8/results']:
         page.goto(SITE + '/' + route_hash)
-        expect(page.locator('.exam-notice')).to_contain_text('Exam in progress')
-    n = len(class_calls)
-    page.click('text=Return to the exam')
-    expect(page).to_have_url(SITE + '/#/9/q/1')
+        expect(page.locator('.pg')).to_contain_text('You are in an exam')
+        expect(page.locator('.lockbox')).to_contain_text('Time left')
+    # The student can choose to go on anyway: they are warned first, then let through with a banner.
+    page.goto(SITE + '/#/review')
+    page.click('[data-act=examgo]')
+    expect(page.locator('.pg')).to_contain_text('Review and analyse')
+    expect(page.locator('.exb')).to_contain_text('Exam in progress')
+    page.goto(SITE + '/#/mistakes')
+    expect(page.locator('.exb')).to_be_visible()
+    assert page.locator('.lockbox').count() == 0, 'no second warning after Continue anyway'
+    page.click('.exb >> text=Return to the exam')
+    expect(page.locator('#tmr')).to_be_visible()
+    page.goto(SITE + '/#/class')
+    expect(page.locator('.pg')).to_contain_text('You are in an exam')   # coming back to the exam re-arms the warning
     # Time up (or submitted): everything unlocks.
     page.evaluate("BS('9').start=Date.now()-1000*60*60*5;save('9')")
     page.goto(SITE + '/#/review')

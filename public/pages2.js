@@ -1,5 +1,5 @@
 /* ---------- Papers, My mistakes ---------- */
-var MF={bank:'',topic:'',kind:''};
+var MF={bank:'',topic:'',kind:'',sel:''};
 function fmtD(t){if(!t)return '';var d=new Date(t);return d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}
 function aiState(b){
   var bs=BS(b.id);if(!bs.done)return '';
@@ -34,21 +34,50 @@ function ansPreview(m){
   h+='<details class="xdd"><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
+/* My mistakes: a vertical list of every part that lost marks (left) and the selected one in the exam's own style (right). */
+function mkKey(m){return m.b.id+'.'+m.n+'.'+m.i}
+function mkFiltered(){
+  return mistakeList().filter(function(m){
+    return (!MF.bank||m.b.id===MF.bank)&&(!MF.topic||m.q.tp===MF.topic)&&(!MF.kind||itemClass(m.it)===MF.kind)});
+}
+function mkSelected(list){
+  var hit=list.filter(function(m){return mkKey(m)===MF.sel})[0];
+  return hit||list[0]||null;
+}
+function mkHref(m){return '#/mistakes/'+(MF.bank||'all')+'/'+mkKey(m)}
+function mkTypeName(it){var c=itemClass(it);return c==='closed'?'Multiple choice':c==='written'?'Written':c==='code'?(it.t==='sq'?'SQL':it.t==='py'?'Python':'Pseudocode'):c==='diagram'?'Diagram':'Question'}
 function mistakesPage(){
   CUR={b:null,n:0};
-  var all=mistakeList(),list=all.filter(function(m){
-    return (!MF.bank||m.b.id===MF.bank)&&(!MF.topic||m.q.tp===MF.topic)&&(!MF.kind||itemClass(m.it)===MF.kind)});
+  var all=mistakeList(),list=mkFiltered(),cur=mkSelected(list);
   var lost=list.reduce(function(s,m){return s+(m.s.m-m.s.g)},0);
   function sel(name,val,opts){return '<select data-mf="'+name+'" aria-label="'+name+'">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
-  var f='<div class="mfilter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden}).map(function(b){return [b.id,b.name]})))+
+  if(!all.length)return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1><div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; provisional marks need review and are excluded.</p></div></div>');
+  var filters='<div class="mk-filter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden&&!b.archived}).map(function(b){return [b.id,b.name]})))+
     sel('topic',MF.topic,[['','All topics']].concat(mkTopics().map(function(t){return [t,t]})))+
     sel('kind',MF.kind,[['','All question types'],['closed','Multiple choice, dropdown and match'],['written','Written'],['code','Python, pseudocode and SQL'],['diagram','Diagram']])+'</div>';
-  var cards=list.map(function(m){
-    return '<article class="mcard"><header><b>'+esc(m.b.name)+' &middot; Question '+m.n+(m.it.lb?' '+plain(m.it.lb):'')+'</b><span class="pill '+(m.s.g===0?'bad':'part')+'">'+m.s.g+' / '+m.s.m+'</span></header>'+
-      '<div class="mut">'+esc(m.q.tp)+'</div><div class="mq">'+m.it.q+'</div>'+ansPreview(m)+
-      '<div class="acts"><a class="nb sm" href="#/'+m.b.id+'/review/'+m.n+'">Open this question in the paper</a></div></article>';
-  }).join('');
-  var body=!all.length?'<div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; provisional marks need review and are excluded.</p></div>':
-    f+'<p class="mut">'+list.length+' part'+(list.length===1?'':'s')+' shown. '+lost+' mark'+(lost===1?'':'s')+' lost in this view.</p>'+(cards||'<div class="feature"><p>Nothing matches these filters.</p></div>');
-  return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1>'+body+'</div>');
+  var groups='',last='';
+  list.forEach(function(m){
+    if(m.b.id!==last){last=m.b.id;groups+='<div class="mk-grp">'+esc(m.b.name)+'</div>'}
+    var c=m.s.g===0?'bad':'part';
+    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta">'+esc(mkTypeName(m.it))+' &middot; '+esc(m.q.tp)+'</span><span class="mk-sc">'+m.s.g+' / '+m.s.m+'</span></a>';
+  });
+  var side='<aside class="mk-side" aria-label="Your mistakes">'+filters+'<p class="mk-sum">'+list.length+' part'+(list.length===1?'':'s')+' &middot; '+lost+' mark'+(lost===1?'':'s')+' lost</p><nav class="mk-list">'+(groups||'<p class="mut">Nothing matches these filters.</p>')+'</nav></aside>';
+  return frame('My mistakes','<div class="mkpage">'+side+'<main class="ex mk-main" id="mkmain">'+(cur?mkDetail(list,cur):'<div class="feature"><p>Nothing matches these filters.</p></div>')+'</main></div>',{bar:true});
 }
+function mkDetail(list,m){
+  var b=m.b,q=m.q,it=m.it,idx=list.indexOf(m);
+  var st=(q.st||'')+(q.db&&typeof dbTables==='function'?dbTables(q.db):'');
+  var mkLabel=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
+  var crit=!AUTO[it.t]&&it.crit&&it.crit.length?'<details class="xdd"><summary>Marking criteria</summary>'+critList(it.crit)+'</details>':'';
+  var prev=list[idx-1],next=list[idx+1];
+  return '<div class="qwrap"><h2 class="qt">Question '+m.n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="mk-badge '+(m.s.g===0?'bad':'part')+'">'+m.s.g+' / '+m.s.m+'</span></h2>'+
+    '<p class="mut mk-where">'+esc(b.name)+' &middot; '+esc(q.tp)+'</p>'+
+    '<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+
+    '<div class="part"><p class="hoa-q">'+(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mkLabel+'</p>'+
+    '<div class="guide mk-guide"><h4>What you did wrong <span class="sc">'+m.s.g+' / '+m.s.m+'</span></h4>'+ansPreview(m)+crit+'</div>'+
+    classSlot(b,m.n,m.i)+'</div></div>'+
+    '<div class="acts"><a class="nb ol'+(prev?'':' dis')+'" '+(prev?'href="'+mkHref(prev)+'"':'aria-disabled="true"')+'>'+IC.left+'<span>Previous mistake</span></a>'+
+    '<a class="nb'+(next?'':' dis')+'" '+(next?'href="'+mkHref(next)+'"':'aria-disabled="true"')+'><span>Next mistake</span>'+IC.right+'</a>'+
+    '<a class="nb ol" href="#/'+b.id+'/review/'+m.n+'">Open in the full paper</a></div></div>';
+}
+function mistakesBind(){var m=mkSelected(mkFiltered());if(m)classEnsure(m.b)}

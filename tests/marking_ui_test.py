@@ -198,9 +198,9 @@ with sync_playwright() as playwright:
     assert page.evaluate("aiTodo(BANKS[0]).length") == 0
     capture(page, 'marking-needs-review.png')
     page.goto(URL + '#/mistakes/1')
-    headers = page.locator('.mcard header > b').all_text_contents()
-    assert any('Question 18' in header for header in headers)
-    assert all('Question 20' not in header for header in headers)
+    headers = page.locator('.mk-item .mk-q').all_text_contents()
+    assert 'Q18' in headers
+    assert 'Q20' not in headers
 
     # Reloading and navigating never turn an abstention into another paid marking attempt.
     page.goto(URL + '#/1/results')
@@ -286,7 +286,7 @@ with sync_playwright() as playwright:
     expect(page.locator('.feature').first).to_contain_text(f'0 of {paper_count} papers finished')
     assert page.locator('a[href="#/formats"]').count() == 0
     page.goto(URL + '#/mistakes')
-    assert all('Question formats' not in heading for heading in page.locator('.mcard header > b').all_text_contents())
+    assert all('formats' not in heading.lower() for heading in page.locator('.mk-grp').all_text_contents())
     assert len(mark_requests) == 3
 
     # Numeric fallbacks remain visibly provisional through practice, submission,
@@ -324,8 +324,8 @@ with sync_playwright() as playwright:
     page.goto(URL + '#/mistakes/10')
     # The deliberately blank third answer is a real zero; only provisional
     # shortfalls are excluded from the mistakes list.
-    expect(page.locator('.mcard header')).to_have_count(1)
-    expect(page.locator('.mcard header')).to_contain_text('Question 3')
+    expect(page.locator('.mk-item')).to_have_count(1)
+    expect(page.locator('.mk-item .mk-q')).to_have_text('Q3')
     page.goto(URL + '#/10/review/1')
     page.locator('[data-act=sm][data-k="1.0"][data-v="4"]').click()
     expect(page.locator('.guide > h4 .sc')).to_have_text('4 / 5')
@@ -335,9 +335,8 @@ with sync_playwright() as playwright:
     expect(page.locator('.feature').first).to_contain_text('Assessed subtotal: 4 / 10.')
     expect(page.locator('#aib')).to_contain_text('1 provisional mark')
     page.goto(URL + '#/mistakes/10')
-    headings = page.locator('.mcard header').all_text_contents()
-    assert len(headings) == 2 and any('Question 1' in h for h in headings) and any('Question 3' in h for h in headings)
-    assert all('Question 2' not in h for h in headings)
+    headings = page.locator('.mk-item .mk-q').all_text_contents()
+    assert sorted(headings) == ['Q1', 'Q3'], headings
     page.goto(URL + '#/10')
     page.once('dialog', lambda dialog: dialog.accept())
     page.click('[data-act=restart]')

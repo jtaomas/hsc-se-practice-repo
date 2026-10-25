@@ -68,7 +68,7 @@ function score(b,n,i){
   else if(AUTO[it.t]){var u=units(it,a);g=u[0]===u[1]?m:Math.floor(m*u[0]/u[1]+1e-9)}
   else{
     var sv=bs.self[k],src='self',ai=typeof aiRecord==='function'?aiRecord(b,n,i):null;
-    if(sv==null){src=ai&&ai.status==='needs_review'?'needs_review':'pending';if(ai&&ai.g!=null){sv=ai.g;src='ai'}}
+    if(sv==null){src=ai&&ai.status==='needs_review'?'needs_review':'pending';if(ai&&ai.g!=null){sv=ai.g;src=ai.status==='provisional'?'provisional':'ai'}}
     if(sv==null&&!isAns(it,a)){sv=0;src='none'}
     return {g:sv==null?0:sv,m:m,auto:false,set:sv!=null,src:src};
   }
@@ -164,7 +164,7 @@ function itemHTML(b,n,i,rv){
 }
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
-  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+(sc.set?sc.g+' / '+sc.m:'Unscored')+'</span></h4>';
+  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+(sc.set?(sc.src==='provisional'?'Provisional: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></h4>';
   if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
   else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
   else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}));

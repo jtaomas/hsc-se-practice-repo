@@ -79,6 +79,35 @@ try {
   assert.equal(withRepeated.runs[2].metricsProviderOnly.scoreCoverage, 2 / 3);
   assert.equal(withRepeated.runs[2].stability.uniqueCases, 1);
   assert.equal(withRepeated.runs[2].stability.releasedMarkVariableCases, 0);
+  const provisionalFile = path.join(temp, 'provisional.json');
+  const provisionalTrials = [trial(cases[0], 'provisional', 3, false), trial(cases[1], 'provisional', 1, false), trial(cases[2], 'marked', 0, false)];
+  provisionalTrials.forEach(row => { row.exactAgreement = true; row.rangeAgreement = true; row.signedError = 0; }); // Never trust precomputed metrics.
+  fs.writeFileSync(provisionalFile, JSON.stringify(report(provisionalTrials, 'blind-marking-v9-resolution', true)));
+  const provisionalRun = buildSummary({ ...options, reports: [...options.reports, { label: 'provisional', path: provisionalFile }] });
+  const pm = provisionalRun.runs[2].metricsProviderOnly, pc = provisionalRun.runs[2].cases;
+  assert.equal(pm.confirmedScores, 0); assert.equal(pm.scored, 0); assert.equal(pm.scoreCoverage, 0);
+  assert.equal(pm.exactAgreementAmongScored, null); assert.equal(pm.rangeAgreementIncludingAbstentions, 0);
+  assert.equal(pm.provisionalScores, 2); assert.equal(pm.releasedScores, 2); assert.equal(pm.releasedRate, 1);
+  assert.equal(pm.provisionalExactAgreement, .5); assert.equal(pm.provisionalRangeAgreement, .5);
+  assert.equal(pm.provisionalMeanAbsoluteError, .5); assert.equal(pm.provisionalSignedBias, -.5);
+  assert.equal(pm.provisionalUnderAwards, 1); assert.equal(pm.provisionalOverAwards, 0);
+  assert.equal(pc[0].mark, 3); assert.equal(pc[0].exactAgreement, false); assert.equal(pc[0].signedError, null);
+  assert.equal(pc[0].provisionalExactAgreement, true); assert.equal(pc[0].diagnosticContract, 'unavailable_provisional');
+  assert.equal(pm.detailedFeedbackScored, 0); assert.equal(pm.legacyContractScored, 0);
+  assert(markdown(provisionalRun).includes('Provisional numeric outcomes: separate from confirmed agreement'));
+  assert(markdown(provisionalRun).includes('not auditor-confirmed agreement'));
+  assert(!JSON.stringify(provisionalRun).includes('SECRET_SENTINEL'));
+  const ps = stability([{ id: 'a', status: 'marked', mark: 2 }, { id: 'a', status: 'provisional', mark: 1 }, { id: 'a', status: 'needs_review', mark: null }]);
+  assert.deepEqual(ps.cases[0].confirmedMarks, [2]); assert.deepEqual(ps.cases[0].provisionalMarks, [1]);
+  assert.deepEqual(ps.cases[0].releasedMarks, [1, 2]); assert.equal(ps.releasedMarkVariableCases, 1);
+  assert.deepEqual(ps.cases[0].outcomes, { 'marked:2': 1, 'provisional:1': 1, needs_review: 1 });
+  for (const mark of [null, '1', -1, 4]) {
+    fs.writeFileSync(provisionalFile, JSON.stringify(report([trial(cases[0], 'provisional', mark, false)], 'blind-marking-v9-resolution', true)));
+    assert.throws(() => buildSummary({ ...options, reports: [...options.reports, { label: 'invalid', path: provisionalFile }] }), /Invalid awarded mark/);
+  }
+  const promoted = trial(cases[0], 'provisional', 3, false); promoted.status = 'marked';
+  fs.writeFileSync(provisionalFile, JSON.stringify(report([promoted], 'blind-marking-v9-resolution', true)));
+  assert.throws(() => buildSummary({ ...options, reports: [...options.reports, { label: 'promoted', path: provisionalFile }] }), /original result/);
   assert.throws(() => buildSummary({ ...options, reports: [...options.reports, { label: 'repeat', path: repeatFile }], matches: [['v1', 'repeat']] }), /single-attempt/);
   assert(!markdown(result).includes('SECRET_SENTINEL'));
   assert(fs.existsSync(options.json)); assert(fs.existsSync(options.markdown));
@@ -86,5 +115,5 @@ try {
   assert.throws(() => buildSummary(options), /Recorded labels/);
   assert.throws(() => parseArgs(['--report', 'v1=' + a, '--fixture', fixtureFile, '--pilot', 'v1', '--json', fixtureFile]), /overwrite/);
   assert.throws(() => parseArgs(['--report', 'v1=' + a, '--report', 'v1=' + a, '--fixture', fixtureFile, '--json', path.join(temp, 'out.json')]), /Duplicate/);
-  console.log('marking summary: provenance, historical labels, provider-only denominators, legacy schema, grouping and sensitive-field exclusion passed');
+  console.log('marking summary: provenance, historical labels, separate provisional metrics/stability, no false confirmation and sensitive-field exclusion passed');
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

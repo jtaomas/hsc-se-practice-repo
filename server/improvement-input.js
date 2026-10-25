@@ -99,11 +99,19 @@ function aggregate(parts) {
   return { coverage, lossSummary: { totalKnownLost, unallocatedLost, unknownMaxMarks: coverage.pendingMaxMarks, categories }, quality };
 }
 
-function cacheValid(result, prepared, inputDigest, answerDigest, markerEngine) {
-  if (!object(result) || !['marked', 'needs_review'].includes(result.status) || !object(result.audit)) return false;
+function cacheValid(result, prepared, inputDigest, answerDigest, markerEngine, options = {}) {
+  if (!object(result) || !['marked', 'needs_review', ...(options.allowProvisional ? ['provisional'] : [])].includes(result.status) || !object(result.audit)) return false;
   const a = result.audit;
   if (a.inputDigest !== inputDigest || a.questionVersion !== prepared.questionVersion || a.rubricVersion !== prepared.rubricVersion || a.harnessVersion !== markerEngine.HARNESS_VERSION || a.requestedModel !== markerEngine.MODEL || (prepared.input.type === 'diagram' && a.answerDigest !== answerDigest)) return false;
   if (result.status === 'needs_review') return result.mark === null;
+  // Provisional decisions are usable only by the marking endpoint. Coaching,
+  // comparison exports and evaluation of confirmed evidence use the default.
+  if (result.status === 'provisional') {
+    if (typeof markerEngine.provisionalProvenanceProblem !== 'function' || markerEngine.provisionalProvenanceProblem(result) ||
+        typeof markerEngine.coreProblem !== 'function' || !Number.isInteger(result.mark) || result.mark < 0 || result.mark > prepared.input.maxMarks) return false;
+    const core = { status: 'marked', mark: result.mark, criteria: result.criteria, uncertainties: [] };
+    try { return !markerEngine.coreProblem(core, prepared.input) && !feedbackProblem(result, prepared.input); } catch (_) { return false; }
+  }
   if (!Number.isInteger(result.mark) || result.mark < 0 || result.mark > prepared.input.maxMarks || typeof markerEngine.confirmedProvenanceProblem !== 'function' || markerEngine.confirmedProvenanceProblem(result)) return false;
   const loss = result.losses;
   if (!object(loss) || !['exact', 'holistic'].includes(loss.allocation) || loss.totalLost !== prepared.input.maxMarks - result.mark || !Array.isArray(loss.items)) return false;

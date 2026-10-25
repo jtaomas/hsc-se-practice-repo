@@ -1,6 +1,7 @@
 // Private marking results, distributed leases and daily paid-job reservations.
 // A single daily ledger reserves account and site quotas in the same CAS write.
 const crypto = require('crypto');
+const { DIAGNOSTIC_CODES } = require('./marking-format');
 const { performance } = require('node:perf_hooks');
 const { verifySession } = require('../api/auth');
 
@@ -12,7 +13,7 @@ const CHANGE_TIMEOUT_MS = 10000;
 const CHANGE_ATTEMPTS = 16;
 const PRECONNECT_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED']);
 const TRANSPORT_CODES = new Set([...PRECONNECT_CODES, 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'ECONNRESET', 'ETIMEDOUT', 'unknown']);
-const FAILURE_CODES = new Set(['marking_timeout', 'provider_response_too_large', 'provider_response_unreadable', 'provider_cancelled', 'provider_rate_limit', 'provider_auth', 'provider_balance', 'provider_error', 'provider_envelope', 'provider_unavailable', 'marking_request_too_large', 'invalid_result', 'no_key', 'marking_storage_unavailable', 'marking_storage_busy', 'marking_storage_timeout', 'marking_storage_version', 'marking_lease_lost', 'marking_unavailable']);
+const FAILURE_CODES = new Set(['marking_unresolved', 'marking_call_budget', 'marking_timeout', 'provider_response_too_large', 'provider_response_unreadable', 'provider_cancelled', 'provider_rate_limit', 'provider_auth', 'provider_balance', 'provider_error', 'provider_envelope', 'provider_unavailable', 'marking_request_too_large', 'invalid_result', 'no_key', 'marking_storage_unavailable', 'marking_storage_busy', 'marking_storage_timeout', 'marking_storage_version', 'marking_lease_lost', 'marking_unavailable']);
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function error(status, code, message) { const e = new Error(message); e.status = status; e.code = code; return e; }
 const conflict = e => e && (e.name === 'BlobPreconditionFailedError' || /precondition|already exists/i.test(String(e.message)));
@@ -37,14 +38,14 @@ function failureDiagnostics(value, kind) {
   const audit = value.audit;
   if (audit && typeof audit === 'object' && !Array.isArray(audit)) {
     clean.audit = { usage: usage(audit.usage), calls: [] };
-    if (Number.isInteger(audit.networkAttempts) && audit.networkAttempts >= 0 && audit.networkAttempts <= (comparison ? 10 : 4)) clean.audit.networkAttempts = audit.networkAttempts;
+    if (Number.isInteger(audit.networkAttempts) && audit.networkAttempts >= 0 && audit.networkAttempts <= (comparison ? 10 : 6)) clean.audit.networkAttempts = audit.networkAttempts;
     if (number(audit.durationMs)) clean.audit.durationMs = audit.durationMs;
     if (audit.requestedModel != null) clean.audit.requestedModel = model(audit.requestedModel);
-    if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, comparison ? 10 : 3).map(model);
-    if (Array.isArray(audit.calls)) for (const call of audit.calls.slice(0, comparison ? 10 : 3)) {
+    if (Array.isArray(audit.returnedModels)) clean.audit.returnedModels = audit.returnedModels.slice(0, comparison ? 10 : 5).map(model);
+    if (Array.isArray(audit.calls)) for (const call of audit.calls.slice(0, comparison ? 10 : 5)) {
       // The coach shares marking jobs and quotas, so its two stage names must
       // survive the same bounded diagnostic projection as marker failures.
-      if (!call || (comparison ? !/^(profile:p[1-8]|synthesis|auditor)$/.test(call.stage) : !['marker1', 'marker2', 'auditor', 'coach', 'coach_auditor'].includes(call.stage))) continue;
+      if (!call || (comparison ? !/^(profile:p[1-8]|synthesis|auditor)$/.test(call.stage) : !['marker1', 'marker2', 'marker1_format', 'marker2_format', 'auditor', 'adjudicator', 'coach', 'coach_auditor'].includes(call.stage))) continue;
       const out = { stage: call.stage, usage: usage(call.usage) };
       if (['running', 'completed', 'failed'].includes(call.status)) out.status = call.status;
       if (number(call.durationMs)) out.durationMs = call.durationMs;
@@ -57,6 +58,15 @@ function failureDiagnostics(value, kind) {
       if (['before_headers', 'body'].includes(call.transportPhase)) out.transportPhase = call.transportPhase;
       if (Number.isInteger(call.responseStatus) && call.responseStatus >= 100 && call.responseStatus <= 599) out.responseStatus = call.responseStatus;
       if (['stop', 'length', 'tool_calls', 'function_call', 'content_filter'].includes(call.finishReason)) out.finishReason = call.finishReason;
+      if (call.criterionDiagnostics && Array.isArray(call.criterionDiagnostics.issues)) {
+        const d = call.criterionDiagnostics;
+        out.criterionDiagnostics = {
+          expectedCount: Number.isInteger(d.expectedCount) && d.expectedCount >= 0 && d.expectedCount <= 100 ? d.expectedCount : 0,
+          actualCount: Number.isInteger(d.actualCount) && d.actualCount >= 0 && d.actualCount <= 101 ? d.actualCount : null,
+          issues: d.issues.slice(0, 8).filter(i => i && DIAGNOSTIC_CODES.includes(i.code)).map(i => ({ code: i.code, ...(Number.isInteger(i.index) && i.index >= 0 && i.index < 100 ? { index: i.index } : {}) })),
+          truncated: d.truncated === true
+        };
+      }
       clean.audit.calls.push(out);
     }
   }
@@ -80,8 +90,8 @@ function createStore(options) {
   const kind = options.kind || 'marking';
   if (!['marking', 'comparison'].includes(kind)) throw new Error('Invalid storage kind.');
   const completedState = kind === 'comparison' ? 'complete' : 'marked';
-  const completedStates = [completedState, 'needs_review'];
-  const states = ['pending', completedState, 'needs_review', 'failed'];
+  const completedStates = [completedState, 'needs_review', ...(kind === 'marking' ? ['provisional'] : [])];
+  const states = ['pending', ...completedStates, 'failed'];
   const prefix = kind + '/v1/';
   const provider = options.blob || privateBlob;
   const now = options.now || Date.now;

@@ -3,7 +3,7 @@
 // No live endpoint or model calls. Native Response streams exercise the same
 // bounded reader used in production; every fetch below is a local mock.
 const assert = require('node:assert/strict');
-const { mark, MODEL, HARNESS_VERSION, LIMITS, AUDIT_CHECKS, confirmedProvenanceProblem, selectedFeedbackDigest } = require('../server/marking-engine');
+const { mark, MODEL, HARNESS_VERSION, LIMITS, MAX_LOGICAL_CALLS, MAX_NETWORK_ATTEMPTS, AUDIT_CHECKS, coreProblem, confirmedProvenanceProblem, provisionalProvenanceProblem, selectedFeedbackDigest } = require('../server/marking-engine');
 const { parse } = require('../server/marking-json');
 const { canonicalDigest } = require('../server/feedback-integrity');
 const { prepare } = require('../server/marking-input');
@@ -28,17 +28,29 @@ function envelope(value, message = {}, extra = {}) {
   return new Response(JSON.stringify(Object.assign({ model: MODEL, choices: [{ finish_reason: 'stop', message: Object.assign({ role: 'assistant', content: JSON.stringify(value) }, message) }] }, extra)));
 }
 function sequence(values, config = {}) {
-  const requests = [];
+  const requests = []; let unexpected = 0;
   const fetch = async (url, options) => {
     const index = requests.length; requests.push({ url, options, body: JSON.parse(options.body) });
     const value = values[index];
+    if (value === undefined) unexpected++;
     assert.notEqual(value, undefined, 'unexpected extra model call');
     return typeof value === 'function' ? value(url, options, index) : response(value);
   };
-  return { requests, run: (question = input()) => mark(question, Object.assign({ fetch, apiKey: 'mock-only-key' }, config)) };
+  return { requests, run: async (question = input()) => { try { return await mark(question, Object.assign({ fetch, apiKey: 'mock-only-key' }, config)); } finally { assert.equal(unexpected, 0, 'unexpected model calls must not masquerade as provider errors'); } } };
 }
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 function networkError(code) { return Object.assign(new TypeError('PRIVATE transport detail'), { cause: { code, hostname: 'PRIVATE host', address: 'PRIVATE address' } }); }
+
+function assertProvisional(result, expectedMark, reason) {
+  assert.equal(result.status, 'provisional'); assert.equal(result.mark, expectedMark);
+  assert.equal(result.audit.resolution, 'lower_mark_fallback'); assert.equal(result.audit.checks.auditorApproved, false);
+  for (const key of ['strengths', 'improve', 'advice', 'quality']) assert.deepEqual(result[key], []);
+  assert.deepEqual(result.losses, unavailableFeedback().losses);
+  assert.equal(provisionalProvenanceProblem(result), null);
+  assert.notEqual(confirmedProvenanceProblem(result), null);
+  if (reason) assert.deepEqual(result.audit.reasons, [reason]);
+}
+function veto() { const value = auditor(); value.selectedFeedback = null; value.checks.rubricAlignment = 'uncertain'; value.issues.push({ checkId: 'rubricAlignment', detail: 'The proposed decisions cannot be resolved confidently.' }); return value; }
 
 test('two blind calls are concurrent and blind; audit sees both scoring cores and eligible complete feedback', async () => {
   const gates = [deferred(), deferred()], requests = [], second = proposal();
@@ -108,17 +120,18 @@ test('trial guidance is preserved outside scored criteria through both markers a
   }
 });
 
-test('guidance separation never salvages extra criterion IDs, invalid band labels or actual blind score disagreement', async () => {
+test('guidance remains non-scoring while invalid cores are excluded from resolution', async () => {
   const question = prepare({ bankId: '8', questionNumber: 18, partIndex: 0, answer: 'Data protection keeps personal information confidential.' }).input;
   const partial = trialProposal(question, 1), full = trialProposal(question, 2);
-  let mock = sequence([partial, full]);
-  assert.deepEqual((await mock.run(question)).audit.reasons, ['blind_score_disagreement']); assert.equal(mock.requests.length, 2);
+  let mock = sequence([partial, full, veto()]), result = await mock.run(question);
+  assertProvisional(result, 1, 'auditor_veto'); assert.equal(mock.requests.length, 3);
+  assert.deepEqual(result.audit.disagreements, ['blind_score_disagreement']);
   const extra = clone(partial); extra.criteria.push({ id: 'guidance1', assessment: 'context', evidence: [], basis: 'The rubric application instruction.' });
-  mock = sequence([extra, partial]);
-  assert.deepEqual((await mock.run(question)).audit.reasons, ['criterion_coverage']); assert.equal(mock.requests.length, 2);
+  mock = sequence([extra, extra, extra, extra]); result = await mock.run(question);
+  assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['criterion_coverage']); assert.equal(mock.requests.length, 4);
   const wrong = clone(partial); wrong.criteria[0].assessment = 'not_met';
-  mock = sequence([partial, wrong]);
-  assert.deepEqual((await mock.run(question)).audit.reasons, ['band_assessment_mismatch']); assert.equal(mock.requests.length, 2);
+  mock = sequence([wrong, wrong]); result = await mock.run(question);
+  assert.deepEqual(result.audit.reasons, ['band_assessment_mismatch']); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
 });
 
 test('rubric guidance is a bounded array of source strings, with invalid metadata rejected before provider calls', async () => {
@@ -129,42 +142,52 @@ test('rubric guidance is a bounded array of source strings, with invalid metadat
   }
 });
 
-test('score disagreement is withheld without averaging or another grading call', async () => {
+test('score disagreement receives one adjudicator without re-marking or averaging', async () => {
   const other = proposal(); other.mark = 3; other.improve = ['Explain beta more completely.']; other.losses = { allocation: 'holistic', totalLost: 1, items: [loss(['c2'])] };
-  const mock = sequence([proposal(), other]), result = await mock.run();
-  assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
-  assert.deepEqual(result.audit.reasons, ['blind_score_disagreement']);
+  for (const index of [0, 1]) {
+    const approval = auditor(); approval.selectedFeedback = index;
+    const mock = sequence([proposal(), other, approval]), result = await mock.run();
+    assert.equal(result.status, 'marked'); assert.equal(result.mark, index ? 3 : 4); assert.equal(mock.requests.length, 3);
+    assert.equal(result.audit.resolution, 'adjudicated'); assert.equal(result.audit.checks.blindAgreement, false);
+    assert.deepEqual(result.audit.calls.map(c => c.stage), ['marker1', 'marker2', 'adjudicator']);
+    assert.equal(confirmedProvenanceProblem(result), null);
+  }
+  const mock = sequence([proposal(), other, veto()]), result = await mock.run();
+  assertProvisional(result, 3, 'auditor_veto'); assert.equal(mock.requests.length, 3); assert.equal(result.audit.selectedFeedback, 1);
 });
 
-test('criterion disagreement with the same score is withheld; ordering alone is allowed', async () => {
+test('criterion disagreement can be adjudicated; ordering alone retains blind agreement', async () => {
   const other = proposal(); other.criteria[1].assessment = 'context';
-  let mock = sequence([proposal(), other]), result = await mock.run();
-  assert.equal(result.status, 'needs_review'); assert.deepEqual(result.audit.reasons, ['blind_criterion_disagreement']); assert.equal(mock.requests.length, 2); assert.equal(mock.requests.length, 2);
+  let mock = sequence([proposal(), other, auditor()]), result = await mock.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.audit.resolution, 'adjudicated'); assert.equal(result.audit.checks.blindAgreement, false);
+  assert.deepEqual(result.audit.disagreements, ['blind_criterion_disagreement']); assert.equal(mock.requests.length, 3);
   other.criteria = clone(proposal().criteria).reverse();
-  mock = sequence([proposal(), other, auditor()]); assert.equal((await mock.run()).status, 'marked');
+  mock = sequence([proposal(), other, auditor()]); result = await mock.run(); assert.equal(result.status, 'marked'); assert.equal(result.audit.resolution, 'blind_agreement');
 });
 
-test('explicit abstention and uncertainty never return a numeric grade', async () => {
+test('abstentions and uncertain cores never supply numeric scores', async () => {
   const uncertain = proposal(); uncertain.status = 'needs_review'; uncertain.mark = null; uncertain.uncertainties = ['The rubric is ambiguous.']; Object.assign(uncertain, unavailableFeedback());
-  let mock = sequence([proposal(), uncertain]), result = await mock.run();
-  assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['marker_abstention']);
-  uncertain.status = 'marked'; uncertain.mark = 4;
-  mock = sequence([proposal(), uncertain]); result = await mock.run();
-  assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['uncertain_proposal']);
+  for (const value of [uncertain, { ...uncertain, status: 'marked', mark: 4 }]) {
+    let mock = sequence([value, value]), result = await mock.run();
+    assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
+    assert.equal(result.audit.resolution, 'no_valid_score');
+    mock = sequence([proposal(), value, veto()]); result = await mock.run();
+    assertProvisional(result, 4); assert.equal(result.audit.proposals[1], null); assert.equal(result.audit.selectedFeedback, 0);
+  }
 });
 
 test('invalid numbers are not coerced, rounded or clamped', async () => {
   for (const grade of [null, true, false, '', '4', 2.8, -1, 5]) {
     const invalid = proposal(); invalid.mark = grade;
-    const mock = sequence([invalid, invalid]), result = await mock.run();
-    assert.equal(result.status, 'needs_review', String(grade)); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
+    const mock = sequence([invalid, invalid, invalid, invalid]), result = await mock.run();
+    assert.equal(result.status, 'needs_review', String(grade)); assert.equal(result.mark, null); assert.equal(mock.requests.length, 4);
   }
 });
 
-test('malformed JSON and duplicate escaped keys fail closed with no regeneration', async () => {
+test('malformed JSON and duplicate escaped keys remain unusable after bounded format replacements', async () => {
   for (const invalid of ['{', '```json\n{}\n```', JSON.stringify(proposal()).replace('"mark":4', '"mark":4,"ma\\u0072k":0')]) {
-    const mock = sequence([invalid, invalid]), result = await mock.run();
-    assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, [invalid.includes('ma\\u0072k') ? 'invalid_json_duplicate_key' : 'invalid_json']); assert.equal(mock.requests.length, 2);
+    const mock = sequence([invalid, invalid, invalid, invalid]), result = await mock.run();
+    assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, [invalid.includes('ma\\u0072k') ? 'invalid_json_duplicate_key' : 'invalid_json']); assert.equal(mock.requests.length, 4);
   }
   assert.throws(() => parse('{"nested":{"a":1,"\\u0061":2}}'), /Duplicate/);
   assert.deepEqual(parse('{"quote":"\\\"a\\\":1","values":[{"a":1},{"a":2}]}'), { quote: '"a":1', values: [{ a: 1 }, { a: 2 }] });
@@ -180,8 +203,10 @@ test('criterion coverage, labels, exact evidence, and feedback schemas are enfor
   ];
   for (const change of changes) {
     const invalid = proposal(); change(invalid);
-    const mock = sequence([invalid, invalid]), result = await mock.run();
-    assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
+    const mock = sequence([invalid, invalid, invalid, invalid]), result = await mock.run();
+    if (coreProblem(invalid, input())) { assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); }
+    else assertProvisional(result, 4, 'no_eligible_feedback');
+    assert(mock.requests.length <= 4); assert.equal(result.audit.checks.auditorApproved, false);
   }
 });
 
@@ -189,15 +214,15 @@ test('partial and zero-credit feedback must match scored credit', async () => {
   const partial = proposal(); partial.mark = 2; partial.criteria[1] = { id: 'c2', assessment: 'not_met', evidence: [], basis: 'The required explanation is missing.' }; partial.improve = ['Explain beta.']; partial.losses = { allocation: 'holistic', totalLost: 2, items: [loss(['c2'])] };
   let mock = sequence([partial, partial, auditor()]); assert.equal((await mock.run()).mark, 2);
   const noFeedback = clone(partial); noFeedback.improve = [];
-  mock = sequence([noFeedback, noFeedback]); assert.equal((await mock.run()).mark, null);
+  mock = sequence([noFeedback, noFeedback]); assertProvisional(await mock.run(), 2, 'no_eligible_feedback');
   const zero = clone(partial); zero.mark = 0;
   mock = sequence([zero, zero]); assert.deepEqual((await mock.run()).audit.reasons, ['zero_score_with_credit']);
   zero.criteria.forEach(c => {c.assessment='not_met'; c.evidence=[];});
-  mock = sequence([zero, zero]); assert.deepEqual((await mock.run()).audit.reasons, ['uncredited_strengths']);
+  mock = sequence([zero, zero]); assertProvisional(await mock.run(), 0, 'no_eligible_feedback');
   const noCredit = proposal(); noCredit.criteria.forEach(criterion => { criterion.assessment = 'context'; });
   mock = sequence([noCredit, noCredit]); assert.deepEqual((await mock.run()).audit.reasons, ['positive_score_without_credit']);
   const noStrengths = proposal(); noStrengths.strengths = [];
-  mock = sequence([noStrengths, noStrengths]); assert.deepEqual((await mock.run()).audit.reasons, ['positive_score_without_credit']);
+  mock = sequence([noStrengths, noStrengths]); assertProvisional(await mock.run(), 4, 'no_eligible_feedback');
 });
 
 test('public provenance is compact and an oversized final result is withheld', async () => {
@@ -208,11 +233,11 @@ test('public provenance is compact and an oversized final result is withheld', a
   assert.equal(small.mark, null); assert.deepEqual(small.audit.reasons, ['result_too_large']);
 });
 
-test('every positive audit check failure or uncertainty withholds the score', async () => {
+test('every positive audit check failure or uncertainty withholds confirmed feedback', async () => {
   for (const key of Object.keys(AUDIT_CHECKS)) for (const state of ['fail', 'uncertain']) {
     const veto = auditor(); veto.checks[key] = state; veto.issues.push({ checkId: key, detail: 'The original evidence does not establish this condition.' });
     const mock = sequence([proposal(), proposal(), veto]), result = await mock.run();
-    assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['auditor_veto']); assert.equal(mock.requests.length, 3);
+    assertProvisional(result, 4, 'auditor_veto'); assert.equal(mock.requests.length, 3);
     assert.equal(result.audit.auditor.checks[key], state); assert.equal(result.audit.auditor.issueCount, 1);
     assert(!JSON.stringify(result).includes('The original evidence does not establish this condition.'));
   }
@@ -247,7 +272,7 @@ test('optional advice cannot disguise the same missing scored requirement', asyn
   const veto = auditor(); veto.checks.adviceSeparation = 'fail';
   veto.issues.push({ checkId: 'adviceSeparation', detail: 'The optional beta suggestion repeats the same missing scored explanation.' });
   const mock = sequence([partial, partial, veto]), result = await mock.run();
-  assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(mock.requests.length, 3);
+  assertProvisional(result, 2, 'auditor_veto'); assert.equal(mock.requests.length, 3);
   assert.equal(result.audit.auditor.checks.adviceSeparation, 'fail');
   assert(mock.requests[0].body.messages[0].content.includes('Prefer advice:[]'));
   assert(mock.requests[2].body.messages[0].content.includes('repeats, paraphrases or generalises a scored improvement'));
@@ -265,21 +290,21 @@ test('optional advice cannot disguise the same missing scored requirement', asyn
   }
 });
 
-test('model identity and completed finish status are required for markers and auditor', async () => {
+test('wrong model and incomplete finish can never supply a scoring core or audit approval', async () => {
   for (const options of [{ model: 'other-model' }, { finish: 'length' }]) {
-    let mock = sequence([proposal(), () => response(proposal(), options)]), result = await mock.run();
+    let mock = sequence([() => response(proposal(), options), () => response(proposal(), options)]), result = await mock.run();
     assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
     mock = sequence([proposal(), proposal(), () => response(auditor(), options)]); result = await mock.run();
-    assert.equal(result.mark, null); assert.equal(result.audit.checks.auditorApproved, false);
+    assertProvisional(result, 4); assert.equal(result.audit.checks.auditorApproved, false);
   }
 });
 
 test('tool calls and refusals cannot accompany an accepted grade; bounded fingerprints are recorded', async () => {
   for (const message of [{ tool_calls: [] }, { tool_calls: [{ type: 'function' }] }, { function_call: { name: 'mark' } }, { refusal: 'Cannot comply.' }]) {
-    let mock = sequence([proposal(), () => envelope(proposal(), message)]), result = await mock.run();
+    let mock = sequence([() => envelope(proposal(), message), () => envelope(proposal(), message)]), result = await mock.run();
     assert.equal(result.status, 'needs_review'); assert.equal(mock.requests.length, 2);
     mock = sequence([proposal(), proposal(), () => envelope(auditor(), message)]); result = await mock.run();
-    assert.equal(result.mark, null); assert.equal(result.audit.checks.auditorApproved, false);
+    assertProvisional(result, 4); assert.equal(result.audit.checks.auditorApproved, false);
   }
   const result = await sequence([() => envelope(proposal(), { refusal: null }, { system_fingerprint: 'fp_test-123' }),
     () => envelope(proposal(), {}, { system_fingerprint: 'x'.repeat(201) }), auditor()]).run();
@@ -343,9 +368,9 @@ test('diagram image and complete scene reach both markers and auditor; evidence 
     assert.deepEqual(original.diagramEvidenceCatalog, [{ evidenceId: 's1', type: 'rectangle', label: '' }, { evidenceId: 's2', type: 'ellipse', label: '' }]);
   });
   const unknown = clone(diagram); unknown.criteria[0].evidence = ['unknown-element'];
-  assert.deepEqual((await sequence([diagram, unknown]).run(question)).audit.reasons, ['unsupported_evidence']);
+  assert.deepEqual((await sequence([unknown, unknown]).run(question)).audit.reasons, ['unsupported_evidence']);
   const inventedQuality = clone(diagram); inventedQuality.quality[10].evidence = ['invented-connector'];
-  assert.deepEqual((await sequence([inventedQuality, inventedQuality]).run(question)).audit.reasons, ['unsupported_feedback_evidence']);
+  assertProvisional(await sequence([inventedQuality, inventedQuality]).run(question), 4, 'no_eligible_feedback');
   for (const image of [null, 'https://example.invalid/image.png', 'data:image/jpeg;base64,YQ==']) {
     question.diagramPng = image; await assert.rejects(() => sequence([]).run(question), error => error.status === 400);
   }
@@ -386,8 +411,9 @@ test('diagram labels, unknown IDs and text handles never become citation aliases
       else if (group === 'losses') value.losses.items[0].evidence = [quote];
       else value.quality[10].evidence = [quote];
       const mock = sequence([value, value]), result = await mock.run(question);
-      assert.deepEqual(result.audit.reasons, [group === 'criteria' ? 'unsupported_evidence' : 'unsupported_feedback_evidence']);
-      assert.equal(mock.requests.length, 2); assert.equal(result.audit.selectedFeedback, undefined);
+      if (group === 'criteria') { assert.deepEqual(result.audit.reasons, ['unsupported_evidence']); assert.equal(result.mark, null); assert.equal(result.audit.selectedFeedback, undefined); }
+      else { assertProvisional(result, 1, 'no_eligible_feedback'); assert(result.audit.feedbackCandidates.every(c => c.problem === 'unsupported_feedback_evidence')); }
+      assert.equal(mock.requests.length, 2);
       assert(!result.audit.calls.some(call => call.evidenceReferencesResolved));
     }
   }
@@ -399,10 +425,12 @@ test('diagram catalog does not relax the six-item evidence bound or duplicate fe
     if (group === 'criteria') value.criteria[0].evidence = seven;
     else if (group === 'losses') value.losses.items[0].evidence = seven;
     else value.quality[10].evidence = seven;
-    assert.deepEqual((await sequence([value, value]).run(question)).audit.reasons, [group === 'criteria' ? 'criterion_schema' : 'feedback_evidence_schema']);
+    const result = await sequence([value, value, value, value]).run(question);
+    if (group === 'criteria') { assert.deepEqual(result.audit.reasons, ['criterion_schema']); assert.equal(result.mark, null); }
+    else { assertProvisional(result, 1, 'no_eligible_feedback'); assert(result.audit.feedbackCandidates.every(c => c.problem === 'feedback_evidence_schema')); }
   }
   const { question, value } = diagramCitationCase(); value.quality[10].evidence = ['s0', 's0'];
-  assert.deepEqual((await sequence([value, value]).run(question)).audit.reasons, ['feedback_evidence_schema']);
+  assertProvisional(await sequence([value, value]).run(question), 1, 'no_eligible_feedback');
 });
 
 test('diagram catalog retains all 500 allowed elements and rejects excess rather than truncating', async () => {
@@ -418,15 +446,21 @@ test('diagram catalog retains all 500 allowed elements and rejects excess rather
   await assert.rejects(sequence([]).run(question), error => error.code === 'invalid_marking_input');
 });
 
-test('HTTP and network failures are typed and do not expose provider or key content', async () => {
+test('all-provider failures remain typed and private; a failed sibling does not erase a valid source', async () => {
   for (const status of [401, 402, 403, 429, 500]) {
-    const mock = sequence([() => new Response('sensitive provider failure mock-only-key', { status }), proposal()]);
+    const fail = () => new Response('sensitive provider failure mock-only-key', { status });
+    const mock = sequence([fail, fail]);
     await assert.rejects(mock.run(), error => {
       assert.equal(error.status, status === 429 ? 429 : status === 500 ? 502 : 503); assert(error.code); assert(!error.message.includes('mock-only-key')); return true;
-    });
+    }); assert.equal(mock.requests.length, 2);
   }
-  await assert.rejects(sequence([() => { throw new Error('network private detail'); }, proposal()]).run(), error => error.code === 'provider_unavailable' && !error.message.includes('private'));
-  await assert.rejects(sequence([() => new Response('not JSON'), proposal()]).run(), error => error.code === 'provider_envelope');
+  const fail = () => { throw new Error('network private detail'); };
+  await assert.rejects(sequence([fail, fail]).run(), error => error.code === 'provider_unavailable' && !error.message.includes('private'));
+  await assert.rejects(sequence([() => new Response('not JSON'), () => new Response('not JSON')]).run(), error => error.code === 'provider_envelope');
+  const approval = auditor(); approval.selectedFeedback = 1;
+  const mixed = sequence([fail, proposal(), approval]), result = await mixed.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.audit.resolution, 'adjudicated'); assert.equal(result.audit.proposals[0], null);
+  assert.equal(result.audit.calls[0].status, 'failed'); assert.equal(confirmedProvenanceProblem(result), null); assert(!JSON.stringify(result).includes('private detail'));
 });
 
 test('one clearly preconnection failure can recover without changing blind inputs or hiding a fourth attempt', async () => {
@@ -447,59 +481,51 @@ test('one clearly preconnection failure can recover without changing blind input
   assert.equal(mock.requests[3].body.reasoning_effort, 'low');
 });
 
-test('retry credit is shared across stages and never expands beyond four physical attempts', async () => {
+test('one preconnection retry credit is shared across all stages', async () => {
   const fail = () => { throw networkError('ECONNREFUSED'); };
-  const mock = sequence([fail, proposal(), proposal(), fail]);
-  await assert.rejects(mock.run(), error => {
-    assert.equal(error.code, 'provider_unavailable'); assert.equal(error.audit.networkAttempts, 4);
-    assert.deepEqual(error.audit.calls.map(call => call.attemptCount), [2, 1, 1]);
-    assert.equal(error.audit.calls[2].transportCode, 'ECONNREFUSED'); assert.equal(error.audit.calls[2].transportPhase, 'before_headers');
-    assert(!JSON.stringify(error.audit).includes('PRIVATE')); return true;
-  });
-  assert.equal(mock.requests.length, 4);
-  const twice = sequence([fail, proposal(), fail]);
-  await assert.rejects(twice.run(), error => error.code === 'provider_unavailable' && error.audit.networkAttempts === 3);
-  assert.equal(twice.requests.length, 3, 'a second preconnection failure is terminal');
-  const both = sequence([fail, fail]);
-  await assert.rejects(both.run(), error => error.code === 'provider_unavailable');
-  await new Promise(resolve => setTimeout(resolve, 120));
-  assert.equal(both.requests.length, 2, 'the sibling failure cancels the sole reserved retry before it starts');
+  const mock = sequence([fail, proposal(), proposal(), fail]), result = await mock.run();
+  assertProvisional(result, 4, 'provider_unavailable'); assert.equal(result.audit.networkAttempts, 4);
+  assert.deepEqual(result.audit.calls.map(call => call.attemptCount), [2, 1, 1]);
+  assert.equal(result.audit.calls[2].transportCode, 'ECONNREFUSED'); assert(!JSON.stringify(result.audit).includes('PRIVATE')); assert.equal(mock.requests.length, 4);
+  const twice = sequence([fail, proposal(), fail, veto()]), fallback = await twice.run();
+  assertProvisional(fallback, 4, 'auditor_veto'); assert.equal(fallback.audit.proposals[0], null); assert.equal(twice.requests.length, 4);
+  const both = sequence([fail, fail, fail]);
+  await assert.rejects(both.run(), error => error.code === 'provider_unavailable' && error.audit.networkAttempts === 3);
+  assert.equal(both.requests.length, 3, 'independent failure does not cancel the other marker, but only one retry exists');
 });
 
 test('ambiguous transport and any failure after headers never retry, even with a preconnection-shaped code', async () => {
   for (const code of ['ECONNRESET', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'ETIMEDOUT', 'PRIVATE UNKNOWN']) {
-    const mock = sequence([() => { throw networkError(code); }, proposal()]);
+    const fail = () => { throw networkError(code); }, mock = sequence([fail, fail]);
     await assert.rejects(mock.run(), error => {
       const failed = error.audit.calls.find(call => call.status === 'failed');
       assert.equal(failed.transportPhase, 'before_headers'); assert.equal(failed.transportCode, code === 'PRIVATE UNKNOWN' ? 'unknown' : code);
       assert.equal(failed.attemptCount, 1); assert(!JSON.stringify(error.audit).includes('PRIVATE')); return error.code === 'provider_unavailable';
-    });
-    assert.equal(mock.requests.length, 2);
+    }); assert.equal(mock.requests.length, 2);
   }
   for (const status of [200, 429, 500]) {
-    const mock = sequence([() => new Response(new ReadableStream({ start(controller) { controller.error(networkError('EAI_AGAIN')); } }), { status }), proposal()]);
+    const fail = () => new Response(new ReadableStream({ start(controller) { controller.error(networkError('EAI_AGAIN')); } }), { status });
+    const mock = sequence([fail, fail]);
     await assert.rejects(mock.run(), error => {
       const failed = error.audit.calls.find(call => call.status === 'failed');
       return error.code === 'provider_unavailable' && failed.transportPhase === 'body' && failed.transportCode === 'EAI_AGAIN' && failed.responseStatus === status;
-    });
-    assert.equal(mock.requests.length, 2, 'received HTTP headers make retry ineligible, regardless of the body error code');
+    }); assert.equal(mock.requests.length, 2, 'HTTP headers make retry ineligible, regardless of the body error code');
   }
 });
 
 test('retry delay shares the original deadline and late cancelled fetches cannot launch recovery', async () => {
-  const tooLittle = sequence([() => { throw networkError('EAI_AGAIN'); }, proposal()], { limits: { stageMs: 50 } });
-  await assert.rejects(tooLittle.run(), error => error.code === 'provider_unavailable');
-  assert.equal(tooLittle.requests.length, 2, 'do not start a retry delay that cannot fit');
-  const hung = sequence([() => { throw networkError('EAI_AGAIN'); }, proposal(), () => new Promise(() => {})], { limits: { stageMs: 150, overallMs: 1000 } });
-  const start = Date.now();
-  await assert.rejects(hung.run(), error => error.code === 'marking_timeout' && error.audit.networkAttempts === 3);
-  assert(Date.now() - start < 500, 'the retry does not receive a fresh stage deadline');
-  assert.equal(hung.requests.length, 3); assert(hung.requests.every(request => request.options.signal.aborted));
+  const fail = () => { throw networkError('EAI_AGAIN'); };
+  const tooLittle = sequence([fail, fail], { limits: { stageMs: 50 } });
+  await assert.rejects(tooLittle.run(), error => error.code === 'provider_unavailable'); assert.equal(tooLittle.requests.length, 2);
+  const hung = sequence([fail, proposal(), () => new Promise(() => {}), veto()], { limits: { stageMs: 150, overallMs: 1000 } });
+  const start = Date.now(), result = await hung.run();
+  assertProvisional(result, 4, 'auditor_veto'); assert.equal(result.audit.calls[0].errorCode, 'marking_timeout');
+  assert(Date.now() - start < 500, 'retry retains the original stage deadline'); assert.equal(hung.requests.length, 4); assert(hung.requests.every(r => r.options.signal.aborted));
   let rejectLate; const gate = new Promise((_, reject) => { rejectLate = reject; });
-  const late = sequence([() => gate, proposal()], { limits: { stageMs: 15 } });
-  await assert.rejects(late.run(), error => error.code === 'marking_timeout');
+  const late = sequence([() => gate, proposal(), veto()], { limits: { stageMs: 15 } });
+  assertProvisional(await late.run(), 4, 'auditor_veto');
   rejectLate(networkError('UND_ERR_CONNECT_TIMEOUT')); await new Promise(resolve => setTimeout(resolve, 120));
-  assert.equal(late.requests.length, 2, 'a late preconnection failure after cancellation must not retry');
+  assert.equal(late.requests.length, 3, 'late rejected fetch cannot spend another attempt');
 });
 
 test('confirmed attempt metadata rejects hidden, excessive or ambiguously justified retries', async () => {
@@ -545,14 +571,18 @@ test('auditor uses remaining overall budget and cannot start after deadline', as
   }
 });
 
-test('auditor deadline aborts hung fetch and body without an extra call or retry', async () => {
-  for (const body of [false, true]) {
+test('auditor and adjudicator deadlines abort hung fetch and body, preserving only the lowest valid source', async () => {
+  for (const disagree of [false, true]) for (const body of [false, true]) {
+    const lower = proposal(); lower.mark = 2; lower.criteria[1].assessment = 'not_met'; lower.criteria[1].evidence = [];
+    lower.improve = ['Explain beta.']; lower.losses = { allocation: 'holistic', totalLost: 2, items: [loss(['c2'])] };
     const signals = [];
-    await assert.rejects(mark(input(), { apiKey: 'mock-only-key', limits: { stageMs: 100, auditorMs: 15, overallMs: 200 }, fetch: async (url, options) => {
-      signals.push(options.signal);
-      if (signals.length < 3) return response(proposal());
+    const result = await mark(input(), { apiKey: 'mock-only-key', limits: { stageMs: 100, auditorMs: 15, overallMs: 200 }, fetch: async (url, options) => {
+      signals.push(options.signal); if (signals.length < 3) return response(disagree && signals.length === 2 ? lower : proposal());
       return body ? new Response(new ReadableStream({ start() {} })) : new Promise(() => {});
-    } }), error => error.status === 504 && error.code === 'marking_timeout' && error.audit.calls.length === 3 && error.audit.calls[2].stage === 'auditor');
+    } });
+    assertProvisional(result, disagree ? 2 : 4, 'marking_timeout'); assert.equal(result.audit.calls[2].errorCode, 'marking_timeout');
+    assert.equal(result.audit.calls[2].stage, disagree ? 'adjudicator' : 'auditor');
+    assert.equal(result.audit.selectedFeedback, disagree ? 1 : 0); assert.equal(result.audit.networkAttempts, 3);
     assert.equal(signals.length, 3); assert(signals.every(signal => signal.aborted));
   }
 });
@@ -593,9 +623,11 @@ test('additive one-mark labels reject partial and context without normalization 
       const { question, value } = additive();
       const bad = clone(value); bad.criteria[1].assessment = label; bad.criteria[1].evidence = ['beta']; bad.quality = [];
       const pair = invalidIndex === 0 ? [bad, value] : [value, bad];
-      const mock = sequence(pair); const result = await mock.run(question);
-      assert.equal(result.mark, null); assert.deepEqual(result.audit.reasons, ['additive_assessment_mismatch']);
-      assert.equal(mock.requests.length, 2); assert.equal(result.audit.selectedFeedback, undefined);
+      const approval = auditor(); approval.selectedFeedback = 1 - invalidIndex;
+      const mock = sequence([...pair, approval]); const result = await mock.run(question);
+      assert.equal(result.status, 'marked'); assert.equal(result.mark, 1); assert.equal(result.audit.proposals[invalidIndex], null);
+      assert.equal(mock.requests.length, 3); assert.equal(result.audit.selectedFeedback, 1 - invalidIndex);
+      assert.equal(result.audit.calls[invalidIndex].problem, 'additive_assessment_mismatch');
       assert.equal(bad.criteria[1].assessment, label);
       const agreeing = sequence([bad, bad]);
       assert.deepEqual((await agreeing.run(question)).audit.reasons, ['additive_assessment_mismatch']);
@@ -619,7 +651,9 @@ test('agreeing additive proposals cannot invent arithmetic, lose credited marks 
   for (const change of changes) {
     const { question, value } = additive(); change(value);
     const mock = sequence([value, value]); const result = await mock.run(question);
-    assert.equal(result.mark, null); assert.equal(mock.requests.length, 2); assert.equal(result.audit.checks.auditorApproved, false);
+    if (coreProblem(value, question)) assert.equal(result.mark, null);
+    else assertProvisional(result, 1, 'no_eligible_feedback');
+    assert.equal(mock.requests.length, 2); assert.equal(result.audit.checks.auditorApproved, false);
   }
 });
 
@@ -630,7 +664,7 @@ test('holistic and mixed rubrics keep exact total deficit without fabricated cat
   value.losses = { allocation: 'holistic', totalLost: 1, items: [loss(['c1'], null, 'insufficient_explanation'), loss(['c1'], null, 'application_gap')] };
   assert.equal((await sequence([value, value, auditor()]).run(question)).mark, 3);
   const falsePrecision = clone(value); falsePrecision.losses.items[0].marksLost = 1;
-  assert.deepEqual((await sequence([falsePrecision, falsePrecision]).run(question)).audit.reasons, ['holistic_false_precision']);
+  const withheld = await sequence([falsePrecision, falsePrecision]).run(question); assertProvisional(withheld, 3, 'no_eligible_feedback'); assert(withheld.audit.feedbackCandidates.every(c => c.problem === 'holistic_false_precision'));
   question.criteria = [{ id: 'c1', text: '1 mark: identifies alpha.' }, { id: 'c2', text: 'Ways include beta.' }];
   question.maxMarks = 2; assert.equal(scoringModel(question).kind, 'holistic');
 });
@@ -650,7 +684,7 @@ test('loss diagnoses require canonical criteria, unique categories and genuine e
   for (const change of changes) {
     const { question, value } = additive(); change(value);
     const result = await sequence([value, value]).run(question);
-    assert.equal(result.mark, null); assert.deepEqual(result.quality, []); assert.deepEqual(result.losses, unavailableFeedback().losses);
+    assertProvisional(result, 1, 'no_eligible_feedback'); assert(result.audit.feedbackCandidates.every(c => !c.eligible));
   }
 });
 
@@ -667,7 +701,7 @@ test('all quality factors are bounded, applicable and evidence anchored; null di
   ];
   for (const change of changes) {
     const invalid = clone(value); change(invalid);
-    assert.equal((await sequence([invalid, invalid]).run(question)).mark, null);
+    assertProvisional(await sequence([invalid, invalid]).run(question), 1, 'no_eligible_feedback');
   }
   value.quality[0].rating = 0;
   const result = await sequence([value, value, auditor()]).run(question);
@@ -688,7 +722,7 @@ test('full marks can coexist with optional quality improvements and never exceed
   value.quality[1] = { id: 'concision', rating: 5, evidence: ['alpha and beta'], feedback: 'The wording could be more economical without changing the credited ideas.', action: 'Retain each useful point once.' };
   assert.equal((await sequence([value, value, auditor()]).run(question)).mark, 2);
   value.losses.items = [loss(['c1'], 1, 'communication')];
-  assert.equal((await sequence([value, value]).run(question)).mark, null);
+  assertProvisional(await sequence([value, value]).run(question), 2, 'no_eligible_feedback');
 });
 
 test('code quality is assessed for code only and untrusted test claims remain data', async () => {
@@ -748,9 +782,9 @@ test('unselected bands need no redundant quotation but selected evidence remains
   assert.equal(result.mark, 4); assert.deepEqual(result.criteria[1].evidence, []);
   assert(mock.requests[0].body.messages[0].content.includes('For every unselected whole-answer band labelled context, use evidence:[]'));
   const missing = clone(value); missing.criteria[0].evidence = [];
-  assert.deepEqual((await sequence([missing, value]).run(question)).audit.reasons, ['missing_evidence']);
+  assert.deepEqual((await sequence([missing, missing]).run(question)).audit.reasons, ['missing_evidence']);
   const unsupported = clone(value); unsupported.criteria[1].evidence = ['1-3 marks: some relevant ideas.'];
-  assert.deepEqual((await sequence([unsupported, value]).run(question)).audit.reasons, ['unsupported_evidence'], 'unused-band evidence is not silently removed or relabelled');
+  assert.deepEqual((await sequence([unsupported, unsupported]).run(question)).audit.reasons, ['unsupported_evidence'], 'unused-band evidence is not silently removed or relabelled');
 });
 
 test('evidence handles resolve exact source code in every evidence array before audit', async () => {
@@ -773,7 +807,7 @@ test('unknown handles and invented escapes fail without rewriting literal source
     assert.deepEqual((await sequence([bad, bad]).run(question)).audit.reasons, ['unsupported_evidence']);
   }
   const bad = clone(value); bad.quality[0].evidence = ['[[source:E99999]]'];
-  assert.deepEqual((await sequence([bad, bad]).run(question)).audit.reasons, ['unsupported_feedback_evidence']);
+  assertProvisional(await sequence([bad, bad]).run(question), 1, 'no_eligible_feedback');
 });
 
 test('catalog is bounded, collision-free and contains only exact source substrings', () => {
@@ -787,8 +821,9 @@ test('catalog is bounded, collision-free and contains only exact source substrin
 
 test('safe JSON diagnostics distinguish depth without retaining parser source text', async () => {
   const deep = '['.repeat(66) + '0' + ']'.repeat(66);
-  assert.deepEqual((await sequence([proposal(), deep]).run()).audit.reasons, ['invalid_json_depth']);
-  const result = await sequence([proposal(), '{"private-student-text":']).run();
+  assert.deepEqual((await sequence([deep, deep, deep, deep]).run()).audit.reasons, ['invalid_json_depth']);
+  const malformed = '{"private-student-text":';
+  const result = await sequence([malformed, malformed, malformed, malformed]).run();
   assert.deepEqual(result.audit.reasons, ['invalid_json']); assert(!JSON.stringify(result).includes('private-student-text'));
 });
 
@@ -833,55 +868,62 @@ test('auditor may reject a semantically defective candidate while selecting a co
 test('two invalid feedback candidates stop before audit, without manufacturing a combined candidate', async () => {
   const first = proposal(), second = proposal(); first.quality = []; second.losses.totalLost = 1;
   const mock = sequence([first, second]); const result = await mock.run();
-  assert.equal(result.mark, null); assert.equal(mock.requests.length, 2);
-  assert(result.audit.feedbackCandidates.every(c => !c.eligible)); assert.equal(result.audit.selectedFeedback, undefined);
+  assertProvisional(result, 4, 'no_eligible_feedback'); assert.equal(mock.requests.length, 2);
+  assert(result.audit.feedbackCandidates.every(c => !c.eligible)); assert.equal(result.audit.selectedFeedback, 0);
 });
 
 test('auditor selection is mandatory, typed, bounded and restricted to eligible candidates', async () => {
   for (const selected of [undefined, null, -1, 2, 0.5, '0', false]) {
     const approved = auditor(); if (selected === undefined) delete approved.selectedFeedback; else approved.selectedFeedback = selected;
     const result = await sequence([proposal(), proposal(), approved]).run();
-    assert.equal(result.mark, null); assert.equal(result.audit.checks.auditorApproved, false);
+    assertProvisional(result, 4); assert.equal(result.audit.checks.auditorApproved, false);
   }
   for (const invalidIndex of [0, 1]) {
     const values = [proposal(), proposal()]; values[invalidIndex].quality = [];
     const approved = auditor(); approved.selectedFeedback = invalidIndex;
     const result = await sequence([...values, approved]).run();
-    assert.deepEqual(result.audit.reasons, ['auditor_invalid_selection']); assert.equal(result.mark, null);
+    assertProvisional(result, 4, 'auditor_invalid_selection');
   }
 });
 
-test('score or criterion disagreement cannot be salvaged by choosing better feedback', async () => {
-  const first = proposal(), second = proposal(); first.quality = []; second.mark = 3;
-  let mock = sequence([first, second]); let result = await mock.run();
-  assert.deepEqual(result.audit.reasons, ['blind_score_disagreement']); assert.equal(mock.requests.length, 2);
-  second.mark = 4; second.criteria[1].assessment = 'context';
-  mock = sequence([first, second]); result = await mock.run();
-  assert.deepEqual(result.audit.reasons, ['blind_criterion_disagreement']); assert.equal(mock.requests.length, 2);
+test('disagreement resolution cannot select invalid feedback or silently merge candidates', async () => {
+  const first = proposal(), second = proposal(); first.quality = []; second.mark = 3; second.improve = ['Develop beta.']; second.losses.totalLost = 1; second.losses.items = [loss(['c2'])];
+  const invalidChoice = auditor(), mock = sequence([first, second, invalidChoice]), result = await mock.run();
+  assertProvisional(result, 3, 'auditor_invalid_selection'); assert.equal(mock.requests.length, 3);
+  assert.equal(result.audit.feedbackCandidates[0].eligible, false); assert.equal(result.audit.selectedFeedback, 1);
+  const approved = auditor(); approved.selectedFeedback = 1;
+  const released = await sequence([first, second, approved]).run();
+  assert.equal(released.status, 'marked'); assert.equal(released.mark, 3); assert.deepEqual(released.quality, second.quality); assert.equal(confirmedProvenanceProblem(released), null);
 });
 
-test('malformed scoring cores and unsupported credited evidence cannot be salvaged', async () => {
+test('malformed and unsupported cores never supply provisional marks or survive as approved proposals', async () => {
   const changes = [p => delete p.mark, p => p.mark = '4', p => p.criteria.pop(),
     p => p.criteria[0].evidence = ['invented achievement'], p => p.criteria[0].evidence = [],
     p => p.criteria[0].basis = '', p => p.uncertainties = ['Score is not established.']];
   for (const change of changes) {
     const bad = proposal(); change(bad); bad.quality = [];
-    const mock = sequence([bad, proposal()]); const result = await mock.run();
-    assert.equal(result.mark, null); assert.equal(mock.requests.length, 2); assert.equal(result.audit.selectedFeedback, undefined);
+    const format = ['proposal_schema', 'criterion_schema', 'criterion_coverage'].includes(coreProblem(bad, input()));
+    const approval = auditor(); approval.selectedFeedback = 1;
+    const mock = sequence([bad, proposal(), ...(format ? [bad] : []), approval]), result = await mock.run();
+    assert.equal(result.status, 'marked'); assert.equal(result.audit.proposals[0], null); assert.equal(result.audit.proposalStages[0], null);
+    assert.equal(result.audit.selectedFeedback, 1); assert.equal(result.mark, 4); assert.equal(confirmedProvenanceProblem(result), null);
+    assert.equal(mock.requests.length, format ? 4 : 3);
   }
 });
 
-test('additive score arithmetic is a core gate independent of candidate loss diagnostics', async () => {
+test('additive score arithmetic excludes an invalid core before choosing a valid alternative', async () => {
   const { question, value } = additive(); value.mark = 2; value.quality = []; value.losses = null;
   const good = proposal(); good.mark = 2; good.losses = { allocation: 'exact', totalLost: 0, items: [] };
-  const mock = sequence([value, good]); const result = await mock.run(question);
-  assert.deepEqual(result.audit.reasons, ['additive_score_mismatch']); assert.equal(mock.requests.length, 2);
+  const approval = auditor(); approval.selectedFeedback = 1;
+  const mock = sequence([value, good, approval]), result = await mock.run(question);
+  assert.equal(result.audit.calls[0].problem, 'additive_score_mismatch'); assert.equal(result.audit.proposals[0], null);
+  assert.equal(result.status, 'marked'); assert.equal(result.mark, 2); assert.equal(mock.requests.length, 3);
 });
 
 test('candidate selection cannot bypass any auditor veto, add replacement feedback or release oversized output', async () => {
   const invalid = proposal(); invalid.quality = [];
   const veto = auditor(); veto.selectedFeedback = 1; veto.checks.qualityGrounding = 'fail'; veto.issues.push({ checkId: 'qualityGrounding', detail: 'The selected feedback is unsupported.' });
-  assert.equal((await sequence([invalid, proposal(), veto]).run()).mark, null);
+  assertProvisional(await sequence([invalid, proposal(), veto]).run(), 4, 'auditor_veto');
   const altered = auditor(); altered.selectedFeedback = 1; altered.summary = 'An auditor-written replacement.';
   assert.deepEqual((await sequence([invalid, proposal(), altered]).run()).audit.reasons, ['auditor_schema']);
   const approved = auditor(); approved.selectedFeedback = 1;
@@ -911,7 +953,7 @@ test('confirmed provenance rejects missing or contradictory completion checks an
   const good = await sequence([proposal(), proposal(), auditor()]).run();
   for (const flag of ['completed', 'modelMatch', 'outputSchema', 'evidenceSupported', 'blindAgreement', 'auditorApproved']) {
     const value = clone(good); value.audit.checks[flag] = false;
-    assert.equal(confirmedProvenanceProblem(value), 'confirmed_provenance_checks', flag);
+    assert.equal(confirmedProvenanceProblem(value), flag === 'blindAgreement' ? 'confirmed_provenance_proposals' : 'confirmed_provenance_checks', flag);
   }
   const changes = [r => { delete r.audit; }, r => { r.status = 'needs_review'; }, r => { r.mark = '4'; },
     r => { r.audit.harnessVersion = 'old'; }, r => { r.audit.requestedModel = 'other'; }, r => { r.audit.reasons.push('auditor_veto'); },
@@ -975,6 +1017,118 @@ test('selected feedback checksum detects payload mutations and tolerates JSON ke
   const incomplete = clone(good); delete incomplete.summary; assert.equal(selectedFeedbackDigest(incomplete), null);
 });
 
+test('lossless criterion syntax adaptation happens before strict validation without another grading call', async () => {
+  const mapped = proposal(); mapped.criteria = Object.fromEntries(mapped.criteria.map(c => [c.id, { assessment: c.assessment, evidence: c.evidence[0], basis: c.basis }]));
+  const mock = sequence([mapped, proposal(), auditor()]), result = await mock.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.mark, 4); assert.equal(mock.requests.length, 3);
+  assert.deepEqual(result.criteria, proposal().criteria); assert.deepEqual(result.audit.calls[0].formatRepairs, { criteriaMap: 1, evidenceStrings: 2 });
+  assert.deepEqual(result.audit.proposalStages, ['marker1', 'marker2']);
+  const data = JSON.parse(mock.requests[0].body.messages[1].content);
+  assert.deepEqual(data.criteriaOutputTemplate, input().criteria.map(c => ({ id: c.id, assessment: null, evidence: [], basis: null })));
+  const bad = proposal(); bad.criteria[0].evidence = 'an invented quote';
+  const rejected = await sequence([bad, bad]).run();
+  assert.equal(rejected.mark, null); assert.deepEqual(rejected.audit.reasons, ['unsupported_evidence']);
+  assert.equal(rejected.audit.calls.length, 2, 'syntax adaptation cannot turn fabricated evidence into a format retry');
+});
+
+test('one format replacement sees original evidence only and records the real proposal source', async () => {
+  const bad = proposal(); bad.criteria[0].basis = ''; bad.summary = 'PRIVATE_PREVIOUS_SUMMARY'; bad.criteria[0].secret = 'PRIVATE_PREVIOUS_FIELD';
+  const mock = sequence([bad, proposal(), proposal(), auditor()]), result = await mock.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.mark, 4); assert.equal(mock.requests.length, 4);
+  assert.deepEqual(result.audit.calls.map(c => c.stage), ['marker1', 'marker2', 'marker1_format', 'auditor']);
+  assert.deepEqual(result.audit.proposalStages, ['marker1_format', 'marker2']); assert.equal(confirmedProvenanceProblem(result), null);
+  assert.deepEqual(JSON.parse(mock.requests[2].body.messages[1].content), JSON.parse(mock.requests[0].body.messages[1].content));
+  assert(!JSON.stringify(mock.requests[2].body).includes('PRIVATE_PREVIOUS'));
+  assert(!JSON.stringify(result).includes('PRIVATE_PREVIOUS'));
+  assert(mock.requests[2].body.messages[0].content.includes('Assess the original response afresh'));
+  assert(result.audit.calls[0].criterionDiagnostics.issues.some(issue => issue.code === 'basis_empty'));
+  assert(result.audit.calls[0].criterionDiagnostics.issues.some(issue => issue.code === 'criterion_extra_fields'));
+  const tampered = clone(result); tampered.audit.calls[0].problem = 'unsupported_evidence';
+  assert.notEqual(confirmedProvenanceProblem(tampered), null, 'a syntax replacement needs an actual format-only failure');
+});
+
+test('two format replacements plus adjudication consume at most five logical calls and six physical attempts', async () => {
+  assert.equal(MAX_LOGICAL_CALLS, 5); assert.equal(MAX_NETWORK_ATTEMPTS, 6);
+  const bad = proposal(); bad.criteria[0].basis = '';
+  const lower = proposal(); lower.mark = 3; lower.improve = ['Develop beta.']; lower.losses = { allocation: 'holistic', totalLost: 1, items: [loss(['c2'])] };
+  const approval = auditor(); approval.selectedFeedback = 1;
+  const mock = sequence([bad, bad, () => { throw networkError('EAI_AGAIN'); }, lower, proposal(), approval]);
+  const result = await mock.run();
+  assert.equal(result.status, 'marked'); assert.equal(result.mark, 3); assert.equal(result.audit.resolution, 'adjudicated');
+  assert.equal(mock.requests.length, 6); assert.equal(result.audit.networkAttempts, 6); assert.equal(result.audit.calls.length, 5);
+  assert.deepEqual(result.audit.calls.map(c => c.stage), ['marker1', 'marker2', 'marker1_format', 'marker2_format', 'adjudicator']);
+  assert.deepEqual(result.audit.proposalStages, ['marker1_format', 'marker2_format']);
+  assert.deepEqual(result.audit.calls.map(c => c.attemptCount), [1, 1, 2, 1, 1]);
+  assert.equal(confirmedProvenanceProblem(result), null);
+  for (const i of [2, 3, 4]) assert.deepEqual(mock.requests[i].body.messages[1], mock.requests[0].body.messages[1]);
+  const raw = JSON.parse(mock.requests[5].body.messages[1].content);
+  assert.deepEqual(raw.independentProposals.map(p => p.mark), [4, 3]);
+  assert(!mock.requests[5].body.messages[0].content.includes('Both must support the exact same integer score'));
+});
+
+test('persistent invalid formats and absent scores stay unscored after their finite replacement budget', async () => {
+  const invalid = proposal(); invalid.criteria[0].basis = '';
+  const mock = sequence([invalid, invalid, invalid, invalid]), result = await mock.run();
+  assert.equal(result.status, 'needs_review'); assert.equal(result.mark, null); assert.equal(result.audit.resolution, 'no_valid_score');
+  assert.deepEqual(result.audit.proposals, [null, null]); assert.equal(mock.requests.length, 4);
+  assert(!result.audit.calls.some(c => ['auditor', 'adjudicator'].includes(c.stage)));
+  assert.notEqual(provisionalProvenanceProblem(result), null);
+  const invalidZero = proposal(); invalidZero.mark = 0; // Still claims met criteria: invalid, never a fallback zero.
+  const one = await sequence([invalidZero, proposal(), veto()]).run();
+  assertProvisional(one, 4, 'auditor_veto'); assert.equal(one.audit.proposals[0], null); assert.equal(one.audit.selectedFeedback, 1);
+});
+
+test('unresolved adjudication always chooses the lowest valid core and exposes no rejected feedback', async () => {
+  const lower = proposal(); lower.mark = 2; lower.criteria[1].assessment = 'not_met'; lower.criteria[1].evidence = [];
+  lower.improve = ['Explain beta.']; lower.losses = { allocation: 'holistic', totalLost: 2, items: [loss(['c2'])] };
+  const invalidGate = auditor(); invalidGate.selectedFeedback = 2;
+  const duplicate = JSON.stringify(auditor()).replace('"selectedFeedback":0', '"selectedFeedback":0,"selectedFeedback":1');
+  for (const gate of [veto(), invalidGate, '{', duplicate, () => response(auditor(), { finish: 'length' }),
+    () => response(auditor(), { model: 'wrong-model' }), () => new Response('PRIVATE failure', { status: 500 })]) {
+    const mock = sequence([proposal(), lower, gate]), result = await mock.run();
+    assertProvisional(result, 2); assert.equal(result.audit.selectedFeedback, 1); assert.equal(result.audit.checks.blindAgreement, false);
+    assert.equal(mock.requests.length, 3); assert.equal(result.audit.calls[2].stage, 'adjudicator');
+    assert(!JSON.stringify(result).includes('PRIVATE')); assert.deepEqual(result.criteria, lower.criteria);
+  }
+  // Lower feedback may be unavailable without invalidating its independently
+  // schema/evidence/arithmetic-valid scoring core as a provisional source.
+  lower.quality = [];
+  const result = await sequence([proposal(), lower, veto()]).run();
+  assertProvisional(result, 2); assert.equal(result.audit.feedbackCandidates[1].eligible, false);
+});
+
+test('provisional provenance detects a higher fallback, false approval, source forgery and payload changes', async () => {
+  const lower = proposal(); lower.mark = 3; lower.improve = ['Develop beta.']; lower.losses = { allocation: 'holistic', totalLost: 1, items: [loss(['c2'])] };
+  const original = await sequence([proposal(), lower, veto()]).run(); assertProvisional(original, 3);
+  for (const change of [
+    r => { r.status = 'marked'; }, r => { r.audit.resolution = 'adjudicated'; }, r => { r.audit.checks.auditorApproved = true; },
+    r => { r.audit.checks.evidenceSupported = false; }, r => { r.audit.reasons = []; }, r => { r.audit.proposals = [null, null]; },
+    r => { r.audit.proposalStages[1] = 'marker1'; }, r => { r.audit.calls[1].finishReason = 'length'; },
+    r => { r.audit.networkAttempts++; }, r => { r.audit.selectedFeedback = 0; r.mark = 4; },
+    r => { r.strengths = ['Unapproved praise']; }, r => { r.quality = quality(); }, r => { r.losses = lower.losses; }
+  ]) {
+    const changed = clone(original); change(changed); changed.audit.feedbackDigest = selectedFeedbackDigest(changed);
+    assert.notEqual(provisionalProvenanceProblem(changed), null);
+  }
+  const corrupted = clone(original); corrupted.summary = 'Changed provisional summary';
+  assert.notEqual(provisionalProvenanceProblem(corrupted), null);
+});
+
+test('format replacements retain the overall deadline and reserve time for the final gate', async () => {
+  let time = 0; const durations = [], requests = [], gates = [deferred(), deferred(), deferred(), deferred()];
+  const invalid = proposal(); invalid.criteria[0].basis = '';
+  const operation = mark(input(), { apiKey: 'mock-only-key', now: () => time,
+    setTimeout(callback, delay) { durations.push(delay); return durations.length; }, clearTimeout() {},
+    fetch: async (_, options) => { const i = requests.length; requests.push(JSON.parse(options.body)); return i < 4 ? gates[i].promise : response(auditor()); } });
+  time = 90000; gates[0].resolve(response(invalid)); gates[1].resolve(response(invalid));
+  for (let i = 0; i < 100 && requests.length < 4; i++) await Promise.resolve();
+  assert.equal(requests.length, 4); assert.deepEqual(durations, [120000, 120000, 105000, 105000]);
+  time = 190000; gates[2].resolve(response(proposal())); gates[3].resolve(response(proposal()));
+  const result = await operation; assert.equal(result.status, 'marked'); assert.equal(requests.length, 5);
+  assert.deepEqual(durations, [120000, 120000, 105000, 105000, 50000]);
+  assert.equal(confirmedProvenanceProblem(result), null);
+});
+
 test('focused diagnostic policy and selected-candidate audit preserve distinct quality factors', async () => {
   const mock = sequence([proposal(), proposal(), auditor()]); await mock.run();
   const policy = mock.requests[0].body.messages[0].content, audit = mock.requests[2].body.messages[0].content;
@@ -986,6 +1140,8 @@ test('focused diagnostic policy and selected-candidate audit preserve distinct q
 });
 
 (async () => {
-  for (const entry of tests) { await entry.run(); console.log('ok - ' + entry.name); }
+  let failed = 0;
+  for (const entry of tests) { try { await entry.run(); console.log('ok - ' + entry.name); } catch (error) { failed++; console.error('FAIL - ' + entry.name, error); } }
+  if (failed) throw new Error(failed + ' marking engine groups failed');
   console.log(tests.length + ' offline marking engine tests passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

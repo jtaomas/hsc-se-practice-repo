@@ -23,10 +23,12 @@ jobs:
         run: |
           node tests/assessment_audit_test.js
           node tests/marking_input_test.js
+          node tests/marking_format_test.js
           node tests/deployment_bundle_test.js
           node tests/marking_engine_test.js
           node tests/feedback_policy_test.js
           node tests/marking_api_test.js
+          node tests/marking_resolution_test.js
           node tests/marking_client_test.js
           node tests/feedback_client_test.js
           node tests/improvement_input_test.js

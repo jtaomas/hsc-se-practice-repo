@@ -54,17 +54,23 @@ def route_request(route):
         unexpected_requests.append('Unexpected auth action: ' + str(action))
         respond(route, {'error': 'Unexpected test action'}, 400)
         return
+    if url.path == '/api/class' and request.post_data_json == {'action': 'status'}:
+        respond(route, {'configured': True, 'member': False, 'name': '', 'count': 0})
+        return
     if url.path == '/api/mark':
         payload = request.post_data_json
         assert request.method == 'POST'
         assert request.headers.get('authorization') == 'Bearer ' + TOKEN
         assert set(payload) == {'bankId', 'questionNumber', 'partIndex', 'answer'}
-        assert payload['bankId'] in ('1', 'formats') and payload['partIndex'] == 0
+        assert payload['bankId'] in ('1', '10', 'formats') and payload['partIndex'] == 0
         if payload['bankId'] == 'formats':
             assert payload['questionNumber'] == 3
             assert isinstance(payload['answer'], dict)
             assert len(payload['answer']) == 12
             assert payload['answer']['0,0'] == '2500'
+        elif payload['bankId'] == '10':
+            assert payload['questionNumber'] in (1, 2)
+            assert isinstance(payload['answer'], str)
         else:
             assert payload['questionNumber'] in (18, 20)
             assert isinstance(payload['answer'], str)
@@ -77,7 +83,15 @@ def route_request(route):
             'rubricVersion': 'mock-rubric-v1',
             'inputDigest': 'mock-answer-reference-' + str(payload['questionNumber']),
         }
-        if payload['bankId'] == 'formats':
+        if payload['bankId'] == '10':
+            respond(route, {
+                'status': 'provisional', 'mark': 2 if payload['questionNumber'] == 1 else 1,
+                'summary': 'The lower valid proposed mark remains unconfirmed.',
+                'strengths': [], 'improve': [], 'advice': [],
+                'criteria': [{'id': 'C1', 'assessment': 'partial', 'evidence': ['A provisional example'], 'basis': 'Candidate evidence only.'}],
+                'losses': {'allocation': 'unavailable', 'totalLost': None, 'items': []}, 'quality': [], 'audit': audit,
+            })
+        elif payload['bankId'] == 'formats':
             respond(route, {
                 'status': 'marked', 'mark': 3, 'summary': 'The table covers the branches and boundaries.',
                 'strengths': ['Correct input and output pairs.'], 'improve': [], 'advice': [],
@@ -274,6 +288,63 @@ with sync_playwright() as playwright:
     page.goto(URL + '#/mistakes')
     assert all('Question formats' not in heading for heading in page.locator('.mcard header > b').all_text_contents())
     assert len(mark_requests) == 3
+
+    # Numeric fallbacks remain visibly provisional through practice, submission,
+    # reload and history. Re-opening or clicking unchanged practice work spends nothing.
+    page.goto(URL + '#/10')
+    page.click('[data-mode=practice]')
+    page.locator('.rta').fill('A provisional example for the first question.')
+    page.click('[data-act=pqmark]')
+    page.wait_for_function("BS('10').ai['1.0'] && !aiQuestionRun(CUR.b, 1)")
+    marking = page.locator('.guide .aib').first
+    expect(marking.locator('h5')).to_have_text('Provisional mark 2 / 5')
+    expect(page.locator('.guide > h4 .sc')).to_have_text('Provisional: 2 / 5')
+    expect(marking).to_contain_text('not a confirmed assessment')
+    capture(page, 'marking-provisional-feedback.png')
+    assert marking.get_by_text('What earned marks', exact=True).count() == 0
+    assert marking.locator('[data-act=airetry], [data-act=airemark]').count() == 0
+    page.click('[data-act=pqmark]')
+    assert len(mark_requests) == 4
+    page.goto(URL + '#/10/q/2')
+    page.locator('.rta').fill('A provisional example for the second question.')
+    page.click('.hxb[href="#/10/finish"]')
+    page.click('[data-act=submit]')
+    page.wait_for_function("BS('10').ai['2.0'] && !AIRUN['10']")
+    expect(page.locator('.big')).to_have_text('3 / 15')
+    expect(page.locator('.feature').first).to_contain_text('Provisional total. Assessed subtotal: 0 / 5.')
+    expect(page.locator('#aib')).to_contain_text('2 provisional marks')
+    expect(page.locator('#improvement')).to_contain_text('Provisional AI marks and their criterion feedback are excluded')
+    capture(page, 'marking-provisional-results.png')
+    # The hidden formats demo deliberately remains local; wait only for this paper.
+    page.wait_for_function("!S.pending['10']")
+    page.reload()
+    expect(page.locator('.big')).to_have_text('3 / 15')
+    expect(page.locator('#aib')).to_contain_text('2 provisional marks')
+    assert len(mark_requests) == 5
+    page.goto(URL + '#/mistakes/10')
+    # The deliberately blank third answer is a real zero; only provisional
+    # shortfalls are excluded from the mistakes list.
+    expect(page.locator('.mcard header')).to_have_count(1)
+    expect(page.locator('.mcard header')).to_contain_text('Question 3')
+    page.goto(URL + '#/10/review/1')
+    page.locator('[data-act=sm][data-k="1.0"][data-v="4"]').click()
+    expect(page.locator('.guide > h4 .sc')).to_have_text('4 / 5')
+    expect(page.locator('.guide .aib').first).to_contain_text('You changed this mark yourself')
+    page.goto(URL + '#/10/results')
+    expect(page.locator('.big')).to_have_text('5 / 15')
+    expect(page.locator('.feature').first).to_contain_text('Assessed subtotal: 4 / 10.')
+    expect(page.locator('#aib')).to_contain_text('1 provisional mark')
+    page.goto(URL + '#/mistakes/10')
+    headings = page.locator('.mcard header').all_text_contents()
+    assert len(headings) == 2 and any('Question 1' in h for h in headings) and any('Question 3' in h for h in headings)
+    assert all('Question 2' not in h for h in headings)
+    page.goto(URL + '#/10')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.click('[data-act=restart]')
+    assert page.evaluate('({T:S.hist[1].T,M:S.hist[1].M,provisionalG:S.hist[1].provisionalG,provisionalM:S.hist[1].provisionalM,provisionalParts:S.hist[1].provisionalParts})') == {'T': 4, 'M': 10, 'provisionalG': 1, 'provisionalM': 5, 'provisionalParts': 1}
+    page.goto(URL + '#/papers')
+    expect(page.locator('table.res').last).to_contain_text('Provisional marks: 1 / 5 across 1 part')
+    assert len(mark_requests) == 5
     assert not page_errors, page_errors
     assert not unexpected_requests, unexpected_requests
     context.close()

@@ -39,10 +39,14 @@ function compactTrial(trial, fixtureCase) {
   assert(trial.expectedStatus === expected.status && trial.expectedMark === expected.mark &&
     JSON.stringify(trial.expectedRange) === JSON.stringify(expected.range), 'Recorded labels differ from the supplied historical fixture.');
   const result = trial.result || {}, audit = result.audit || {}, calls = Array.isArray(audit.calls) ? audit.calls : [];
-  assert(['marked', 'needs_review', 'error'].includes(trial.status), 'Unknown trial status.');
-  assert(trial.status !== 'marked' || Number.isInteger(trial.mark) && trial.mark >= 0 && trial.mark <= fixtureCase.source.maxMarks, 'Invalid awarded mark.');
+  assert(['marked', 'provisional', 'needs_review', 'error'].includes(trial.status), 'Unknown trial status.');
+  const released = ['marked', 'provisional'].includes(trial.status);
+  assert(!released || Number.isInteger(trial.mark) && trial.mark >= 0 && trial.mark <= fixtureCase.source.maxMarks, 'Invalid awarded mark.');
+  assert(result.status === trial.status && (!released || result.mark === trial.mark), 'Recorded outcome differs from the original result.');
   assert(typeof trial.deterministic === 'boolean', 'Missing deterministic/provider distinction.');
   const numeric = trial.status === 'marked' && expected.status === 'marked';
+  const provisional = trial.status === 'provisional' && expected.status === 'marked';
+  const outsideRange = mark => mark < expected.range[0] ? 'under' : mark > expected.range[1] ? 'over' : null;
   const tokens = { prompt: 0, completion: 0, total: 0 };
   let unknownUsageCalls = 0;
   for (const call of calls) {
@@ -50,7 +54,7 @@ function compactTrial(trial, fixtureCase) {
     if (!usage || number(usage.prompt_tokens) === null || number(usage.completion_tokens) === null) unknownUsageCalls++;
     if (usage) for (const [key, field] of [['prompt', 'prompt_tokens'], ['completion', 'completion_tokens'], ['total', 'total_tokens']]) if (number(usage[field]) !== null) tokens[key] += usage[field];
   }
-  const diagnosticContract = trial.status !== 'marked' || trial.deterministic ? 'not_assessed' : result.losses && Array.isArray(result.quality) ? 'detailed' : 'legacy';
+  const diagnosticContract = trial.status === 'provisional' ? 'unavailable_provisional' : trial.status !== 'marked' || trial.deterministic ? 'not_assessed' : result.losses && Array.isArray(result.quality) ? 'detailed' : 'legacy';
   return {
     id: trial.id, repetition: Number.isInteger(trial.repetition) ? trial.repetition : 1,
     questionPart: [fixtureCase.request.bankId, fixtureCase.request.questionNumber, fixtureCase.request.partIndex].join('/'),
@@ -58,11 +62,15 @@ function compactTrial(trial, fixtureCase) {
     questionVersion: fixtureCase.source.questionVersion, rubricVersion: fixtureCase.source.rubricVersion,
     responseDigest: semanticDigest({ answer: fixtureCase.request.answer, diagramPng: fixtureCase.request.diagramPng || null }),
     maxMarks: fixtureCase.source.maxMarks, expectedStatus: expected.status, expectedMark: expected.mark, expectedRange: expected.range,
-    status: trial.status, mark: trial.status === 'marked' ? trial.mark : null, deterministic: trial.deterministic,
+    status: trial.status, mark: released ? trial.mark : null, deterministic: trial.deterministic,
     exactAgreement: expected.status === 'needs_review' ? trial.status === 'needs_review' : numeric && trial.mark === expected.mark,
     rangeAgreement: expected.status === 'needs_review' ? trial.status === 'needs_review' : numeric && trial.mark >= expected.range[0] && trial.mark <= expected.range[1],
     signedError: numeric ? trial.mark - expected.mark : null,
-    outsideRange: numeric ? trial.mark < expected.range[0] ? 'under' : trial.mark > expected.range[1] ? 'over' : null : null,
+    outsideRange: numeric ? outsideRange(trial.mark) : null,
+    provisionalExactAgreement: provisional ? trial.mark === expected.mark : null,
+    provisionalRangeAgreement: provisional ? outsideRange(trial.mark) === null : null,
+    provisionalSignedError: provisional ? trial.mark - expected.mark : null,
+    provisionalOutsideRange: provisional ? outsideRange(trial.mark) : null,
     abstentionCodes: unique((audit.reasons || []).map(code)), errorCode: code(result.errorCode),
     mechanicalFeedbackCodes: unique((trial.feedbackIssues || []).map(code)), diagnosticContract,
     selectedFeedback: audit.selectedFeedback === 0 || audit.selectedFeedback === 1 ? audit.selectedFeedback : null,
@@ -75,12 +83,23 @@ function compactTrial(trial, fixtureCase) {
 }
 function metrics(rows, prices) {
   const labelled = rows.filter(row => row.expectedStatus === 'marked'), scored = labelled.filter(row => row.status === 'marked');
+  const provisional = labelled.filter(row => row.status === 'provisional');
   const review = rows.filter(row => row.expectedStatus === 'needs_review');
   const detailed = rows.filter(row => row.diagnosticContract === 'detailed');
   const tokens = rows.reduce((sum, row) => ({ prompt: sum.prompt + row.reportedTokens.prompt, completion: sum.completion + row.reportedTokens.completion, total: sum.total + row.reportedTokens.total }), { prompt: 0, completion: 0, total: 0 });
   const unknown = rows.reduce((sum, row) => sum + row.unknownUsageCalls, 0);
   return { trials: rows.length, questionParts: unique(rows.map(row => row.questionPart)).length,
-    scoreLabelled: labelled.length, scored: scored.length, scoreCoverage: fraction(scored.length, labelled.length),
+    scoreLabelled: labelled.length, scored: scored.length, confirmedScores: scored.length, scoreCoverage: fraction(scored.length, labelled.length),
+    provisionalScores: provisional.length, releasedScores: scored.length + provisional.length,
+    releasedRate: fraction(scored.length + provisional.length, labelled.length), provisionalRate: fraction(provisional.length, labelled.length),
+    unscoredLabelledTrials: labelled.length - scored.length - provisional.length,
+    unexpectedNumericReleases: rows.filter(row => row.expectedStatus !== 'marked' && ['marked', 'provisional'].includes(row.status)).length,
+    provisionalExactAgreement: fraction(provisional.filter(row => row.provisionalExactAgreement).length, provisional.length),
+    provisionalRangeAgreement: fraction(provisional.filter(row => row.provisionalRangeAgreement).length, provisional.length),
+    provisionalMeanAbsoluteError: fraction(provisional.reduce((sum, row) => sum + Math.abs(row.provisionalSignedError), 0), provisional.length),
+    provisionalSignedBias: fraction(provisional.reduce((sum, row) => sum + row.provisionalSignedError, 0), provisional.length),
+    provisionalOverAwards: provisional.filter(row => row.provisionalOutsideRange === 'over').length,
+    provisionalUnderAwards: provisional.filter(row => row.provisionalOutsideRange === 'under').length,
     exactMatches: scored.filter(row => row.exactAgreement).length, rangeMatches: scored.filter(row => row.rangeAgreement).length,
     exactAgreementAmongScored: fraction(scored.filter(row => row.exactAgreement).length, scored.length),
     rangeAgreementAmongScored: fraction(scored.filter(row => row.rangeAgreement).length, scored.length),
@@ -91,6 +110,7 @@ function metrics(rows, prices) {
     withheld: labelled.filter(row => row.status === 'needs_review').length, failures: rows.filter(row => row.status === 'error').length,
     expectedReviewCases: review.length, expectedReviewsConfirmed: review.filter(row => row.status === 'needs_review').length,
     abstentionCodes: countBy(rows.filter(row => row.status === 'needs_review').flatMap(row => row.abstentionCodes)),
+    provisionalCodes: countBy(rows.filter(row => row.status === 'provisional').flatMap(row => row.abstentionCodes)),
     errorCodes: countBy(rows.filter(row => row.status === 'error').map(row => row.errorCode || 'unclassified')),
     detailedFeedbackScored: detailed.length, detailedFeedbackMechanicallyFlagged: detailed.filter(row => row.mechanicalFeedbackCodes.length).length,
     legacyContractScored: rows.filter(row => row.diagnosticContract === 'legacy').length,
@@ -110,10 +130,12 @@ function stability(rows) {
   const grouped = new Map();
   for (const row of rows) { if (!grouped.has(row.id)) grouped.set(row.id, []); grouped.get(row.id).push(row); }
   const cases = [...grouped].filter(([, trials]) => trials.length > 1).map(([id, trials]) => {
-    const releasedMarks = [...new Set(trials.filter(row => row.status === 'marked').map(row => row.mark))].sort((a, b) => a - b);
+    const confirmedMarks = [...new Set(trials.filter(row => row.status === 'marked').map(row => row.mark))].sort((a, b) => a - b);
+    const provisionalMarks = [...new Set(trials.filter(row => row.status === 'provisional').map(row => row.mark))].sort((a, b) => a - b);
+    const releasedMarks = [...new Set([...confirmedMarks, ...provisionalMarks])].sort((a, b) => a - b);
     const statuses = unique(trials.map(row => row.status));
-    const outcomes = countBy(trials.map(row => row.status === 'marked' ? 'marked:' + row.mark : row.status));
-    return { id, trials: trials.length, statuses, releasedMarks, outcomes, statusVaries: statuses.length > 1,
+    const outcomes = countBy(trials.map(row => ['marked', 'provisional'].includes(row.status) ? row.status + ':' + row.mark : row.status));
+    return { id, trials: trials.length, statuses, confirmedMarks, provisionalMarks, releasedMarks, outcomes, statusVaries: statuses.length > 1,
       releasedMarkVaries: releasedMarks.length > 1, outcomeVaries: Object.keys(outcomes).length > 1 };
   }).sort((a, b) => a.id.localeCompare(b.id));
   return { uniqueCases: grouped.size, repeatedCases: cases.length, statusVariableCases: cases.filter(row => row.statusVaries).length,
@@ -183,6 +205,7 @@ function buildSummary(options) {
     safeguards: ['Only whitelisted score, diagnostic-code and provenance metadata is exported; full feedback, answer text and model reasoning remain in workspace reports.',
       'Fixed labels and raw score discrepancies are unchanged. Adjudication notes are qualitative cautions, not retroactive corrections.',
       'Provider metrics exclude deterministic blanks/review guards; tag groups overlap and must not be summed.',
+      'Provisional scores are reported separately from confirmed scores and agreement. Numeric release coverage includes both; unavailable provisional feedback is not assessed as confirmed feedback.',
       'Legacy v1 absence of later losses/quality fields is a contract difference, not a newly generated diagnostic error.',
       'Exposure groups refer only to the initial pilot. Later full-corpus reruns follow development review of earlier runs; no untouched or teacher-certified holdout is claimed.'], runs };
 }
@@ -198,6 +221,19 @@ function markdown(summary) {
     '| Run | Provider cases | Scored / eligible | Range agreement among scored | Range agreement including abstentions | MAE | Over / under | Withheld / failed |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |'];
   singleRuns.forEach(run => lines.push(tableRow(run, run.metricsProviderOnly)));
+  if (summary.runs.some(run => run.cases.some(row => row.status === 'provisional'))) {
+    lines.push('', '## Provisional numeric outcomes: separate from confirmed agreement', '',
+      'The scored/confirmed columns throughout this report count only marked decisions. Provisional outcomes are conservative numeric releases with withheld educational diagnostics; they are not auditor-confirmed agreement. Their accuracy and error counts are reported separately below. All nonreleased cases remain in the eligible denominator.', '',
+      '| Run | Confirmed / eligible | Provisional | All numeric releases / eligible | Release rate | Provisional exact | Provisional in range | Provisional MAE | Provisional over / under |',
+      '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+    for (const run of summary.runs) { const m = run.metricsProviderOnly;
+      lines.push(`| ${run.label} | ${m.confirmedScores}/${m.scoreLabelled} | ${m.provisionalScores} | ${m.releasedScores}/${m.scoreLabelled} | ${percent(m.releasedRate)} | ${percent(m.provisionalExactAgreement)} | ${percent(m.provisionalRangeAgreement)} | ${numeric(m.provisionalMeanAbsoluteError)} | ${m.provisionalOverAwards}/${m.provisionalUnderAwards} |`);
+    }
+    lines.push('', '| Run | Provisional case | Reference range | Provisional mark | Raw error | Outcome codes |', '| --- | --- | --- | ---: | --- | --- |');
+    for (const run of summary.runs) for (const row of run.cases.filter(row => row.status === 'provisional')) {
+      lines.push(`| ${run.label} | ${row.id} | ${row.expectedRange ? row.expectedRange.join('–') : 'review required'} | ${row.mark} | ${row.provisionalOutsideRange || (row.provisionalRangeAgreement ? 'within range' : 'unexpected numeric release')} | ${row.abstentionCodes.join(', ') || '—'} |`);
+    }
+  }
   lines.push('', 'These rows cover different scopes. Compare v1/v2 on the matched pilot below; do not treat their ten-case pilot as a full-corpus baseline. The v1 baseline is the historical implementation at the start of this review. Upstream positive-audit changes later merged into v5 were not separately evaluated as that baseline. Deterministic input checks are excluded from all rows above. MAE is against the preferred exact mark; range agreement allows the predeclared holistic interval. Repeated-run experiments are reported separately below.', '',
     '## Matched pilot: same answer and fixed label', '',
     '| Run | Provider cases | Scored / eligible | Range agreement among scored | Range agreement including abstentions | MAE | Over / under | Withheld / failed |',

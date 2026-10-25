@@ -53,7 +53,7 @@ api/
 server/
   comparison-*.js  verified snapshots, blind profiles, matched comparison and audit
   marking-input.js loads authoritative question banks and validates text / diagram evidence
-  marking-engine.js two blind marks, strict evidence checks and independent audit
+  marking-engine.js blind marks, bounded format recovery and independent resolution
   marking-json.js  strict JSON parser, including duplicate-key rejection
   marking-store.js private cached decisions, distributed leases and atomic quotas
   feedback-policy.js loss attribution, quality-factor contract and validation
@@ -118,7 +118,7 @@ Account storage (`server/d1-blob.js`, Cloudflare D1) uses ETag conditional write
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
 
-The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort for the two blind markers, low effort for the auditor, and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job normally uses three calls. One connection-establishment failure may use a fourth network attempt within the original deadline; completed responses are not rerolled. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
+The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort for the two blind markers, low effort for the auditor/adjudicator, and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job normally uses three calls. A structurally unusable proposal gets at most one blind format replacement per marker (five logical calls maximum). One shared connection-establishment retry permits at most six physical attempts, all within the original deadline. Valid disagreement goes to an independent adjudicator; unresolved decisions receive an explicitly provisional lower proposed mark, excluded from confirmed improvement/comparison evidence. If no valid score survives, the answer stays unscored with an explicit retry. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
 
 See [AI marking design and verification](docs/AI_MARKING.md) for prompts, budgets, review states, privacy, limitations and the teacher-calibration checklist. `vercel.json` requests Fluid compute and a 300-second function limit; the deployment must support that limit. No live API calls are part of the test suite.
 

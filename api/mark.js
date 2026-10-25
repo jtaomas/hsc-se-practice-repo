@@ -1,4 +1,4 @@
-// Three bounded DeepSeek calls: two blind assessments, then a rubric/evidence audit.
+// Bounded blind assessments, format recovery and independent rubric/evidence resolution.
 const inputTools = require('../server/marking-input');
 const engine = require('../server/marking-engine');
 const store = require('../server/marking-store');
@@ -15,13 +15,14 @@ function verifiedDecision(result, prepared, inputDigest, answerDigest, marking) 
         Buffer.byteLength(JSON.stringify(result)) > 64000 || !text(result.summary, 600) || !strings(result.strengths, 6, 300) ||
         !strings(result.improve, 6, 300) || !strings(result.advice, 4, 300) || !Array.isArray(result.criteria) ||
         !object(result.audit) || result.audit.answerDigest !== answerDigest ||
-        !cacheValid(result, prepared, inputDigest, answerDigest, marking)) return false;
+        !cacheValid(result, prepared, inputDigest, answerDigest, marking, { allowProvisional: true })) return false;
     if (result.status === 'needs_review') {
       return result.mark === null && !result.strengths.length && !result.improve.length && !result.advice.length && !result.criteria.length &&
         strings(result.audit.reasons, 8, 80) && result.audit.reasons.length > 0 && !feedback.feedbackProblem(result, prepared.input);
     }
     if (result.criteria.some(criterion => !keys(criterion, ['id', 'assessment', 'evidence', 'basis']) ||
         !strings(criterion.evidence, 6, 400) || !text(criterion.basis, 600))) return false;
+    if (result.status === 'provisional') return !result.strengths.length && !result.improve.length && !result.advice.length && !feedback.feedbackProblem(result, prepared.input);
     if (result.mark === 0 && (result.strengths.length || result.criteria.some(criterion => criterion.assessment === 'met')) ||
         result.mark > 0 && !result.strengths.length || result.mark === prepared.input.maxMarks && result.improve.length ||
         result.mark < prepared.input.maxMarks && !result.improve.length) return false;
@@ -65,6 +66,11 @@ function createHandler(deps = {}) {
       lease = reservation.leaseId;
       const result = await marking.mark(prepared.input, { apiKey: env.DEEPSEEK_API_KEY });
       result.audit = Object.assign({}, result.audit, provenance);
+      // No supported proposal is a retryable failure, never a cached zero or a
+      // terminal review that would retrieve the same failed attempt forever.
+      if (result.status === 'needs_review' && result.audit.resolution === 'no_valid_score') {
+        throw Object.assign(new Error('No valid marking score could be recovered. Your answer remains saved. Try again.'), { status: 502, code: 'marking_unresolved', audit: result.audit });
+      }
       if (!verifiedDecision(result, prepared, inputDigest, answerDigest, marking)) throw Object.assign(new Error('The marking result could not be verified before saving.'), { status: 502, code: 'invalid_result' });
       // Do not show an unpersisted result: subsequent reads must see the same decision.
       await storage.finish(session.id, inputDigest, lease, result);

@@ -20,6 +20,7 @@ function paper(c,items,id='1'){
 function written(){return {t:'tx',q:'Explain one thing.',m:3,w:50,model:'Sample answer',crit:['3 marks for explanation.']}}
 function practice(c,items){const p=paper(c,items);p.bs.done=false;p.bs.mode='practice';delete p.bs.doneAt;p.bs.pq={1:1};c.CUR.rv=false;c.location.hash='#/1/q/1';return p}
 function result(mark=2){return {status:'marked',mark,summary:'Evidence supported this mark.',strengths:['One point explained.'],improve:['Explain the second point.'],advice:['Use a clearer example.'],criteria:[{id:'C1',assessment:'partial',evidence:['A point'],basis:'A link is missing.'}],audit:{requestedModel:'deepseek-flash',returnedModels:['deepseek-flash'],harnessVersion:'test-v2',questionVersion:'q1',rubricVersion:'r1',inputDigest:'digest'}}}
+function provisional(mark=1){return {...result(mark),status:'provisional',summary:'The lower valid proposed mark remains unconfirmed.',strengths:[],improve:[],advice:[],losses:{allocation:'unavailable',totalLost:null,items:[]},quality:[]}}
 function reply(body,status=200){return {ok:status>=200&&status<300,status,json:async()=>clone(body)}}
 function defer(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
 async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolve();assert(check(),'asynchronous operation did not start')}
@@ -38,6 +39,7 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     function feedback(){return c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0))}
     bs.ai['1.0'].audit.durationMs=90123;assert(feedback().includes('Model assessment time: 90.1 seconds (excludes browser queue and transfer time)'));
     bs.ai['1.0'].audit.durationMs=0;assert(feedback().includes('Model assessment time: 0 seconds'));
+    bs.ai['1.0'].audit.resolution='adjudicated';assert(feedback().includes('confirmed after disagreement resolution and audit'));assert(!feedback().includes('<h5>Provisional mark'));delete bs.ai['1.0'].audit.resolution;
     for(const duration of [undefined,null,'123',-1,Infinity,NaN,300001]){bs.ai['1.0'].audit.durationMs=duration;assert(!feedback().includes('Model assessment time:'))}
     c.AIMARKING_VERSION='new-harness';assert.equal(c.aiRecord(b,1,0),null);c.AIMARKING_VERSION='test-v2';assert(c.aiRecord(b,1,0));
     b.qs[0].it[0].crit=['A corrected rubric.'];assert.equal(c.aiRecord(b,1,0),null);assert.equal(c.aiTodo(b).length,1);assert.equal(c.score(b,1,0).set,false);
@@ -59,6 +61,41 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert(c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('Needs review'));
     bs.self['1.0']=1;assert.equal(c.score(b,1,0).set,true);assert.equal(c.mistakeList().length,1);
   }
+  // A provisional score is terminal but never enters assessed totals, mistake
+  // deductions or verified feedback; an explicit self mark retains precedence.
+  {
+    const c=client(),{b,bs}=paper(c,[written(),written(),written()]);
+    b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0;
+    c.fetch=async(_,request)=>{calls++;const i=JSON.parse(request.body).partIndex;return reply(i===0?provisional():i===1?result(2):{...result(),status:'needs_review',mark:null})};
+    await c.runAI(b);await c.runAI(b);assert.equal(calls,3);assert.equal(c.aiTodo(b).length,0);
+    assert.equal(c.score(b,1,0).g,1);assert.equal(c.score(b,1,0).set,true);assert.equal(c.score(b,1,0).src,'provisional');assert.equal(c.aiProvisionals(b),1);
+    const t=c.totals(b);assert.deepEqual([t.T,t.markedM,t.P,t.provisionalG,t.provisionalM,t.provisionalParts],[2,3,3,1,3,1]);
+    assert.deepEqual([t.rows[0].g,t.rows[0].markedM,t.rows[0].provisionalG,t.tp.Project.g,t.tp.Project.provisionalM],[2,3,1,2,3]);
+    assert.deepEqual(clone(c.mistakeList().map(m=>m.i)),[1]);
+    const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
+    assert(html.includes('Provisional mark'));assert(html.includes('1 / 3'));assert(html.includes('lower valid proposed mark'));assert(html.includes('not a confirmed assessment'));
+    assert(html.includes('Provisional criterion evidence'));assert(!html.includes('What earned marks'));assert(!html.includes('How to gain more marks'));assert(!html.includes('data-act="airetry"'));
+    // Even a malformed local copy must not display unaudited diagnostics as facts.
+    bs.ai['1.0'].fb.strengths=['UNCONFIRMED_DIAGNOSIS'];c.feedbackDetails=()=>{throw new Error('Provisional diagnostics rendered')};
+    assert(!c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('UNCONFIRMED_DIAGNOSIS'));
+    assert(c.guideHTML(b,1,0).includes('Provisional: 1 / 3'));
+    const page=c.resultsPage(b);assert(page.includes('3 / 6'));assert(page.includes('Provisional total'));assert(page.includes('Assessed subtotal: 2 / 3'));assert(page.includes('3 of 9 marks remain unscored'));
+    assert(c.aiStatusHTML(b).includes('1 provisional mark'));assert(c.aiStatusHTML(b).includes('1 answer need review'));
+    assert(c.papersPage().includes('Provisional marks: 1 / 3'));assert(c.reviewStatus(b).includes('Provisional marks: 1 / 3'));
+    const serialized=clone(bs);c.S.u[b.id]=serialized;await c.runAI(b);assert.equal(calls,3);assert.equal(c.score(b,1,0).src,'provisional','reload must preserve the provisional discriminator');
+    serialized.self['1.0']=2;assert.equal(c.score(b,1,0).src,'self');assert.equal(c.aiProvisionals(b),0);assert.equal(c.totals(b).T,4);assert.equal(c.totals(b).markedM,6);assert.equal(c.mistakeList().length,2);
+    delete serialized.self['1.0'];c.S.hist.push({id:b.id,name:'Provisional history',at:1,T:t.T,M:t.markedM,pending:t.P,provisionalG:t.provisionalG,provisionalM:t.provisionalM,provisionalParts:t.provisionalParts});
+    assert(c.papersPage().includes('Provisional history'));assert(c.papersPage().includes('Provisional marks: 1 / 3 across 1 part'));
+  }
+  // Zero remains a numeric provisional mark, while malformed and out-of-range
+  // fallback scores cannot enter the saved client state.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';
+    for(const mark of [null,false,'1',1.5]){c.fetch=async()=>reply(provisional(mark));await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
+    for(const mark of [-1,4])assert.throws(()=>c.aiStore(bs,'1.0',b.qs[0].it[0],c.aiStamp(b,1,0),provisional(mark)),/outside/);
+    c.fetch=async()=>reply(provisional(0));await c.runAI(b);assert.equal(c.score(b,1,0).g,0);assert.equal(c.totals(b).provisionalParts,1);assert.equal(c.totals(b).P,0);assert.equal(c.totals(b).markedM,0);
+    assert(c.aiState(b).includes('Provisional'));assert(!c.aiStatusHTML(b).includes('AI marking is complete'));
+  }
   // Existing marks remain visible and explicitly retain their earlier-harness provenance.
   {
     const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Old answer';bs.ai['1.0']={g:2,fb:{summary:'Old feedback'}};
@@ -74,9 +111,9 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c=>{c.SYNC.epoch++},
     (c,b,bs)=>{bs.doneAt++},
     c=>{c.S={...c.S,u:{}}}
-  ]){
+  ])for(const output of [result(),provisional()]){
     const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Original answer';const pending=defer();let started=false;
-    c.fetch=()=>{started=true;return pending.promise};const run=c.runAI(b);await until(()=>started);mutate(c,b,bs);pending.resolve(reply(result()));await run;
+    c.fetch=()=>{started=true;return pending.promise};const run=c.runAI(b);await until(()=>started);mutate(c,b,bs);pending.resolve(reply(output));await run;
     assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.aiErr['1.0'],undefined);
   }
   // A stale batch finishing must not delete the replacement batch's in-flight lock.

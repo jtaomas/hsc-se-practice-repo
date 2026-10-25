@@ -122,6 +122,7 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   await putPriya({ ai: { '17.0': { status: 'marked', g: 99 } }, self: { '17.0': -1 } }); assert.equal((await priya()).mark, null, 'out-of-range marks are ignored');
   await m.put('progress/' + id(2) + '.json', { u: { 8: paper('<p>' + text2 + '</p>') } });
   assert.equal((await rest(h, { action: 'analyse', bankId: '8', questionNumber: 1, partIndex: 0 })).body.code, 'invalid_part', 'multiple choice is not analysed');
+  assert.equal((await rest(h, { action: 'analyse', bankId: '11', questionNumber: 1, partIndex: 0 })).body.code, 'invalid_part', 'SQL parts use direct model query instead of class prose synthesis');
   const r1 = (await rest(h, { action: 'analyse', bankId: '8', questionNumber: 17, partIndex: 0 })).body;
   assert.equal(r1.status, 'ready'); assert.equal(r1.count, 2); assert(Object.values(r1.names).includes('You')); assert(Object.values(r1.names).includes('Priya'));
   await rest(h, { action: 'analyse', bankId: '8', questionNumber: 17, partIndex: 0 });

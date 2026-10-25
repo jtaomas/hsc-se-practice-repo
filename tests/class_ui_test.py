@@ -98,6 +98,11 @@ with sync_playwright() as pw:
     expect(page.locator('.cvbest')).to_contain_text('Agile supports frequent feedback')
     page.set_viewport_size({'width': 390, 'height': 800})
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'no sideways scroll on a phone'
+    page.set_viewport_size({'width': 1200, 'height': 900})
+    page.goto(SITE + '/#/class/11/4')
+    expect(page.locator('.cvagg').first).to_contain_text('Model answer')
+    expect(page.locator('.cvagg pre.cvcode').first).to_contain_text('SELECT Category, SUM(Quantity * UnitPrice) AS TotalCost')
+    expect(page.locator('.cvagg [data-cv=analyse]')).to_have_count(0)
     browser.close()
 assert not errors, errors
 print('CLASS UI OK: sign-in gate, join with wrong then right code, escaped answers, analysis rendering, phone width')

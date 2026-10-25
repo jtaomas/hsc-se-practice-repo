@@ -71,11 +71,19 @@ function cvAnalyse(bankId,key,qn,pi){
   cvApi({action:'analyse',bankId:bankId,questionNumber:qn,partIndex:pi}).then(function(r){delete CV.run[key];CV.res[key]=r;cvDraw()}).catch(function(e){CV.run[key]={err:e.message};cvDraw()});
 }
 /* Parts shown in a mistakes/review slot with 2+ shared answers build their model answer on their own, once per visit. */
+function cvFormatSQL(sql){
+  var s=String(sql||'').trim();
+  if(!s)return '';
+  if(s.indexOf('\n')>=0)return s;
+  return s.replace(/\s+\b(FROM|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|JOIN|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY)\b/gi,'\n$1');
+}
 function cvAutoBuild(b){
   if(!CV.ans||CV.ansBank!==b.id)return;
   Array.prototype.forEach.call(document.querySelectorAll('.cvslot'),function(el){
     if(el.getAttribute('data-b')!==b.id)return;
-    var n=+el.getAttribute('data-n'),i=+el.getAttribute('data-i'),key=n+'.'+i,k=b.id+'|'+key,list=CV.ans.parts[key]||[];
+    var n=+el.getAttribute('data-n'),i=+el.getAttribute('data-i'),it=b.qs[n-1]&&b.qs[n-1].it[i];
+    if(it&&it.t==='sq')return;
+    var key=n+'.'+i,k=b.id+'|'+key,list=CV.ans.parts[key]||[];
     if(list.length<2||CV.res[k]||CV.run[k]||CV.auto[k])return;
     CV.auto[k]=1;cvAnalyse(b.id,k,n,i);
   });
@@ -119,25 +127,72 @@ function cvMarkHTML(a){
   if(typeof a.mark!=='number'||typeof a.max!=='number')return '<span class="cv-mark none" title="Not marked yet">Unmarked</span>';
   return '<span class="cv-mark '+(a.mark>=a.max?'ok':'bad')+'" title="Mark for this part">'+a.mark+' / '+a.max+'</span>';
 }
+function cvSqlFeedbackHTML(a,res){
+  var fb=a.fb||null,summary='',problems=[];
+  if(!fb&&a.mine&&CV.ansBank){
+    var u=S.u[CV.ansBank],ai=u&&u.ai&&u.ai[a.partKey||''];
+    if(ai&&ai.fb){
+      summary=typeof aiFirst==='function'?aiFirst(ai.fb.summary):String(ai.fb.summary||'').trim();
+      var L=ai.fb.losses&&Array.isArray(ai.fb.losses.items)?ai.fb.losses.items:[];
+      L.forEach(function(l){if(l&&l.explanation)problems.push(typeof aiFirst==='function'?aiFirst(l.explanation):l.explanation)});
+      if(!problems.length&&Array.isArray(ai.fb.improve))ai.fb.improve.forEach(function(x){if(x)problems.push(typeof aiFirst==='function'?aiFirst(x):x)});
+    }
+  }else if(fb){
+    summary=fb.summary||'';
+    problems=Array.isArray(fb.problems)?fb.problems:[];
+  }
+  if(!summary&&!problems.length&&res&&res.result&&Array.isArray(res.result.mainPoints)){
+    var author=a.mine?'You':a.name,letter=null;
+    if(res.names)Object.keys(res.names).forEach(function(l){if(res.names[l]===author||(author==='You'&&res.names[l]==='You'))letter=l});
+    if(letter){
+      var okPts=[],badPts=[];
+      res.result.mainPoints.forEach(function(p){
+        if(p.madeBy&&p.madeBy.indexOf(letter)>=0){
+          if(p.answersQuestion==='yes')okPts.push(p.point);
+          else badPts.push(p.why||p.point);
+        }
+      });
+      if(okPts.length)summary=typeof aiFirst==='function'?aiFirst(okPts[0]):okPts[0];
+      if(badPts.length)problems=badPts.slice(0,2);
+    }
+  }
+  var hasLoss=typeof a.mark==='number'&&typeof a.max==='number'&&a.mark<a.max;
+  if(!summary&&!problems.length)return '';
+  var h='<div class="cv-sql-fb">';
+  if(summary)h+='<p class="cv-sql-sum">'+esc(summary)+'</p>';
+  if(problems.length){
+    h+='<div class="cv-sql-prob"><span class="pill bad">Problem</span> <span>'+esc(problems.join(' '))+'</span></div>';
+  }else if(hasLoss&&summary){
+    h='<div class="cv-sql-fb"><div class="cv-sql-prob"><span class="pill bad">Problem</span> <span>'+esc(summary)+'</span></div>';
+  }
+  return h+'</div>';
+}
 function cvPartBody(bankId,key,qn,pi,list){
   var k=bankId+'|'+key,r=CV.res[k],run=CV.run[k],isOpen=CV.open[k]!==false,busy=run&&!run.err;
-  var bk=BANKS.filter(function(x){return x.id===bankId})[0],it=bk&&bk.qs[qn-1]&&bk.qs[qn-1].it[pi],code=!!it&&it.t!=='tx';
-  /* The aggregator: always shown, so it is clear where the model answer will appear. */
-  var g='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
-  if(r)g+=cvResultHTML(r);
-  else if(busy)g+='<p class="mut">Building the class model answer...</p>';
-  else g+='<p class="mut">The best points from everyone\'s answers, combined and checked against the syllabus.'+(list.length>=2?'':' It needs at least 2 shared answers ('+list.length+' so far).')+'</p>';
-  if(run&&run.err)g+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
-  g+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
+  var bk=BANKS.filter(function(x){return x.id===bankId})[0],it=bk&&bk.qs[qn-1]&&bk.qs[qn-1].it[pi],code=!!it&&it.t!=='tx',isSql=!!it&&it.t==='sq';
+  /* The aggregator: for SQL, show the clean formatted query directly without class synthesis or rebuild buttons. */
+  var g;
+  if(isSql){
+    g='<div class="cvagg"><div class="cvhd"><b>Model answer</b></div><pre class="cvcode">'+esc(cvFormatSQL(it.model))+'</pre></div>';
+  }else{
+    g='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
+    if(r)g+=cvResultHTML(r);
+    else if(busy)g+='<p class="mut">Building the class model answer...</p>';
+    else g+='<p class="mut">The best points from everyone\'s answers, combined and checked against the syllabus.'+(list.length>=2?'':' It needs at least 2 shared answers ('+list.length+' so far).')+'</p>';
+    if(run&&run.err)g+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
+    g+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
+  }
   var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
     (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
     var wc=cvPlain(a.text).split(' ').filter(Boolean).length;
     var author=a.mine?'You':a.name;
-    var pts=cvAnswerPoints(r,author,a.text);
+    var pts=isSql?[]:cvAnswerPoints(r,author,a.text);
     var ptsHTML='';
-    if(pts&&pts.length){
+    if(isSql){
+      ptsHTML=cvSqlFeedbackHTML(Object.assign({partKey:key},a),r);
+    }else if(pts&&pts.length){
       ptsHTML='<div class="cv-main-pts"><div class="cv-pts-head"><span class="cv-pts-title"><b>Main points in this response:</b></span>'+
         (r?'<span class="cv-badge">Syllabus assessed</span>':'<span class="cv-badge mut">Key points</span>')+'</div>'+
         '<ul class="cv-pts-list">'+pts.map(function(p){

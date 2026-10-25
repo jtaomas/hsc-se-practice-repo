@@ -52,6 +52,31 @@ function createHandler(deps) {
     return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
   }
 
+  function firstSentence(t) {
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    const m = t.match(/^.*?[.!?](?:\s|$)/);
+    t = m ? m[0].trim() : t;
+    return t.length > 220 ? t.slice(0, 217).replace(/\s+\S*$/, '') + '...' : t;
+  }
+  function partFeedback(paper, key, max) {
+    const ai = paper.ai && paper.ai[key];
+    if (!ai || ai.status !== 'marked' || !ai.fb || typeof ai.fb !== 'object') return null;
+    const f = ai.fb;
+    const summary = typeof f.summary === 'string' && f.summary.trim() ? firstSentence(f.summary) : '';
+    const losses = f.losses && Array.isArray(f.losses.items) ? f.losses.items : [];
+    const problems = [];
+    losses.forEach(l => {
+      if (l && typeof l.explanation === 'string' && l.explanation.trim()) problems.push(firstSentence(l.explanation));
+    });
+    if (!problems.length && Array.isArray(f.improve)) {
+      f.improve.forEach(x => {
+        if (typeof x === 'string' && x.trim()) problems.push(firstSentence(x));
+      });
+    }
+    if (!summary && !problems.length) return null;
+    return { summary, problems: problems.slice(0, 4) };
+  }
+
   // Open-ended answers of every member for one paper, in a fixed order.
   async function classAnswers(bank, me) {
     const members = await store.members();
@@ -70,7 +95,12 @@ function createHandler(deps) {
       submitted.forEach(r => {
         const key = (qi + 1) + '.' + pi;
         const text = engine.answerText(item, r.paper.ans && r.paper.ans[key]);
-        if (text) list.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text, mark: partMark(r.paper, key, item.m), max: item.m });
+        if (text) {
+          const entry = { id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text, mark: partMark(r.paper, key, item.m), max: item.m };
+          const fb = partFeedback(r.paper, key, item.m);
+          if (fb) entry.fb = fb;
+          list.push(entry);
+        }
       });
       parts[(qi + 1) + '.' + pi] = list;
     }));
@@ -234,7 +264,7 @@ function createHandler(deps) {
         const qn = Number(p.questionNumber), pi = Number(p.partIndex);
         if (!Number.isInteger(qn) || !Number.isInteger(pi)) return fail(400, 'invalid_part', 'Choose a question part.');
         const context = engine.partContext(bank, qn, pi);
-        if (!context) return fail(400, 'invalid_part', 'This part is not a written answer, so there is nothing to analyse.');
+        if (!context || context.kind === 'sq') return fail(400, 'invalid_part', 'This part is not a written answer, so there is nothing to analyse.');
         const all = await classAnswers(bank, sess.id);
         const entries = (all.parts[qn + '.' + pi] || []);
         if (entries.length < 2) return fail(409, 'too_few', 'At least two classmates need to have shared an answer to this part before the class can be analysed.');

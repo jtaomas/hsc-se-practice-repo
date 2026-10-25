@@ -197,9 +197,32 @@ function aiWrongHTML(f,max,g){
   return '<div class="wrongbox"><h5><span>What&rsquo;s wrong</span>'+(lost>0?'<span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span>':'')+'</h5><ul>'+rows+'</ul></div>';
 }
 function aiEarnedHTML(f){return f.strengths&&f.strengths.length?'<div class="earnbox"><h5>What earned marks</h5><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></div>':''}
+function aiSqlResultHTML(b,n,i,it,k,ai,opt){
+  var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp;
+  var running=aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n);
+  var sum=f.summary?aiFirst(f.summary):'';
+  var L=f.losses&&Array.isArray(f.losses.items)?f.losses.items.filter(function(l){return l&&(l.explanation||l.action)}):[];
+  var probs=[];
+  L.forEach(function(l){if(l.explanation)probs.push(aiFirst(l.explanation));else if(l.action)probs.push(aiFirst(l.action))});
+  if(!probs.length&&Array.isArray(f.improve))f.improve.forEach(function(x){if(x)probs.push(aiFirst(x))});
+  var lost=typeof ai.g==='number'&&typeof it.m==='number'?it.m-ai.g:0;
+  var probHTML='';
+  if(!review&&!provisional&&(probs.length||lost>0)){
+    var ptxt=probs.length?probs.join(' '):(sum||'Query did not meet all requirements.');
+    probHTML='<div class="wrongbox sql-prob"><h5><span><span class="pill bad">Problem</span></span>'+(lost>0?'<span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span>':'')+'</h5><p style="margin:4px 0 0">'+esc(ptxt)+'</p></div>';
+  }
+  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':(opt.title||'AI marking'))+'</h5>'+
+    (sum&&(!probHTML||probs.length)?'<p class="aisum">'+esc(sum)+'</p>':'')+
+    probHTML+
+    (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
+    (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment.</p>':'')+
+    (opt.remark!==false&&!review&&!provisional?(S.tok?'<p style="margin-top:8px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':''):'')+
+    (opt.after||'')+'</div>';
+}
 /* One AI marking result in the review style. opt.remark=false hides the re-mark button (retries). */
 function aiResultHTML(b,n,i,it,k,ai,opt){
   opt=opt||{};
+  if(it&&it.t==='sq')return aiSqlResultHTML(b,n,i,it,k,ai,opt);
   var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp,audit=ai.audit||{};
   var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(opt.answer!==undefined?aiPayload(b,n,i,opt.answer).answer:aiPayload(b,n,i).answer):null;
   var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];

@@ -901,7 +901,7 @@ table.hoa.db{margin:12px 0}
 .cvro{pointer-events:none}.cvro .ptog{display:none}
 .cvcode{margin:4px 0 0;padding:8px 10px;background:#1b1b1b;color:#f2f2f2;overflow:auto;white-space:pre;font-size:.9em;border-radius:3px}
 /* Under a marking guide, `.guide pre` would win and give light text on a light background; keep the code readable everywhere. */
-.cvans pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0}
+.cvans pre.cvcode,.cvagg pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0}
 
 /* ---------- General Instructions page ---------- */
 .gi-page{flex:1;padding:28px 36px 36px;background:var(--pbg,#fff);color:var(--pfg,#000)}
@@ -1066,3 +1066,9 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 /* Admin remark buttons in the class progress report */
 .cv-rm{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .cv-prog td .acmsg{min-height:0;margin:6px 0 0;font-size:.92em}
+
+.cv-sql-fb{margin-top:8px;font-size:.92em;line-height:1.45}
+.cv-sql-sum{margin:0 0 6px;color:#334155}
+.cv-sql-prob{display:flex;align-items:baseline;gap:8px;background:#fdeef1;border:1px solid #e0a1ae;border-left:4px solid #b81237;color:#8a0d29;padding:6px 10px;border-radius:4px;margin-top:4px}
+.cv-sql-prob .pill.bad{flex:none}
+.cvagg pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0;margin:6px 0 0}

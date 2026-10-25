@@ -654,7 +654,7 @@ function cvClassSkeletonHTML(){
 function cvHTML(){
   if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
   if(CV.st===null){
-    cvInitCache();
+    loadCVCache();
     if(CV.st===null)return cvPg(cvClassSkeletonHTML()+(CV.msg?'<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>':''));
   }
   if(!CV.st.configured)return cvPg('<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>');
@@ -728,14 +728,14 @@ document.addEventListener('click',function(ev){
     cvApi({action:'join',name:nm,code:cd}).then(function(r){
       if(!CV.st)CV.st={configured:true};
       CV.st.member=true;CV.st.name=r&&r.name||nm;CV.joining=false;
-      cvSaveCache();cvDraw();
+      saveCVCache();cvDraw();
       cvStatus(true).then(classBind);
     }).catch(function(e){CV.joining=false;CV.msg=e.message;cvDraw()});
     return;
   }
   if(a==='rename'){
     var n=window.prompt?window.prompt('Your name as classmates see it',CV.st&&CV.st.name):null;
-    if(n)cvApi({action:'rename',name:n}).then(function(r){CV.st.name=r.name;CV.ans=null;CV.ansBank='';cvDraw();classBind()}).catch(function(e){CV.msg=e.message;cvDraw()});
+    if(n)cvApi({action:'rename',name:n}).then(function(r){CV.st.name=r.name;saveCVCache();CV.ans=null;CV.ansBank='';cvDraw();classBind()}).catch(function(e){CV.msg=e.message;cvDraw()});
     return;
   }
   if(a==='analyse')cvAnalyse(el.getAttribute('data-b')||CV.bank,el.getAttribute('data-k'),+el.getAttribute('data-q'),+el.getAttribute('data-p'));

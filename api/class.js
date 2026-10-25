@@ -143,16 +143,20 @@ function createHandler(deps) {
       if (p.action === 'status') {
         const member = configured ? await store.getMember(sess.id) : null;
         const sys = isSystemAdmin(sess), cls = isClassAdmin(sess);
-        const count = member ? (typeof store.memberCount === 'function' ? await store.memberCount() : (await store.members()).length) : 0;
+        const count = member ? (typeof store.list === 'function' ? ((await store.list({ prefix: 'class/members/' })).blobs || []).length : (typeof store.memberCount === 'function' ? await store.memberCount() : (await store.members()).length)) : 0;
         const out = { configured, member: !!member, name: member ? member.name : '', count, admin: sys };
         if (cls && !sys) out.classAdmin = true;
         if (p.bundle && member) {
           const list = await store.members();
           out.roster = { admin: cls, members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) };
           const counts = {}, papers = {};
+          const progressPaths = list.map(m => 'progress/' + m.id + '.json');
+          const progressMap = typeof store.getMany === 'function' ? await store.getMany(progressPaths).catch(() => null) : null;
           for (let i = 0; i < list.length; i += 6) {
             const slice = list.slice(i, i + 6);
-            const done = await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
+            const done = progressMap
+              ? slice.map(m => parseBlobData(progressMap.get('progress/' + m.id + '.json')) || {})
+              : await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
             slice.forEach((m, idx) => {
               const u = (done[idx] && done[idx].u) || {};
               banksOf().forEach(b => {
@@ -252,9 +256,13 @@ function createHandler(deps) {
         const members = await store.members();
         const counts = {};
         const papers = {};
+        const progressPaths = members.map(m => 'progress/' + m.id + '.json');
+        const progressMap = typeof store.getMany === 'function' ? await store.getMany(progressPaths).catch(() => null) : null;
         for (let i = 0; i < members.length; i += 6) {
           const slice = members.slice(i, i + 6);
-          const done = await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
+          const done = progressMap
+            ? slice.map(m => (parseBlobData(progressMap.get('progress/' + m.id + '.json')) || {}).u || {})
+            : await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
           slice.forEach((m, idx) => {
             const u = done[idx] || {};
             let latestOpenId = null;

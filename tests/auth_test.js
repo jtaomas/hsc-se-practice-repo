@@ -54,7 +54,7 @@ function save(tok,data,changes,revisions){return call({action:'save',data,change
   r=await call({action:'load'},tok);
   assert.equal(r.j.data.u['10'].ans['1.0'],'Updated mini paper response');
   const beforeInvalid=JSON.stringify(r.j);
-  for(const invalid of ['0','11','01','../10','__proto__','constructor','prototype',10,['10'],null,{}]) {
+  for(const invalid of ['0','20','01','../10','__proto__','constructor','prototype',10,['10'],null,{}]) {
     assert.equal((await save(tok,{u:{}},[invalid],r.j.revisions)).c,409,'invalid paper key accepted: '+JSON.stringify(invalid));
   }
   assert.equal(JSON.stringify((await call({action:'load'},tok)).j),beforeInvalid,'invalid keys modified progress');

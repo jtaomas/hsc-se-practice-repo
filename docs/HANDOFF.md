@@ -46,13 +46,14 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
   - `#/review` (linked in the header and on the home page) lists every paper and opens it straight in `#/N/review/1`. Under each written part in review there is a class panel (`.cvslot`, built in `public/classview.js`) with the shared answers and the analysis button.
   - Practice mode: each question has a "Mark this question" button (`pqMark` in `public/pages.js`). It runs the code or SQL check for that question (`runChecks(b, n)`) and AI marking for that question only (`runAIQuestion` in `public/ai.js`), then shows the normal marking guide under each part. `paper.pq[n]=1` records that a question was revealed. Results use the same stamps as whole-paper marking, so submitting later does not re-mark unchanged answers.
   - Exam lock: `examLock()` in `public/pages.js` returns the paper being sat in exam mode (started, not done, inside its working time). While it is set, `#/class`, `#/review`, any review or results route, `#/mistakes` and `#/compare` show a locked page. `api/class.js` also refuses `answers` and `analyse` for a member whose saved progress shows an exam started in the last 3 hours and not submitted (`exam_in_progress`). Progress syncs about 20 seconds after typing, so the server check is best effort and the browser check is the main guard.
+  - Time up: when an exam-mode paper's working time ends it is submitted automatically (`expireExams` in `public/pages.js`, run every second and on every page change, including when the student comes back after closing the tab). Before this, the lock lifted at time up while the paper stayed open for answering.
   - Sharing rule (`sharedPaper` in `api/class.js`): a paper's written answers are shared if it is submitted or was sat in practice mode. An exam still being sat is not shared. To share that too, change `sharedPaper`.
 - **Legacy:** `#/compare` (signed export files) and the earlier per-account class-code feature in `server/comparison-sharing.js` still exist but are no longer linked from the nav. Leave or remove them in a later clean-up; do not mix them with the new class.
 - **Not done:** the existing marking engine (`api/mark.js`) does not yet receive the syllabus text. The owner asked that AI marking always has the syllabus. Adding it means bumping the marking harness version and re-checking the marking tests and cached marks, so it was left for a deliberate change.
 
 ## Changes made in this session, newest first
 
-- Class code response sharing and daily save caps implemented: students can enter a class code to share and compare responses directly without downloading files. Daily save cap of 150 saves per account in `api/auth.js` protects D1 storage. See rollback instructions below.
+- Class code response sharing and daily save caps implemented: students can enter a class code to share and compare responses directly without downloading files. Daily save cap of 1000 saves per account in `api/auth.js` protects D1 storage (raised from 150, which a single full exam could exceed). See rollback instructions below.
 - `f001457` Removed the two consent tick boxes from Compare responses. Plain notices replace them. See "Open decisions".
 - `11b6125` Banks 1 to 7 archived: `archived:true` on their `BANKS.push` line, hidden at load by `public/boot.js`, content exported to `archive/banks-1-7.json` with `archive/README.md`. `?archive=1` on the site address shows them again, and the browser tests use it. Also fixed the review-page bug where question box 2 sat lower than its neighbours: the rule `.part+.part` (spacing between parts of a question) also matched the orange `nav-elem part` box; it is now `.part+.part:not(.nav-elem)`, with a regression check in `tests/ui_test.py`.
 - `2579592` Marking no longer stops on "This answer is already being marked". The client waits and asks again, up to about six minutes (24 tries). The status panel, results totals and open review question update as each answer finishes (`aiLive` in `public/ai.js`).
@@ -78,7 +79,7 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
    - **Rollback in Git:** Run `git revert HEAD` and push to `main`.
 
 2. **Daily save caps:**
-   Limits each account to 150 progress saves per UTC day to protect Cloudflare D1 free tier limits. Stored directly on the user record at zero extra write cost.
+   Limits each account to 1000 progress saves per UTC day (`MAX_DAILY_SAVES` overrides it) to protect Cloudflare D1 free tier limits. Stored directly on the user record at zero extra write cost.
    - **Disable via env var:** Set `DISABLE_SAVE_CAPS=1` in Vercel Environment Variables.
 
 3. **The odd nav box** the owner reported is fixed (see `11b6125`), but they have not confirmed it on the live site.

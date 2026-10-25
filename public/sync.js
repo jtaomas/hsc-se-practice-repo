@@ -80,9 +80,20 @@ function api(action,body,token){
 }
 function syncFail(e){
   if(e.stale)return;
-  if(e.status===401&&S.tok){stashDraft();replaceState({});SYNC.state='paused';SYNC.msg='';render()}
+  if(e.status===401&&S.tok&&sittingPaper()){
+    // An expired sign-in in the middle of a paper must not wipe the answers off the screen.
+    // Keep everything in this browser and stop account saves until the student signs in again.
+    clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();S.tok='';persist();SYNC.state='paused';SYNC.msg='';
+  }
+  else if(e.status===401&&S.tok){stashDraft();replaceState({});SYNC.state='paused';SYNC.msg='';render()}
+  else if(e.status===401&&SYNC.state==='paused'){}
   else{SYNC.state='error';SYNC.msg=e.message}
   refreshAcct();
+}
+/* True while a paper is open for answering, or an exam-mode paper is still running. */
+function sittingPaper(){
+  if(typeof examLock==='function'&&examLock())return true;
+  return typeof CUR!=='undefined'&&!!CUR.b&&!CUR.rv&&!!S.u[CUR.b.id]&&!S.u[CUR.b.id].done;
 }
 function draftKey(owner){return KEY+':draft:'+encodeURIComponent(owner)}
 function stashDraft(){if(typeof xdCleanup==='function')xdCleanup();if(S.owner){try{localStorage.setItem(draftKey(S.owner),JSON.stringify(Object.assign(syncPayload(),{owner:S.owner,pending:S.pending,revisions:S.revisions})))}catch(e){}}}

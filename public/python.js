@@ -1,12 +1,14 @@
 /* Python runs only in a worker. Termination also stops an infinite loop. */
 var PYBASE=window.PYBASE||'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
-var PYTIMEOUT=10000,PYLOADTIMEOUT=60000,PY={worker:null,ready:false,job:null,queue:[],timer:null};
+/* PYASK closes an open input() dialog. Students cannot close it, but the page must when Python is
+   stopped for them (time up, account change), or the dialog would trap focus over the next page. */
+var PYASK=null,PYTIMEOUT=10000,PYLOADTIMEOUT=60000,PY={worker:null,ready:false,job:null,queue:[],timer:null};
 function pythonFailure(message){
   clearTimeout(PY.timer);if(PY.worker)PY.worker.terminate();PY.worker=null;PY.ready=false;
   var jobs=PY.queue.splice(0);if(PY.job)jobs.unshift(PY.job);PY.job=null;
   jobs.forEach(function(j){j.reject(new Error(message))});
 }
-function stopPython(){pythonFailure('Python stopped. You can edit your program and run it again.')}
+function stopPython(){if(PYASK)PYASK(new Error('Python stopped. You can edit your program and run it again.'));pythonFailure('Python stopped. You can edit your program and run it again.')}
 function pythonNext(){
   if(PY.job||!PY.queue.length)return;
   if(!PY.worker){
@@ -50,13 +52,16 @@ function runPyInteractive(src,show){
   return step();
 }
 function pyAsk(prompt){
-  return new Promise(function(resolve){
-    var old=document.querySelector('.pyask');if(old)old.remove();
+  return new Promise(function(resolve,reject){
+    if(PYASK)PYASK(new Error('Python stopped.'));
     var w=document.createElement('div');w.className='pyask';w.setAttribute('role','dialog');w.setAttribute('aria-modal','true');w.setAttribute('aria-labelledby','pyaskl');
     w.innerHTML='<div class="pyaskb"><label id="pyaskl" for="pyaski"></label><input id="pyaski" type="text" autocomplete="off" spellcheck="false"><div class="pyacts"><button type="button" class="pyno">Cancel</button><button type="button" class="pyok">Ok</button></div></div>';
     w.querySelector('label').textContent=prompt;
     var inp=w.querySelector('input'),focused=document.activeElement;
-    function done(v){document.removeEventListener('focusin',trap,true);document.removeEventListener('keydown',keys,true);w.remove();document.body.classList.remove('pyasking');if(focused&&focused.focus&&document.body.contains(focused))try{focused.focus()}catch(e){};resolve(v)}
+    function close(){if(PYASK===abort)PYASK=null;document.removeEventListener('focusin',trap,true);document.removeEventListener('keydown',keys,true);w.remove();document.body.classList.remove('pyasking')}
+    function abort(e){close();reject(e)}
+    function done(v){close();if(focused&&focused.focus&&document.body.contains(focused))try{focused.focus()}catch(e){};resolve(v)}
+    PYASK=abort;
     function trap(e){if(!w.contains(e.target))inp.focus()}
     function keys(e){
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();inp.focus();return}

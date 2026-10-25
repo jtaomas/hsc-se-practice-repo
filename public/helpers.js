@@ -9,7 +9,21 @@ S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0
 S.owner=S.owner||S.ae||'';S.revisions=S.revisions||{};
 // Legacy drafts have no cloud revision: preserve them until the user resolves any conflict.
 if(!S.pending){S.pending={};Object.keys(S.u).forEach(function(id){S.pending[id]=1})}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+/* If the browser refuses to store answers (storage full or blocked), say so once instead of failing silently:
+   a reload would otherwise lose everything typed since the last successful write. */
+var PERSISTFAIL=null;
+function persist(){
+  try{localStorage.setItem(KEY,JSON.stringify(S));if(PERSISTFAIL){if(PERSISTFAIL.remove)PERSISTFAIL.remove();PERSISTFAIL=null}}
+  catch(e){if(!PERSISTFAIL)PERSISTFAIL=persistWarn()}
+}
+function persistWarn(){
+  if(typeof document==='undefined'||!document.body||!document.createElement)return true;
+  var w=document.createElement('div');w.className='aib bad';w.setAttribute('role','alert');
+  w.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;margin:0';
+  w.innerHTML='<b>This browser could not save your latest answers.</b> Its storage may be full or blocked. '+(S&&S.tok?'Your account still receives your answers when it saves. ':'Sign in so your answers are saved to an account. ')+'Do not reload or close this page until your answers are saved. <button type="button" class="nb sm ol">Dismiss</button>';
+  w.querySelector('button').addEventListener('click',function(){w.remove()});
+  document.body.appendChild(w);return w;
+}
 function save(id){S.ts=Date.now();id=id||(typeof CUR!=='undefined'&&CUR.b?CUR.b.id:null);if(id){if(S.u[id])S.u[id].upd=S.ts;S.pending[id]=(S.pending[id]||0)+1}persist();if(typeof syncSoon==='function')syncSoon()}
 function BS(id){var u=S.u[id];if(!u)u=S.u[id]={ans:{},flags:{},self:{},chk:{},ai:{},start:0,done:false};if(!u.ai)u.ai={};if(!u.aiErr)u.aiErr={};return u}
 

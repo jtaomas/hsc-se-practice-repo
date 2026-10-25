@@ -47,6 +47,14 @@ function edit(c,id,value){c.BS(id).ans['1.0']=value;c.save(id)}
   a.acceptAccount({token:'same@example.test',email:'same@example.test'},false);
   assert.equal(a.S.u['1'].ans['1.0'],7);
 
+  // Expiry in the middle of a paper keeps the answers on screen and in this browser; signing in again resumes saving.
+  const mid=client('mid@example.test');edit(mid,'1','typed before expiry');mid.CUR={b:{id:'1'},n:3,rv:false};
+  mid.syncFail(Object.assign(new Error('expired'),{status:401}));
+  assert.equal(mid.S.u['1'].ans['1.0'],'typed before expiry','expiry during a paper wiped the answers');assert.equal(mid.S.tok,'');assert.equal(mid.SYNC.state,'paused');
+  edit(mid,'1','typed after expiry');
+  mid.syncFail(Object.assign(new Error('expired again'),{status:401}));assert.equal(mid.SYNC.state,'paused');
+  mid.acceptAccount({token:'mid@example.test',email:'mid@example.test'},false);await mid.syncNow();
+  assert.equal(stores.get('Bearer mid@example.test').data.u['1'].ans['1.0'],'typed after expiry');
   // A delayed 401 from an old account cannot sign out a new one.
   const c=client('old@example.test');let rejectOld;
   c.beforeRequest=()=>new Promise((_,reject)=>{rejectOld=reject});

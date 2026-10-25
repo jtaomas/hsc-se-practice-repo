@@ -260,7 +260,10 @@ module.exports = async (req, res) => {
         }
         data.v = 2; data._revisions = revisions; data._backupDay = today;
         if (!process.env.DISABLE_SAVE_CAPS) {
-          const maxUserSaves = parseInt(process.env.MAX_DAILY_SAVES || '150', 10);
+          // Saves arrive about every 20 seconds while a student works, so a full 2 h 20 min exam alone can
+          // need about 420. The old default of 150 stopped account saves part-way through an exam.
+          // 1000 is still well inside the D1 free tier (one row written per save).
+          const maxUserSaves = parseInt(process.env.MAX_DAILY_SAVES || '1000', 10);
           const saveCount = (current && current._saveDay === today ? current._saveCount : 0) || 0;
           if (saveCount >= maxUserSaves) {
             const e = new Error('Daily save limit reached for this account. Your answers remain saved in this browser until tomorrow.');

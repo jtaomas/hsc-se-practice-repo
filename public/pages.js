@@ -27,8 +27,31 @@ function redrawTools(){var t=$('#tools');if(t)t.innerHTML=toolsHTML(!!CUR.b&&CUR
 function fmtT(s){if(s<=0)return 'Time up';var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=Math.floor(s%60);return h+':'+(m<10?'0':'')+m+':'+(x<10?'0':'')+x}
 function paperDuration(b){return b&&b.duration?b.duration:140*60}
 function paperTime(b){var minutes=paperDuration(b)/60,h=Math.floor(minutes/60),m=minutes%60;return (h?h+' hour'+(h===1?'':'s')+(m?' ':''):'')+(m?m+' minute'+(m===1?'':'s'):'')}
-function tick(){var t=$('#tmr');if(!t||!CUR.b)return;var bs=BS(CUR.b.id);t.textContent=fmtT(paperDuration(CUR.b)-(bs.start?Math.floor((Date.now()-bs.start)/1000):0))}
+function tick(){
+  var ended=expireExams();
+  if(ended.length){
+    // Working time is over: leave the exam (or the locked page) for the submitted paper.
+    var id=location.hash.replace(/^#\/?/,'').split('/')[0];
+    if(LOCKVIEW||ended.some(function(b){return b.id===id}))render();
+    return;
+  }
+  var t=$('#tmr');if(!t||!CUR.b)return;var bs=BS(CUR.b.id);t.textContent=fmtT(paperDuration(CUR.b)-(bs.start?Math.floor((Date.now()-bs.start)/1000):0));
+}
 setInterval(tick,1000);
+/* Exam mode ends when its working time runs out, as in the HSC online exam: the paper is submitted
+   automatically. Without this the answers stayed editable after the review lock lifted at time up,
+   so marking guides and sample answers could be read and then copied into the open paper. */
+var TIMEUP={},LOCKVIEW=false;
+function expireExams(){
+  var ended=[];
+  BANKS.forEach(function(b){var u=S.u[b.id];
+    if(!u||u.mode!=='exam'||!u.start||u.done||Date.now()-u.start<paperDuration(b)*1000)return;
+    // Keep the last drawing change, which waits 400 ms before saving.
+    if(CUR.b===b&&!CUR.rv)xdCleanup();
+    u.done=true;u.doneAt=u.start+paperDuration(b)*1000;u.checked=0;TIMEUP[b.id]=1;save(b.id);ended.push(b);
+  });
+  return ended;
+}
 
 /* ---------- page frames ---------- */
 function frame(title,main,opt){
@@ -126,7 +149,8 @@ function qHTML(b,n,rv){
 function examPage(b,n,rv){
   rv=rv||BS(b.id).done;
   CUR={b:b,n:n,rv:rv};var bs=BS(b.id);
-  if(!rv&&!bs.start){bs.start=Date.now()}
+  // Opened by address without pressing Start: the working-time timer shows, so treat it as exam mode.
+  if(!rv&&!bs.start){bs.start=Date.now();if(!bs.mode)bs.mode='exam'}
   if(!rv){bs.cur=n;save()}
   return frame((rv?'Review: ':'')+b.name+' Software Engineering','<main class="ex" id="qarea">'+qHTML(b,n,rv)+'</main>'+(INFO?infoHTML():''),{nav:navHTML(b,rv),timer:!rv,mode:bs.mode,bid:b.id,bar:true});
 }
@@ -143,7 +167,7 @@ function totals(b){
 }
 function resultsPage(b){
   CUR={b:b,n:0};var r=totals(b),pend=r.rows.filter(function(x){return x.pend}).length;
-  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature"><div class="big">'+r.T+' / '+r.markedM+'</div><p>'+(r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
+  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature">'+(TIMEUP[b.id]?'<p><b>Working time ended, so your exam was submitted automatically.</b></p>':'')+'<div class="big">'+r.T+' / '+r.markedM+'</div><p>'+(r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
     '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Assessed marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k],m=t.m-t.pending;return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+m+(t.pending?' ('+t.pending+' unscored)':'')+'</td><td><div class="tbar"><i style="width:'+(m?Math.round(100*t.g/m):0)+'%"></i></div></td></tr>'}).join('')+'</table>'+
     '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend?'part':x.g===x.m?'ok':x.g===0?'bad':'part';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
     (typeof improvementPanel==='function'?improvementPanel(b):'')+
@@ -156,9 +180,13 @@ function render(){
   var h=location.hash.replace(/^#\/?/,'').split('/'),b=BANKS.filter(function(x){return x.id===h[0]})[0],html;
   /* Archived papers (see archive/README.md) are not reachable from the app; ?archive=1 is for tests and maintainers. */
   if(b&&b.archived&&!/[?&]archive=1\b/.test(location.search))b=undefined;
-  MENU={};CPK='';xdCleanup();
-  var lock=examLock();
-  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done))))html=lockedPage(lock);
+  MENU={};CPK='';
+  expireExams();
+  // A paper whose working time ended goes to its results, not back into the exam.
+  if(b&&TIMEUP[b.id]&&BS(b.id).done&&(h[1]==='q'||h[1]==='finish')){stopPython();location.replace('#/'+b.id+'/results');return}
+  xdCleanup();
+  var lock=examLock();LOCKVIEW=false;
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
   else if(h[0]==='papers')html=papersPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
@@ -327,8 +355,8 @@ document.addEventListener('click',function(e){
   else if(a==='bg'){S.bg=+d.v;CPK='';save();applyTheme();redrawTools()}
   else if(a==='creset'){S.fg=0;S.bg=0;CPK='';save();applyTheme();redrawTools()}
   else if(a==='info'){INFO=true;var w=document.createElement('div');w.innerHTML=infoHTML();document.body.appendChild(w.firstChild)}
-  else if(a==='start'){var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
-  else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.markedM,pending:ot.P})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}
+  else if(a==='start'){delete TIMEUP[CUR.b.id];var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
+  else if(a==='restart'){if(confirm('Clear all answers and marks for this paper and start again?')){delete TIMEUP[CUR.b.id];var ob=S.u[CUR.b.id];if(ob&&ob.done){var ot=totals(CUR.b);S.hist.push({id:CUR.b.id,name:CUR.b.name,at:ob.doneAt||Date.now(),T:ot.T,M:ot.markedM,pending:ot.P})}S.u[CUR.b.id]=null;delete S.u[CUR.b.id];save();location.hash='#/'+CUR.b.id;render()}}
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen';aceResize()}

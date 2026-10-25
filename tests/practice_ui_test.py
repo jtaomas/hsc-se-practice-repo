@@ -80,6 +80,23 @@ with sync_playwright() as pw:
     page.evaluate("BS('9').start=Date.now()-1000*60*60*5;save('9')")
     page.goto(SITE + '/#/review')
     expect(page.locator('.pg')).to_contain_text('Review and analyse')
+    # Time up submits the exam, so it cannot be reopened for answering after review unlocks.
+    assert page.evaluate("BS('9').done") is True
+    page.goto(SITE + '/#/9/q/1')
+    expect(page).to_have_url(SITE + '/#/9/results')
+    expect(page.locator('.feature').first).to_contain_text('submitted automatically')
+    # Sitting an exam when the timer reaches zero: the paper is submitted and the page leaves the exam,
+    # closing an open Python input box, and the answer typed before time up is kept.
+    page.goto(SITE + '/#/11'); page.click('[data-mode=exam]')
+    expect(page).to_have_url(SITE + '/#/11/q/1')
+    page.evaluate("BS('11').ans['1.0']='SELECT name FROM t';save('11');window.askEnd='open';pyAsk('Name?').then(function(){askEnd='answered'},function(){askEnd='stopped'});BS('11').start=Date.now()-paperDuration(CUR.b)*1000+1500")
+    expect(page.locator('.pyask')).to_have_count(1)
+    expect(page).to_have_url(SITE + '/#/11/results', timeout=8000)
+    expect(page.locator('.pyask')).to_have_count(0)
+    assert page.evaluate("askEnd") == 'stopped'
+    assert page.evaluate("BS('11').done && BS('11').ans['1.0']==='SELECT name FROM t' && !document.body.classList.contains('pyasking')")
+    page.goto(SITE + '/#/11/review/1')
+    assert page.locator('textarea[data-k="1.0"]:not([readonly])').count() == 0, 'auto-submitted answers stayed editable'
     assert not errors, errors
     browser.close()
 print('PRACTICE UI OK: review hub opens review directly, per-question practice marking with immediate feedback, class panel in practice, exam lock and unlock')

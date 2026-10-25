@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{}};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -242,17 +242,86 @@ function cvLoadProg(id,isSystem){
     CV.progRun[id]={err:e.message};cvDraw();
   });
 }
+/* ---------- Admin remark ----------
+   Marking runs in the browser of whoever asks for it, so a paper that was submitted while signed out, or closed before marking
+   finished, can stay unmarked. An admin can mark it from the student's saved answers: this browser builds exactly the request the
+   student's own browser would send (aiPayload and aiStamp in ai.js), marks it with the admin's own sign-in, then asks the server to
+   save the results into the student's paper (remark_save, or admin_remark_save for any account). It uses the admin's own daily
+   marking allowance. Must run inside cvWithU, which puts the student's papers in S.u. */
+function cvRmKey(id,bid){return id+'|'+bid}
+/* Answered AI-marked parts of one submitted paper. 'missing': no usable mark yet (none, stale, provisional or needs review) and no
+   mark set by the student. 'all': every one. 'one': just the part named in "only". */
+function cvRmList(b,mode,only){
+  var bs=BS(b.id),out=[];
+  b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){
+    var k=(qi+1)+'.'+i,a=bs.ans[k];
+    if(AUTO[it.t]||!isAns(it,a)||(only&&k!==only))return;
+    if(mode==='missing'){var rec=aiRecord(b,qi+1,i);if(bs.self[k]!=null||(rec&&rec.status!=='needs_review'&&rec.status!=='provisional'))return}
+    out.push({n:qi+1,i:i,k:k,it:it,ans:a});
+  })});
+  return out;
+}
+function cvRmBtn(id,isSystem,bid,mode,k,label,primary,off){
+  return '<button class="nb sm'+(primary?'':' ol')+'" data-cv="remark" data-mode="'+mode+'" data-id="'+esc(id)+'" data-sys="'+(isSystem?'1':'0')+'" data-b="'+esc(bid)+'"'+(k?' data-k="'+esc(k)+'"':'')+' type="button"'+(off?' disabled':'')+'>'+label+'</button>';
+}
+function cvRmSummary(run,name){
+  var t=[];
+  if(run.saved)t.push(run.saved+' answer'+(run.saved===1?'':'s')+' marked and saved to '+name+'’s paper.');
+  if(run.failed)t.push(run.failed+' did not finish'+(run.err?': '+run.err:'.'));
+  return t.join(' ')||'Nothing needed marking.';
+}
+function cvRemark(id,isSystem,bid,mode,only){
+  var d=CV.prog[id],b=BANKS.filter(function(x){return x.id===bid})[0],key=cvRmKey(id,bid),old=CV.rm[key];
+  if(!d||!b||!d.u||!d.u[bid]||!d.u[bid].done||!S.tok||(old&&old.running)||typeof aiDispatch!=='function')return;
+  if(mode==='all'&&!confirm('Mark every written, code and diagram answer in this paper again with AI? This uses your daily AI marking allowance and replaces the AI marks saved for this student.'))return;
+  var doneAt=d.u[bid].doneAt||0,name=d.name||'the student',tasks=cvWithU(d.u,function(){return cvRmList(b,mode,only)});
+  var run={running:true,total:tasks.length,done:0,saved:0,failed:0,err:'',msg:'',ok:false,saving:Promise.resolve()};
+  CV.rm[key]=run;
+  if(!tasks.length){run.running=false;run.msg=cvRmSummary(run,name);run.ok=true;cvDraw();return}
+  var pending={},idx=0,fatal=null;
+  function flush(){
+    var keys=Object.keys(pending);if(!keys.length)return run.saving;
+    var batch={};keys.forEach(function(k){batch[k]=pending[k];delete pending[k]});
+    run.saving=run.saving.then(function(){
+      return cvApi({action:isSystem?'admin_remark_save':'remark_save',memberId:id,bankId:bid,doneAt:doneAt,marks:batch}).then(function(){
+        var paper=CV.prog[id]&&CV.prog[id].u&&CV.prog[id].u[bid];
+        if(paper){paper.ai=paper.ai||{};paper.aiErr=paper.aiErr||{};keys.forEach(function(k){paper.ai[k]=batch[k];delete paper.aiErr[k]})}
+        run.saved+=keys.length;
+      }).catch(function(e){run.failed+=keys.length;run.err=e.message});
+    });
+    return run.saving;
+  }
+  function next(){
+    if(idx>=tasks.length||fatal)return Promise.resolve();
+    var t=tasks[idx++],stamp=aiStamp(b,t.n,t.i,t.ans),payload=aiPayload(b,t.n,t.i,t.ans);
+    var prepared=t.it.t==='dr'&&typeof xdPNG==='function'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
+    return prepared.then(function(p){
+      return fatal?null:aiDispatch(p,S.tok,function(){return !fatal&&CV.rm[key]===run},null).catch(function(e){if(e.fatal)fatal=e;throw e});
+    }).then(function(r){
+      if(!r)return;
+      var tmp={ai:{},aiErr:{}};aiStore(tmp,t.k,t.it,stamp,r);pending[t.k]=tmp.ai[t.k];
+      if(Object.keys(pending).length>=4)return flush();
+    }).catch(function(e){run.failed++;run.err=e.message}).then(function(){run.done++;cvDraw();return next()});
+  }
+  var workers=[];for(var w=0;w<Math.min(4,tasks.length);w++)workers.push(next());
+  Promise.all(workers).then(flush).then(function(){return run.saving}).then(function(){
+    if(fatal)run.failed+=tasks.length-idx;
+    run.running=false;run.ok=!run.failed;run.msg=cvRmSummary(run,name);cvDraw();
+  });
+  cvDraw();
+}
+document.addEventListener('toggle',function(ev){var el=ev.target,k=el&&el.getAttribute&&el.getAttribute('data-cvd');if(k)CV.dopen[k]=!!el.open},true);
 function cvProgHTML(id,isSystem){
   var run=CV.progRun[id],d=CV.prog[id];
   if(run&&run.loading&&!d)return '<p class="mut">Loading progress report...</p>';
   if(run&&run.err&&!d)return '<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
   if(!d)return '<p class="mut">Loading progress report...</p>';
   return cvWithU(d.u,function(uMap){
-    var banks=cvBanks(),paperRows=[],respBlocks=[],doneCount=0,progCount=0,totQ=0,totParts=0,totWords=0,lastTs=d.ts||0;
+    var banks=cvBanks(),paperRows=[],respBlocks=[],doneCount=0,progCount=0,totQ=0,totParts=0,totWords=0,lastTs=d.ts||0,unmarked=0;
     banks.forEach(function(b){
       var p=uMap[b.id];if(!p)return;
       var ansQ=0,ansParts=0,allParts=0,pWords=0,partRows=[];
-      var t=totals(b);
+      var t=totals(b),rmNow=CV.rm[cvRmKey(id,b.id)];
       b.qs.forEach(function(q,qi){
         var qn=qi+1;
         if(qAnswered(b,qn))ansQ++;
@@ -271,9 +340,10 @@ function cvProgHTML(id,isSystem){
             var pillCls=!s.set||s.src==='provisional'?'pend':s.g===s.m?'ok':'bad';
             var pillTxt=s.set?(s.src==='provisional'?'Provisional '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
             var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
+            var rmOne=p.done&&ans&&!AUTO[it.t]&&S.tok?'<div class="cv-rm">'+cvRmBtn(id,isSystem,b.id,'one',k,'Remark',false,rmNow&&rmNow.running)+'</div>':'';
             partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+
               '<td>'+cvFormatAns(it,a)+aiSum+'</td>'+
-              '<td><span class="pill '+pillCls+'">'+pillTxt+'</span></td>'+
+              '<td><span class="pill '+pillCls+'">'+pillTxt+'</span>'+rmOne+'</td>'+
               '<td class="ra"><a class="nb sm ol" href="#/class/'+esc(b.id)+'/'+qn+'">Class Q'+qn+'</a> <a class="nb sm ol" href="#/'+esc(b.id)+'/review/'+qn+'">Review Q'+qn+'</a></td></tr>');
           }
         });
@@ -292,14 +362,22 @@ function cvProgHTML(id,isSystem){
       if(p.done&&p.doneAt)meta.push('Submitted '+fmtD(p.doneAt));
       else if(p.upd)meta.push('Saved '+fmtD(p.upd));
       var markStr=p.done||t.markedM>0?('<b>'+t.T+' / '+t.markedM+'</b>'+(t.markedM?' <span class="mut">('+Math.round(100*t.T/t.markedM)+'%)</span>':'')+(t.P?'<div class="mut">'+t.P+' unscored</div>':'')):'<span class="mut">Not marked yet</span>';
-      var targetQ=p.cur||1;
+      var targetQ=p.cur||1,rmCell='';
+      if(p.done&&S.tok){
+        var miss=cvRmList(b,'missing').length,anyAI=cvRmList(b,'all').length;
+        unmarked+=miss;
+        if(rmNow&&rmNow.running)rmCell='<div class="mut">Marking '+rmNow.done+' of '+rmNow.total+'...</div>';
+        else if(miss||anyAI)rmCell='<div class="cv-rm">'+(miss?cvRmBtn(id,isSystem,b.id,'missing','','Mark '+miss+' unmarked',true):'')+(anyAI?cvRmBtn(id,isSystem,b.id,'all','','Re-mark paper',false):'')+'</div>';
+        if(rmNow&&rmNow.msg)rmCell+='<div class="acmsg'+(rmNow.ok?' ok':'')+'" role="status">'+esc(rmNow.msg)+'</div>';
+      }
       paperRows.push('<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub||'')+' &middot; '+(p.mode==='practice'?'Practice mode':'Exam mode')+'</div></td>'+
         '<td>'+stBadge+(meta.length?'<div class="mut">'+esc(meta.join(' · '))+'</div>':'')+'</td>'+
         '<td><b>'+ansQ+' / '+b.qs.length+'</b> questions<div class="mut">'+ansParts+' / '+allParts+' parts'+(pWords?' &middot; '+pWords+' words':'')+'</div></td>'+
-        '<td>'+markStr+'</td>'+
+        '<td>'+markStr+rmCell+'</td>'+
         '<td class="ra"><a class="nb sm ol" href="#/class/'+esc(b.id)+'/'+targetQ+'">Class paper</a> <a class="nb sm ol" href="#/'+esc(b.id)+'/review/'+targetQ+'">Review paper</a></td></tr>');
       if(partRows.length){
-        respBlocks.push('<details class="xdd"><summary>'+esc(b.name)+' &mdash; responses and marks ('+ansParts+' answered)</summary>'+
+        var dk=cvRmKey(id,b.id);
+        respBlocks.push('<details class="xdd" data-cvd="'+esc(dk)+'"'+(CV.dopen[dk]?' open':'')+'><summary>'+esc(b.name)+' &mdash; responses and marks ('+ansParts+' answered)</summary>'+
           '<div class="tw"><table class="res plist"><tr><th>Part</th><th>Response</th><th>Mark</th><th></th></tr>'+partRows.join('')+'</table></div></details>');
       }
     });
@@ -309,6 +387,7 @@ function cvProgHTML(id,isSystem){
     sumParts.push(doneCount+' submitted');
     sumParts.push(progCount+' in progress');
     sumParts.push(totQ+' question'+(totQ===1?'':'s')+' answered ('+totParts+' part'+(totParts===1?'':'s')+(totWords?', '+totWords+' words':'')+')');
+    if(unmarked)sumParts.push(unmarked+' unmarked answer'+(unmarked===1?'':'s'));
     if(hist.length)sumParts.push(hist.length+' earlier attempt'+(hist.length===1?'':'s'));
     if(lastTs)sumParts.push('Last active '+fmtD(lastTs));
     var out='<div class="cv-prog-sum"><span><b>Progress report:</b> '+esc(sumParts.join(' · '))+'</span>'+
@@ -473,6 +552,7 @@ document.addEventListener('click',function(ev){
   var a=el.getAttribute('data-cv');
   if(a==='prog'){var pid=el.getAttribute('data-id');CV.pview=CV.pview===pid?'':pid;if(CV.pview&&!CV.prog[pid])cvLoadProg(pid,false);else cvDraw();return}
   if(a==='aprog'){var apid=el.getAttribute('data-id');CV.apview=CV.apview===apid?'':apid;CV.aedit='';CV.adel='';CV.amsg='';if(CV.apview&&!CV.prog[apid])cvLoadProg(apid,true);else cvDraw();return}
+  if(a==='remark'){cvRemark(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1',el.getAttribute('data-b'),el.getAttribute('data-mode')||'one',el.getAttribute('data-k')||'');return}
   if(a==='progrefresh'){cvLoadProg(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1');return}
   if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.apview='';CV.adel='';CV.amsg='';cvDraw();return}
   if(a==='aname'){cvAdm({action:'admin_name',memberId:el.getAttribute('data-id'),name:(document.getElementById('cvanm')||{}).value||''});return}

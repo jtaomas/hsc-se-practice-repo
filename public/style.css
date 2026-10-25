@@ -1063,3 +1063,6 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .cv-mark.ok{background:#e6f4ea;color:#14532d}
 .cv-mark.bad{background:#fdeef1;color:#8a0f2b}
 .cv-mark.none{background:#f1f5f9;color:#64748b;font-weight:500}
+/* Admin remark buttons in the class progress report */
+.cv-rm{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.cv-prog td .acmsg{min-height:0;margin:6px 0 0;font-size:.92em}

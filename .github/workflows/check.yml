@@ -22,7 +22,9 @@ jobs:
       - name: Real participant display
         run: node tests/participants_test.js
       - name: Class sharing and analysis
-        run: node tests/class_test.js
+        run: |
+          node tests/class_test.js
+          node tests/class_remark_client_test.js
       - name: Marking evidence, blind assessment and API regressions (no network)
         run: |
           node tests/assessment_audit_test.js

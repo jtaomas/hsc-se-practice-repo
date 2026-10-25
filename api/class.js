@@ -1,6 +1,7 @@
 'use strict';
 // Class sharing. Members of the class see each other's submitted answers by name, automatically.
 // POST { action: 'status' | 'join' | 'rename' | 'overview' | 'answers' | 'analyse', ... } with a Bearer session token.
+// Admin only: 'progress', 'remark_save' (class members) and 'admin_*' incl. 'admin_remark_save' (any account).
 const { verifySession } = require('./auth');
 const classStore = require('../server/class-store');
 const synthesis = require('../server/class-synthesis');
@@ -26,6 +27,13 @@ function createHandler(deps) {
   const isClassAdmin = sess => !!sess && !!sess.email && classAdminList().includes(String(sess.email).toLowerCase());
   const isAdmin = isSystemAdmin;
   const bankFor = id => banksOf().find(b => b.id === id && !b.hidden && !b.archived);
+
+  // Admin remark: the admin's browser marked a student's answers again; this validates and saves the results into the student's paper.
+  async function saveRemarks(id, p) {
+    const bank = typeof p.bankId === 'string' && BANK_ID.test(p.bankId) ? bankFor(p.bankId) : null;
+    if (!bank) throw classStore.error(400, 'invalid_bank', 'Choose an available practice paper.');
+    return store.saveMarks(id, bank.id, p.doneAt, classStore.cleanMarks(bank, p.marks, clock()));
+  }
 
   const sharedPaper = paper => !!paper && (paper.done === true || paper.mode === 'practice');
   // A member who is sitting an exam right now cannot look at the class. Past three hours the exam is treated as abandoned.
@@ -98,6 +106,7 @@ function createHandler(deps) {
         if (p.action === 'admin_users') return res.status(200).json({ users: await store.adminUsers() });
         const id = String(p.memberId || '');
         if (p.action === 'admin_progress') return res.status(200).json(await store.adminProgress(id));
+        if (p.action === 'admin_remark_save') { await store.adminUser(id); return res.status(200).json(Object.assign({ ok: true }, await saveRemarks(id, p))); }
         if (p.action === 'admin_name') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetName(id, p.name)));
         if (p.action === 'admin_photo') {
           const photo = p.photo;
@@ -128,6 +137,12 @@ function createHandler(deps) {
       if (p.action === 'progress') {
         if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can view member progress reports.');
         return res.status(200).json(await store.memberProgress(String(p.memberId || '')));
+      }
+      if (p.action === 'remark_save') {
+        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can mark other students\' answers.');
+        const memberId = String(p.memberId || '');
+        if (!(await store.getMember(memberId))) return fail(404, 'no_member', 'That person is not in the class.');
+        return res.status(200).json(Object.assign({ ok: true }, await saveRemarks(memberId, p)));
       }
       if (p.action === 'setname') {
         if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s names.');

@@ -190,5 +190,93 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await asTok('admin', { action: 'admin_delete', memberId: id(7), confirmEmail: 'KID@student.det.nsw.edu.au' })).status, 200);
   assert.equal((await asTok('admin', { action: 'admin_users' })).body.users.some(x => x.id === id(7)), false);
   assert.equal(m.map.has('progress/' + id(7) + '.json'), false);
+
+  // Admin remark: an admin's browser marks a student's answers again; the results are saved into the student's own paper.
+  const part = bank.qs[16].it[0], max = part.m;
+  const rec = (g, extra) => Object.assign({ status: 'marked', g, stamp: '{"version":"v","answer":"a"}', fb: { summary: 'Fine.', strengths: ['Named agile.'], improve: ['Add a judgement.'], advice: [], criteria: [{ id: 'c1', assessment: 'met' }], losses: null, quality: [] }, audit: { requestedModel: 'm' } }, extra);
+  const progressOf = who => JSON.parse(m.map.get('progress/' + id(who) + '.json').body);
+  const seed = async (who, extra) => m.put('progress/' + id(who) + '.json', { ts: 5, _saveDay: '2026-10-25', _saveCount: 3, _revisions: { 8: 'rev-old', 9: 'rev-nine' },
+    u: { 8: Object.assign({ done: true, doneAt: 1000, mode: 'exam', ans: { '17.0': '<p>' + text1 + '</p>' }, self: { '1.0': 1 }, ai: { '16.0': { status: 'marked', g: 1, stamp: 's' } }, aiErr: { '17.0': 'AI marking failed' } }, extra), 9: { done: false, ans: {} } }, hist: [{ id: '8', at: 1 }] });
+  const remark = (tok, body, who = 2, handler = h) => rest(handler, Object.assign({ action: 'remark_save', memberId: id(who), bankId: '8', doneAt: 1000, marks: { '17.0': rec(max - 1) } }, body), tok);
+  await seed(2);
+  assert.equal((await remark('bad', {})).status, 401);
+  assert.equal((await remark('ok', {})).body.code, 'not_admin', 'a student cannot mark another student');
+  assert.equal((await remark('ok', { action: 'admin_remark_save' })).body.code, 'not_admin');
+  assert.equal(progressOf(2).u['8'].ai['17.0'], undefined, 'refused requests change nothing');
+  assert.equal((await remark('admin', { bankId: '1' })).body.code, 'invalid_bank', 'archived papers cannot be marked this way');
+  assert.equal((await remark('admin', { bankId: 'x' })).body.code, 'invalid_bank');
+  // Bad input is refused whole: nothing is written when any part is wrong.
+  for (const [what, marks] of [
+    ['a closed question part', { '1.0': rec(1) }],
+    ['a part that does not exist', { '17.9': rec(1), '99.0': rec(1) }],
+    ['a key that is not a part', { 'constructor': rec(1) }],
+    ['a mark above the maximum', { '17.0': rec(max + 1) }],
+    ['a negative mark', { '17.0': rec(-1) }],
+    ['a half mark', { '17.0': rec(0.5) }],
+    ['a needs-review result with a mark', { '17.0': rec(1, { status: 'needs_review' }) }],
+    ['an unknown status', { '17.0': rec(1, { status: 'done' }) }],
+    ['no answer reference', { '17.0': rec(1, { stamp: '' }) }],
+    ['feedback that is not an object', { '17.0': rec(1, { fb: 'text' }) }],
+    ['a strengths list of non-text', { '17.0': rec(1, { fb: { summary: 's', strengths: [1], improve: [], advice: [], criteria: [], losses: null, quality: [] } }) }],
+    ['no audit', { '17.0': rec(1, { audit: null }) }],
+    ['an empty set', {}],
+    ['a list instead of an object', [rec(1)]]]) {
+    assert.equal((await remark('admin', { marks })).body.code, 'bad_marks', what);
+  }
+  assert.equal(progressOf(2).u['8'].ai['17.0'], undefined);
+  // The attempt must match, and it must be submitted.
+  assert.equal((await remark('admin', { doneAt: 2000 })).body.code, 'paper_changed');
+  await seed(2, { done: false });
+  assert.equal((await remark('admin', {})).body.code, 'not_submitted');
+  await m.put('progress/' + id(2) + '.json', { u: { 9: { done: false, ans: {} } } });
+  assert.equal((await remark('admin', {})).body.code, 'no_paper', 'the student has no copy of that paper');
+  await m.put('progress/' + id(2) + '.json', {});
+  assert.equal((await remark('admin', {})).body.code, 'no_paper', 'the student has no saved progress at all');
+  await seed(2);
+  // A system admin saves into a class member's paper. Only the marked part, its error flag and the paper revision change.
+  const before = progressOf(2);
+  const ok = await remark('admin', { marks: { '17.0': rec(max - 1, { extra: 'ignored', fb: { summary: 'Fine.', strengths: ['Named agile.'], improve: [], advice: [], criteria: [], losses: null, quality: [], extra: 'ignored' } }) } });
+  assert.equal(ok.status, 200); assert.deepEqual(ok.body, { ok: true, saved: ['17.0'] });
+  const after = progressOf(2), paper8 = after.u['8'];
+  assert.equal(paper8.ai['17.0'].g, max - 1); assert.equal(paper8.ai['17.0'].status, 'marked');
+  assert.equal(paper8.ai['17.0'].stamp, '{"version":"v","answer":"a"}');
+  assert.equal(paper8.ai['17.0'].fb.summary, 'Fine.');
+  assert.ok(!('extra' in paper8.ai['17.0']) && !('extra' in paper8.ai['17.0'].fb), 'only known fields are kept');
+  assert.ok(paper8.ai['17.0'].ts > 0);
+  assert.deepEqual(paper8.ai['16.0'], before.u['8'].ai['16.0'], 'other marks are untouched');
+  assert.equal(paper8.aiErr['17.0'], undefined, 'the failed-marking note is cleared');
+  assert.deepEqual(paper8.ans, before.u['8'].ans); assert.deepEqual(paper8.self, before.u['8'].self);
+  assert.equal(paper8.done, true); assert.equal(paper8.doneAt, 1000);
+  assert.deepEqual(after.u['9'], before.u['9'], 'other papers are untouched');
+  assert.notEqual(after._revisions['8'], 'rev-old', 'the paper has a new revision, so the student\'s browser takes the marks on its next sync');
+  assert.equal(after._revisions['9'], 'rev-nine');
+  assert.equal(after._saveCount, 3); assert.equal(after.ts, 5); assert.deepEqual(after.hist, before.hist);
+  // A result that needs review and a provisional one are saved as they are.
+  assert.equal((await remark('admin', { marks: { '17.0': rec(null, { status: 'needs_review' }) } })).status, 200);
+  assert.equal(progressOf(2).u['8'].ai['17.0'].g, null);
+  assert.equal((await remark('admin', { marks: { '17.0': rec(0, { status: 'provisional' }) } })).status, 200);
+  assert.equal(progressOf(2).u['8'].ai['17.0'].status, 'provisional');
+  // Several parts at once, including a code or SQL part when the paper has one.
+  const multi = {}; bank.qs.forEach((q, qi) => q.it.forEach((it, pi) => { if (['tx', 'py', 'ps', 'sq', 'dr', 'ft'].includes(it.t)) multi[(qi + 1) + '.' + pi] = rec(0); }));
+  assert.ok(Object.keys(multi).length > 3);
+  assert.equal((await remark('admin', { marks: multi })).body.saved.length, Object.keys(multi).length);
+  assert.equal(Object.keys(progressOf(2).u['8'].ai).length, Object.keys(multi).length + 1);
+  // Class admins: class members only. System admins use admin_remark_save for any account, including people outside the class.
+  await m.put('users/' + id(8) + '.json', { email: 'outside@student.det.nsw.edu.au', created: 1 });
+  await seed(8);
+  assert.equal((await remark('admin', {}, 8)).body.code, 'no_member', 'the class action is for class members');
+  assert.equal((await remark('admin', { action: 'admin_remark_save' }, 8)).status, 200);
+  assert.equal(progressOf(8).u['8'].ai['17.0'].g, max - 1);
+  assert.equal((await remark('admin', { action: 'admin_remark_save' }, 9)).body.code, 'no_user', 'an account that does not exist');
+  await seed(2);
+  assert.equal((await remark('cadmin', {}, 2, hSplit)).status, 200, 'a class admin marks a class member');
+  assert.equal(progressOf(2).u['8'].ai['17.0'].g, max - 1);
+  assert.equal((await remark('cadmin', {}, 8, hSplit)).body.code, 'no_member', 'a class admin cannot mark someone outside the class');
+  assert.equal((await remark('cadmin', { action: 'admin_remark_save' }, 8, hSplit)).body.code, 'not_admin', 'admin_remark_save is for system admins only');
+  // Two saves at the same moment both land: the update retries against the newest copy of the record.
+  const otherKey = Object.keys(multi).find(k => k !== '17.0');
+  await seed(2);
+  await Promise.all([store.saveMarks(id(2), '8', 1000, { '17.0': rec(1) }), store.saveMarks(id(2), '8', 1000, { [otherKey]: rec(0) })]);
+  assert.deepEqual(Object.keys(progressOf(2).u['8'].ai).sort(), ['16.0', '17.0', otherKey].sort());
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -22,6 +22,40 @@ function cleanName(value) {
 }
 const normaliseCode = value => String(value == null ? '' : value).trim().toLowerCase().replace(/\s+/g, '');
 
+// ---- Admin remark: AI marking results that an admin's browser produced for a student's answers. ----
+// The browser sends the same record the student's own browser would keep in paper.ai[<question>.<part>]. Nothing is trusted
+// beyond its shape: the part must be one the AI marks, the mark must fit the part, and only known fields are kept.
+const MARK_KEY = /^[1-9]\d?\.\d{1,2}$/;
+const AI_PART_TYPES = new Set(['tx', 'ft', 'py', 'ps', 'sq', 'dr']);
+const MARK_STATUS = new Set(['marked', 'provisional', 'needs_review']);
+const MAX_PROGRESS = 3500000;
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const strList = (v, n, max) => Array.isArray(v) && v.length <= n && v.every(s => typeof s === 'string' && s.length <= max);
+function cleanMarks(bank, input, ts) {
+  const bad = message => error(400, 'bad_marks', message);
+  if (!isObj(input)) throw bad('Send the marks to save.');
+  const keys = Object.keys(input);
+  if (!keys.length || keys.length > 60) throw bad('Send between 1 and 60 marks.');
+  const out = {};
+  for (const k of keys) {
+    const at = MARK_KEY.test(k) ? k.split('.') : null;
+    const q = at && bank.qs[+at[0] - 1];
+    const it = q && q.it[+at[1]];
+    if (!it || !AI_PART_TYPES.has(it.t)) throw bad('Part ' + k + ' is not marked by AI.');
+    const r = input[k];
+    if (!isObj(r) || !MARK_STATUS.has(r.status)) throw bad('Part ' + k + ' has no valid marking result.');
+    if (r.status === 'needs_review' ? r.g !== null : !(Number.isInteger(r.g) && r.g >= 0 && r.g <= it.m)) throw bad('Part ' + k + ' has a mark outside 0 to ' + it.m + '.');
+    if (typeof r.stamp !== 'string' || !r.stamp || r.stamp.length > 400000) throw bad('Part ' + k + ' is missing its answer reference.');
+    const fb = r.fb;
+    if (!isObj(fb) || typeof fb.summary !== 'string' || fb.summary.length > 2000 || !strList(fb.strengths, 12, 600) || !strList(fb.improve, 12, 600) || !strList(fb.advice, 12, 600) ||
+        !Array.isArray(fb.criteria) || fb.criteria.length > 80 || !Array.isArray(fb.quality) || fb.quality.length > 40 || !(fb.losses === null || isObj(fb.losses)) || !isObj(r.audit)) throw bad('Part ' + k + ' has feedback in the wrong shape.');
+    const rec = { status: r.status, g: r.g, stamp: r.stamp, fb: { summary: fb.summary, strengths: fb.strengths, improve: fb.improve, advice: fb.advice, criteria: fb.criteria, losses: fb.losses, quality: fb.quality }, audit: r.audit, ts };
+    if (Buffer.byteLength(JSON.stringify(rec.fb)) + Buffer.byteLength(JSON.stringify(rec.audit)) > 120000) throw bad('Part ' + k + ' has too much feedback to save.');
+    out[k] = rec;
+  }
+  return out;
+}
+
 function createClassStore(options) {
   options = options || {};
   const provider = options.blob || (() => require('./d1-blob'));
@@ -240,6 +274,26 @@ function createClassStore(options) {
       hist: Array.isArray(d.hist) ? d.hist : []
     };
   }
+  // Admin action: write AI marking results into a student's submitted paper. The caller has already checked who may do this.
+  // doneAt ties the results to the attempt the admin was looking at, so a restarted or restored paper is never marked by mistake.
+  // The paper gets a new revision, so the student's browser takes the marks on its next sync (or asks them to choose, if they edited it too).
+  async function saveMarks(id, bankId, doneAt, marks) {
+    if (!ID.test(id)) throw error(400, 'bad_member', 'Choose a student.');
+    await update('progress/' + id + '.json', current => {
+      const paper = current && current.u && current.u[bankId];
+      if (!isObj(paper)) throw error(404, 'no_paper', 'This student has no saved copy of that paper.');
+      if (paper.done !== true) throw error(409, 'not_submitted', 'Only a submitted paper can be marked this way.');
+      if ((Number(paper.doneAt) || 0) !== (Number(doneAt) || 0)) throw error(409, 'paper_changed', 'This paper changed since you opened it. Press Refresh and try again.');
+      const next = Object.assign({}, paper, { ai: Object.assign({}, isObj(paper.ai) ? paper.ai : {}), aiErr: Object.assign({}, isObj(paper.aiErr) ? paper.aiErr : {}) });
+      Object.keys(marks).forEach(k => { next.ai[k] = marks[k]; delete next.aiErr[k]; });
+      const revisions = Object.assign({}, isObj(current._revisions) ? current._revisions : {});
+      revisions[bankId] = crypto.randomBytes(16).toString('hex');
+      const data = Object.assign({}, current, { u: Object.assign({}, current.u, { [bankId]: next }), _revisions: revisions });
+      if (Buffer.byteLength(JSON.stringify(data)) > MAX_PROGRESS) throw error(413, 'too_large', 'This student\'s saved progress is too large to add marks to.');
+      return data;
+    });
+    return { saved: Object.keys(marks) };
+  }
   async function adminDelete(id) {
     await adminUser(id);
     const store = await provider();
@@ -248,7 +302,7 @@ function createClassStore(options) {
     return { deleted: true };
   }
 
-  return { configured, setPhoto, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  return { configured, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
-module.exports = { createClassStore, cleanName, normaliseCode, QUOTA, MAX_MEMBERS, error };
+module.exports = { createClassStore, cleanName, cleanMarks, normaliseCode, QUOTA, MAX_MEMBERS, error };

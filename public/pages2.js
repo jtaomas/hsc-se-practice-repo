@@ -27,7 +27,7 @@ function paperCard(b,hiddenView){
   if(k==='done'){
     var t=totals(b),pct=t.markedM?Math.round(100*t.T/t.markedM):null;
     run=aiRunCurrent(b,AIRUN[b.id])?AIRUN[b.id]:null;
-    h+='<div class="pc-score"><b>'+t.T+' / '+t.markedM+'</b> <span class="mut">'+(t.markedM?'('+pct+'% of assessed marks)':'No marks assessed')+(t.P?' · '+t.P+' marks unscored':'')+'</span> <span class="pc-date">Submitted '+fmtD(u.doneAt)+'</span></div>'+
+    h+='<div class="pc-score"><b>'+t.T+' / '+t.markedM+'</b> <span class="mut">'+(t.markedM?'('+pct+'% of assessed marks)':'No marks assessed')+(t.P?' Â· '+t.P+' marks unscored':'')+'</span> <span class="pc-date">Submitted '+fmtD(u.doneAt)+'</span></div>'+
       (t.markedM?'<div class="pc-bar" aria-hidden="true"><i style="width:'+pct+'%"></i></div>':'')+
       (t.provisionalParts?'<div class="note">'+provisionalMarksText(t)+'</div>':'')+
       (run?paperRunBox(b,run):'<div class="pc-ai">'+aiState(b)+'</div>');
@@ -63,7 +63,7 @@ function papersPage(){
     stripHTML+filters+
     '<div class="plist">'+(rows||'<p class="mut">'+(PF.hid?'No hidden papers.':'No papers match this filter.')+'</p>')+'</div>'+
     (PF.hid?'<p class="mut">Hidden papers stay on this browser only. Use Show in list to bring one back.</p>':'')+'</div>'+
-    (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' · '+h.pending+' marks unscored':'')+(h.provisionalParts?'<br><span class="note">'+provisionalMarksText(h)+'</span>':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
+    (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' Â· '+h.pending+' marks unscored':'')+(h.provisionalParts?'<br><span class="note">'+provisionalMarksText(h)+'</span>':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
 }
 /* What's wrong comes first, then your answer, then the sample answer. */
 function ansPreview(m){
@@ -109,8 +109,22 @@ function ansPreview(m){
 /* My mistakes: a vertical list of every part that lost marks (left) and the selected one in the exam's own style (right). */
 function mkKey(m){return m.b.id+'.'+m.n+'.'+m.i}
 function mkFiltered(){
-  return mistakeList().filter(function(m){
+  var raw=mistakeList().filter(function(m){
     return (!MF.bank||m.b.id===MF.bank)&&(!MF.topic||m.q.tp===MF.topic)&&(!MF.kind||itemClass(m.it)===MF.kind)});
+  var byBank={},bankOrder=[];
+  raw.forEach(function(m){
+    if(!byBank[m.b.id]){byBank[m.b.id]={closed:[],open:[]};bankOrder.push(m.b.id)}
+    if(itemClass(m.it)==='closed')byBank[m.b.id].closed.push(m);
+    else byBank[m.b.id].open.push(m);
+  });
+  var out=[];
+  bankOrder.forEach(function(bid){
+    var grp=byBank[bid];
+    grp.closed.sort(function(a,b){return (a.n-b.n)||(a.i-b.i)});
+    grp.open.sort(function(a,b){return (a.n-b.n)||(a.i-b.i)});
+    out=out.concat(grp.closed,grp.open);
+  });
+  return out;
 }
 function mkSelected(list){
   var hit=list.filter(function(m){return mkKey(m)===MF.sel})[0];
@@ -131,15 +145,40 @@ function mistakesPage(){
   var filters='<div class="mk-filter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden&&!b.archived}).map(function(b){return [b.id,b.name]})))+
     sel('topic',MF.topic,[['','All topics']].concat(mkTopics().map(function(t){return [t,t]})))+
     sel('kind',MF.kind,[['','All question types'],['closed','Multiple choice, dropdown and match'],['written','Written'],['code','Python, pseudocode and SQL'],['diagram','Diagram']])+'</div>';
-  // One heading per paper, one sub-heading per run of the same question type and topic, and one line per part
-  // that shows what the part asks, so the type and topic are not repeated on every row.
-  var groups='',last='',lastSub='';
+  // Group by paper, then by section: Multiple choice at the top, Written & code underneath.
+  // Topics are neatly integrated inside each question box to keep the layout clean and compact.
+  var byBank={},bankOrder=[];
   list.forEach(function(m){
-    if(m.b.id!==last){last=m.b.id;lastSub='';groups+='<div class="mk-grp"><span>'+esc(m.b.name)+'</span><span class="mk-n">'+list.filter(function(x){return x.b.id===m.b.id}).length+'</span></div>'}
-    var sub=mkTypeName(m.it)+'|'+m.q.tp;
-    if(sub!==lastSub){lastSub=sub;groups+='<div class="mk-sub"><b>'+esc(mkTypeName(m.it))+'</b><span>'+esc(m.q.tp)+'</span></div>'}
+    if(!byBank[m.b.id]){byBank[m.b.id]={b:m.b,closed:[],open:[]};bankOrder.push(m.b.id)}
+    if(itemClass(m.it)==='closed')byBank[m.b.id].closed.push(m);
+    else byBank[m.b.id].open.push(m);
+  });
+  var groups='';
+  function renderItem(m){
     var c=partCls(m.b,m.n,m.i)||'bad',fixedNow=c==='rtok',ask=mkAsk(m.it);
-    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta" title="'+esc(ask)+'">'+esc(ask)+'</span><span class="mk-sc"'+(fixedNow?' title="Exam mark '+m.s.g+' / '+m.s.m+', fixed by a retry"':'')+'>'+(fixedNow?m.s.m:m.s.g)+' / '+m.s.m+'</span></a>';
+    var qLab='Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'');
+    var tp=m.q.tp||'';
+    return '<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'>'+
+      '<span class="mk-q">'+qLab+'</span>'+
+      '<div class="mk-body">'+
+        '<span class="mk-meta" title="'+esc(ask)+'">'+esc(ask)+'</span>'+
+        '<span class="mk-tp" title="'+esc(tp)+'">'+esc(tp)+'</span>'+
+      '</div>'+
+      '<span class="mk-sc"'+(fixedNow?' title="Exam mark '+m.s.g+' / '+m.s.m+', fixed by a retry"':'')+'>'+(fixedNow?m.s.m:m.s.g)+' / '+m.s.m+'</span>'+
+    '</a>';
+  }
+  bankOrder.forEach(function(bid){
+    var grp=byBank[bid];
+    var total=grp.closed.length+grp.open.length;
+    groups+='<div class="mk-grp"><span>'+esc(grp.b.name)+'</span><span class="mk-n">'+total+'</span></div>';
+    if(grp.closed.length){
+      groups+='<div class="mk-sub mk-sec"><b>Multiple choice</b><span class="mk-sec-n">'+grp.closed.length+'</span></div>';
+      groups+=grp.closed.map(renderItem).join('');
+    }
+    if(grp.open.length){
+      groups+='<div class="mk-sub mk-sec"><b>Written &amp; code</b><span class="mk-sec-n">'+grp.open.length+'</span></div>';
+      groups+=grp.open.map(renderItem).join('');
+    }
   });
   var side='<aside class="mk-side" aria-label="Your mistakes">'+filters+'<p class="mk-sum">'+list.length+' part'+(list.length===1?'':'s')+' &middot; '+lost+' mark'+(lost===1?'':'s')+' lost'+(fixed?' &middot; <span class="rtk">'+fixed+' fixed by retry</span>':'')+'</p><nav class="mk-list">'+(groups||'<p class="mut">Nothing matches these filters.</p>')+'</nav></aside>';
   return frame('My mistakes','<div class="mkpage">'+side+'<main class="ex mk-main" id="mkmain">'+(cur?mkDetail(list,cur):'<div class="feature"><p>Nothing matches these filters.</p></div>')+'</main></div>',{bar:true});
@@ -172,83 +211,50 @@ function masteryBand(pct){
   return {cls:'b2',label:'Band 2-3 (Needs Practice)',desc:'Prioritise revision & retries'};
 }
 
-function subtopicForQ(tp,q){
-  var text=(q.st+' '+q.it.map(function(i){return i.q+' '+(i.model||'')}).join(' ')).toLowerCase();
-  if(tp==='Secure Software Architecture'){
-    if(/xss|csrf|sql injection|vulnerab|attack|exploit|race condition|side.channel|malware|buffer overflow/i.test(text))return 1;
-    if(/validat|saniti|defens|input|error handling|sandbox|boundary/i.test(text))return 2;
-    if(/sast|dast|pen test|penetration|audit|review|resilien|disaster|backup|continuity|recovery/i.test(text))return 3;
-    return 0; // Security Concepts & CIA Triad
-  }
-  if(tp==='Programming for the Web'){
-    if(q.db||/sql|table|database|query|select|join|group by|primary key|foreign key/i.test(text))return 1;
-    if(/ssl|tls|cert|encrypt|cipher|hash|digital signature|public key|private key/i.test(text))return 3;
-    if(/protocol|packet|dns|http|https|ip address|tcp|port|router|bandwidth|latency/i.test(text))return 0;
-    return 2; // Front-End, UI/UX & Standards
-  }
-  if(tp==='Software Automation'){
-    if(/regress|linear|logistic|knn|nearest|scatter|slope|gradient|equation|numeric/i.test(text))return 1;
-    if(/devops|rpa|bpa|ci\/cd|pipeline|automat|sensor|robot|stream/i.test(text))return 2;
-    if(/bias|ethical|society|social|legal|fairness|workplace|displacement|disability/i.test(text))return 3;
-    return 0; // AI vs ML Models & Neural Networks
-  }
-  if(tp==='Software Engineering Project'){
-    if(/agile|waterfall|scrum|sprint|kanban|wagile|iterat/i.test(text))return 0;
-    if(/direct|phased|parallel|pilot|cutover|deployment|installation/i.test(text))return 2;
-    if(/gantt|feasib|cost|schedule|budget|time|requirement|dictionary|scope/i.test(text))return 1;
-    return 3; // Quality Assurance, Testing & Ethics
-  }
-  return 0;
+/* Sub-topics are the organisers used in the NESA Software Engineering 11-12 (2022) syllabus, Year 12 content
+   (see context/NESA - software_engineering_11_12_2022 (S6).pdf, pages 19 to 29). The content-point lists are the
+   syllabus's own wording and appear as hover text. Questions carry no syllabus tag of their own, so a question is
+   placed by matching its wording to the syllabus content points; the DoE 2026 Trial uses its official mapping grid. */
+var SYLLABUS_AREAS=[
+  {id:'SSA',name:'Secure Software Architecture',subs:[
+    {name:'Designing software',pts:['benefits of developing secure software','fundamental software development steps to develop secure code','how the capabilities and experience of end users influence secure design']},
+    {name:'Developing secure code',pts:['confidentiality, integrity, availability, authentication, authorisation, accountability','security features: data protection, security, privacy and regulatory compliance','cryptography and sandboxing (security by design)','privacy by design','vulnerabilities, hardening, breaches, business continuity, disaster recovery','code review, SAST, DAST, vulnerability assessment, penetration testing','input validation, sanitisation and error handling; safe APIs','memory, session and exception management','user action controls: broken authentication, XSS, CSRF, invalid redirects, race conditions','file attacks and side channel attacks']},
+    {name:'Impact of safe and secure software development',pts:['benefits of collaboration','benefits to an enterprise of safe and secure development practices','social, ethical and legal issues: employment, data security, privacy, copyright, intellectual property, digital disruption']}]},
+  {id:'PW',name:'Programming for the Web',subs:[
+    {name:'Data transmission using the web',pts:['applications of web programming: interactive websites, e-commerce, PWAs','data packets, IP addresses, DNS','web protocols and ports: HTTP, HTTPS, TCP/IP, FTP, SFTP, SSL, TLS, SMTP, POP3, IMAP','securing the web: SSL certificates, encryption, keys, plain and cipher text, hash values, digital signatures','effect of big data on web architecture']},
+    {name:'Designing web applications',pts:['role of the W3C: WAI, internationalisation, web security, privacy, machine-readable data','client-side and server-side programming; SQL and non-SQL databases','web browsers and developer tools; CSS','version control; code libraries; open-source software; load times; content management systems','back-end process for a web request; SQL queries; ORM compared to SQL','front-end and back-end collaboration; progressive web apps: font, colour, audio, video, navigation, accessibility and inclusivity']}]},
+  {id:'SA',name:'Software Automation',subs:[
+    {name:'Algorithms in machine learning',pts:['ML, DevOps, RPA and BPA','artificial intelligence and ML','supervised, unsupervised, semi-supervised and reinforcement learning','applications: data analysis and forecasting, virtual personal assistants, image recognition','decision trees and neural networks','linear regression, logistic regression, K-nearest neighbour']},
+    {name:'Programming for automation',pts:['regression models using OOP: linear, polynomial, logistic','neural network models using OOP']},
+    {name:'Significance and impact of ML and AI',pts:['impact of automation on the individual, society and the environment','patterns in human behaviour that influence ML and AI','human and dataset source bias']}]},
+  {id:'SEP',name:'Software Engineering Project',subs:[
+    {name:'Identifying and defining',pts:['requirements of a problem','tools to develop ideas and generate solutions','implementation methods: direct, phased, parallel, pilot']},
+    {name:'Research and planning',pts:['Waterfall, Agile and WAgile approaches','project management: Gantt charts and collaboration tools','social, ethical and communication issues','quality assurance','modelling tools','back-end engineering']},
+    {name:'Producing and implementing',pts:['design, construct and implement a solution','develop, construct and document algorithms','allocate resources','programmed data backup and version control','strategies to respond to difficulties','prototype and user interface design']},
+    {name:'Testing and evaluating',pts:['methodologies to test and evaluate code','code optimisation','analyse and respond to feedback','test plan, path and boundary testing, comparing actual and expected output']}]}
+];
+var SYLLABUS_RULES={
+  'Secure Software Architecture':[[2,/ramification|social|ethic|legal|law\b|employment|copyright|intellectual property|digital disruption|collaborat|enterprise|productivity|points? of view|delegat/i],[0,/benefits? of (developing )?secure|development steps|life ?cycle|requirements definition|specifications|end users?|experience of|capabilit|waterfall|installation|maintenance/i]],
+  'Programming for the Web':[[0,/packet|ip address|ipv4|dns|domain name|protocol|tcp|ftp|smtp|pop3|imap|https|ssl|tls|certificate|cipher|plain text|hash|digital signature|encryption|big data|data mining|metadata|streaming|e-commerce/i]],
+  'Software Automation':[[2,/impact|society|environment|ethic|social|bias|disabilit|employment|worker|economy|wealth|human behaviour|cultural|belief|stress|waste/i],[1,/\boop\b|object.oriented|polynomial|neural network model/i]],
+  'Software Engineering Project':[[3,/test plan|test data|testing|desk check|debug|boundary|optimi[sz]|expected output|evaluate the effectiveness/i],[1,/waterfall|agile|wagile|gantt|project management|collaboration tool|communicat|negotiat|stakeholder|quality assur|complian|modelling tool|data flow|context diagram|structure chart|back-end engineering/i],[0,/requirement|feasib|data dictionar|data type|brainstorm|storyboard|implementation method|direct|phased|parallel|pilot|cutover/i]]
+};
+var SYLLABUS_DEFAULT={'Secure Software Architecture':1,'Programming for the Web':1,'Software Automation':0,'Software Engineering Project':2};
+function subtopicForQ(tp,q,b,n){
+  var area=SYLLABUS_AREAS.filter(function(a){return a.name===tp})[0];
+  if(!area)return 0;
+  var g=b&&typeof MARKING==='object'&&MARKING.doe2026&&b.id==='9'&&MARKING.doe2026.grid?(MARKING.doe2026.grid[String(n)]||MARKING.doe2026.grid[n+'a+'+n+'b']):null;
+  if(g)for(var k=0;k<area.subs.length;k++)if(area.subs[k].name.toLowerCase()===String(g[1]).toLowerCase())return k;
+  var text=(q.st+' '+q.it.map(function(i){return i.q+' '+(i.model||'')}).join(' ')).toLowerCase(),rules=SYLLABUS_RULES[tp]||[];
+  for(var r=0;r<rules.length;r++)if(rules[r][1].test(text))return rules[r][0];
+  return SYLLABUS_DEFAULT[tp]||0;
 }
 
 function syllabusMasteryData(){
-  var areas=[
-    {
-      id:'SSA',
-      name:'Secure Software Architecture',
-      desc:'Security by design, CIA triad, vulnerabilities, defensive coding & resilience',
-      subs:[
-        {name:'Security Concepts & CIA Triad',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Vulnerabilities & Attacks',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Defensive Programming',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Resilience & Security Testing',m:0,g:0,rg:0,lost:0,count:0}
-      ]
-    },
-    {
-      id:'PW',
-      name:'Programming for the Web',
-      desc:'Web protocols, relational databases & SQL, client/server systems, UI/UX & standards',
-      subs:[
-        {name:'Web Architecture & Protocols',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Databases & SQL',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Front-End, UI/UX & Standards',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Web Security & Encryption',m:0,g:0,rg:0,lost:0,count:0}
-      ]
-    },
-    {
-      id:'SA',
-      name:'Software Automation',
-      desc:'AI vs ML, regression models, neural networks, DevOps, bias & ethics',
-      subs:[
-        {name:'AI vs ML Models & Neural Networks',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Algorithms & Regression',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Automation Systems & DevOps',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Ethics, Bias & Societal Impacts',m:0,g:0,rg:0,lost:0,count:0}
-      ]
-    },
-    {
-      id:'SEP',
-      name:'Software Engineering Project',
-      desc:'Agile & Waterfall, requirements analysis, cutover methods, QA & project tools',
-      subs:[
-        {name:'Project Methodologies',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Requirements, Planning & Scheduling',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Implementation & Cutover Methods',m:0,g:0,rg:0,lost:0,count:0},
-        {name:'Quality Assurance, Testing & Ethics',m:0,g:0,rg:0,lost:0,count:0}
-      ]
-    }
-  ];
-
+  var areas=SYLLABUS_AREAS.map(function(a){
+    return {id:a.id,name:a.name,desc:a.subs.map(function(s){return s.name}).join(' · '),
+      subs:a.subs.map(function(s){return {name:s.name,pts:s.pts,m:0,g:0,rg:0,lost:0,count:0}})};
+  });
   var grandM=0,grandG=0,grandRg=0,grandLost=0,grandCount=0;
   var visible=BANKS.filter(function(b){return !b.hidden&&!b.archived});
 
@@ -262,7 +268,7 @@ function syllabusMasteryData(){
         if(areas[ai].name===q.tp){aIdx=ai;break}
       }
       if(aIdx<0)return;
-      var sIdx=subtopicForQ(q.tp,q);
+      var sIdx=subtopicForQ(q.tp,q,b,n);
       var sub=areas[aIdx].subs[sIdx];
 
       q.it.forEach(function(it,i){
@@ -337,7 +343,7 @@ function masteryPage(){
     var subsHTML=area.subs.map(function(sub){
       var sb=sub.band;
       var stat=sub.m?(sub.g+sub.rg)+' / '+sub.m+' marks':'Untested';
-      return '<div class="sm-sub-row"><span class="sm-sub-name" title="'+esc(sub.name)+'">'+esc(sub.name)+'</span><span class="sm-sub-stat">'+stat+'</span><span class="sm-pill '+sb.cls+'">'+(sub.pct!=null?sub.pct+'%':'-')+'</span></div>';
+      return '<div class="sm-sub-row"><span class="sm-sub-name" title="'+esc(sub.name+(sub.pts?': '+sub.pts.join('; '):''))+'">'+esc(sub.name)+'</span><span class="sm-sub-stat">'+stat+'</span><span class="sm-pill '+sb.cls+'">'+(sub.pct!=null?sub.pct+'%':'-')+'</span></div>';
     }).join('');
 
     return '<div class="sm-card">'+
@@ -355,7 +361,7 @@ function masteryPage(){
 
   var main='<div class="sm-page">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:12px">'+
-      '<div><h1 class="pt" style="margin:0 0 4px">Syllabus Outcome Mastery</h1><p class="mut" style="margin:0">Live mastery across all 4 NESA HSC Software Engineering focus areas and 16 key outcome subtopics.</p></div>'+
+      '<div><h1 class="pt" style="margin:0 0 4px">Syllabus Outcome Mastery</h1><p class="mut" style="margin:0">Live mastery across all 4 NESA HSC Software Engineering focus areas, broken down by the organisers used in the NESA syllabus (Year 12 content).</p></div>'+
       (d.grandM?'<div style="font-size:1.1em;font-weight:700">Overall: <span class="sm-badge '+d.grandBand.cls+'" style="font-size:.9em">'+d.grandPct+'% &middot; '+d.grandBand.label+'</span></div>':'')+
     '</div>'+
     recHTML+

@@ -18,11 +18,16 @@ def route(r):
     if url.path == '/api/class':
         p = r.request.post_data_json; calls.append(p['action']); a = p['action']
         def ok(j): r.fulfill(status=200, content_type='application/json', body=json.dumps(j))
-        if a == 'status': return ok({'configured': True, 'member': state['member'], 'name': 'Sam', 'count': 2})
+        if a == 'status': return ok({'configured': True, 'member': state['member'], 'name': 'Sam', 'count': 2, 'admin': True})
         if a == 'join':
             if p['code'] != 'good-code': return r.fulfill(status=400, content_type='application/json', body=json.dumps({'code': 'bad_code', 'error': 'That class code is not right.'}))
             state['member'] = True; return ok({'ok': True, 'name': p['name']})
         if a == 'roster': return ok({'admin': True, 'members': [{'id': 'a'*64, 'name': 'Sam', 'photo': '', 'mine': True, 'joined': 1}, {'id': 'b'*64, 'name': 'Priya', 'photo': '', 'mine': False, 'joined': 2}]})
+        if a == 'admin_users': return ok({'users': [{'id': 'c'*64, 'email': 'kid@student.det.nsw.edu.au', 'name': 'Kid', 'inClass': False, 'photo': '', 'created': 1}]})
+        if a in ('admin_name', 'admin_class', 'admin_photo'): return ok({'ok': True})
+        if a == 'admin_delete':
+            if p.get('confirmEmail') != 'kid@student.det.nsw.edu.au': return r.fulfill(status=400, content_type='application/json', body=json.dumps({'code': 'confirm', 'error': 'Type the account email to confirm.'}))
+            return ok({'ok': True})
         if a == 'setname': return ok({'ok': True, 'name': p['name']})
         if a == 'setphoto': return ok({'ok': True, 'photo': p['photo']})
         if a == 'overview': return ok({'members': 2, 'counts': {'8': 2}})
@@ -48,15 +53,22 @@ with sync_playwright() as pw:
     expect(page.locator('#cvroot')).to_contain_text('not right')
     page.fill('#cvcode', 'good-code'); page.click('[data-cv=join]')
     expect(page.locator('#cvroot')).to_contain_text('You are in the class as')
-    expect(page.locator('.cv-person')).to_have_count(2)
-    expect(page.locator('.cv-person').nth(1)).to_contain_text('Priya')
+    expect(page.locator('.cv-people:not(.cv-accts) .cv-person')).to_have_count(2)
+    expect(page.locator('.cv-people:not(.cv-accts) .cv-person').nth(1)).to_contain_text('Priya')
     assert page.locator('[data-cv=edit]').count() == 2, 'admin sees Edit on everyone'
-    a0 = page.locator('.cv-person').nth(0).bounding_box(); a1 = page.locator('.cv-person').nth(1).bounding_box()
+    a0 = page.locator('.cv-people:not(.cv-accts) .cv-person').nth(0).bounding_box(); a1 = page.locator('.cv-people:not(.cv-accts) .cv-person').nth(1).bounding_box()
     assert a1['y'] > a0['y'] + a0['height'] - 2, 'people are stacked, one per row'
     page.locator('[data-cv=edit]').nth(1).click()
     page.fill('#cvnm', 'Priya S'); page.click('[data-cv=savename]')
-    expect(page.locator('.cv-person').nth(1)).to_contain_text('Priya S')
+    expect(page.locator('.cv-people:not(.cv-accts) .cv-person').nth(1)).to_contain_text('Priya S')
     expect(page.locator('[data-cv=photo]')).to_have_count(1)
+    expect(page.locator('.cv-accts .cv-person')).to_have_count(1)
+    page.locator('[data-cv=aedit]').click()
+    page.click('[data-cv=aclass]'); page.click('[data-cv=adel]')
+    page.fill('#cvadc', 'wrong'); page.click('[data-cv=adelgo]')
+    expect(page.locator('#cvroot')).to_contain_text('Type the account email to confirm')
+    page.fill('#cvadc', 'kid@student.det.nsw.edu.au'); page.click('[data-cv=adelgo]')
+    expect(page.locator('#cvroot')).to_contain_text('Done.')
     page.click('a[href="#/class/8/1"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 1 ')
     assert page.locator('.nav-bar .nav-elem').count() > 5, 'question navigator'

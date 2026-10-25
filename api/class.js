@@ -67,11 +67,35 @@ function createHandler(deps) {
       const configured = store.configured();
       if (p.action === 'status') {
         const member = configured ? await store.getMember(sess.id) : null;
-        return res.status(200).json({ configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: !!member && isAdmin(sess) });
+        return res.status(200).json({ configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: isAdmin(sess) });
       }
       if (p.action === 'join') {
         const joined = await store.join(sess.id, p.name, p.code);
         return res.status(200).json({ ok: true, member: true, name: joined.name });
+      }
+      // Platform admin: works on any account, with or without class membership.
+      if (/^admin_/.test(String(p.action))) {
+        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only admins can do this.');
+        if (p.action === 'admin_users') return res.status(200).json({ users: await store.adminUsers() });
+        const id = String(p.memberId || '');
+        if (p.action === 'admin_name') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetName(id, p.name)));
+        if (p.action === 'admin_photo') {
+          const photo = p.photo;
+          if (typeof photo !== 'string' || photo.length > 44000 || (photo && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))) return fail(400, 'bad_photo', 'Choose a JPEG, PNG or WebP image using the photo picker.');
+          if (photo) {
+            const bytes = Buffer.from(photo.split(',')[1], 'base64');
+            if (bytes.length < 4 || bytes[0] !== 255 || bytes[1] !== 216 || bytes[bytes.length - 2] !== 255 || bytes[bytes.length - 1] !== 217) return fail(400, 'bad_photo', 'The picture is invalid.');
+          }
+          return res.status(200).json(Object.assign({ ok: true }, await store.adminSetPhoto(id, photo)));
+        }
+        if (p.action === 'admin_class') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetClass(id, p.inClass === true)));
+        if (p.action === 'admin_delete') {
+          const target = await store.adminUser(id);
+          if (id === sess.id || adminList().includes(String(target.email || '').toLowerCase())) return fail(400, 'protected', 'Admin accounts cannot be deleted here.');
+          if (String(p.confirmEmail || '').toLowerCase() !== String(target.email || '').toLowerCase()) return fail(400, 'confirm', 'Type the account email to confirm.');
+          return res.status(200).json(Object.assign({ ok: true }, await store.adminDelete(id)));
+        }
+        return fail(400, 'unknown_action', 'Unknown request.');
       }
       const me = await store.getMember(sess.id);
       if (!me) return fail(403, 'not_member', 'Join the class with your class code first.');

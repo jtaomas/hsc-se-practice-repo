@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,users:null,aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -49,7 +49,7 @@ function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||''
 function cvStatus(){
   if(CV.st!==null||CV.loadSt||!S.tok)return Promise.resolve();
   CV.loadSt=true;
-  return cvApi({action:'status'}).then(function(r){CV.st=r;return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
+  return cvApi({action:'status'}).then(function(r){CV.st=r;if(r.admin)cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(e){CV.amsg=e.message});return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
 }
 function cvLoadAnswers(id,quiet){
   if(CV.loadAns)return Promise.resolve();
@@ -199,17 +199,46 @@ function cvSetName(id,name){
     (CV.roster.members||[]).forEach(function(m){if(m.id===id)m.name=x.name});CV.photoMsg='Name saved.';cvDraw();
   }).catch(function(e){CV.photoMsg=e.message;cvDraw()});
 }
+/* Platform admin: every account on the site. Edit name, photo and class membership, or delete the account. */
+function cvAdminHTML(){
+  if(!CV.st||!CV.st.admin)return '';
+  var u=CV.users;
+  var h='<h2 class="pt" style="margin-top:22px">All accounts'+(u?' ('+u.length+')':'')+'</h2><p class="mut">You are an admin. These are every account on the site.</p>';
+  if(!u)return h+'<p class="mut">Loading accounts...</p>'+(CV.amsg?'<p class="acmsg" role="alert">'+esc(CV.amsg)+'</p>':'');
+  h+='<ul class="cv-people cv-accts">'+u.map(function(a){
+    var open=CV.aedit===a.id,del=CV.adel===a.id;
+    var row='<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,40,a.name||a.email)+'</span><span class="cv-pname2">'+esc(a.name||'(no name)')+'<br><small class="mut">'+esc(a.email)+(a.inClass?' &middot; in class':' &middot; not in class')+'</small></span>'+
+      '<button class="nb sm ol" data-cv="aedit" data-id="'+esc(a.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Edit')+'</button></div>';
+    if(open)row+='<div class="cv-edit"><label for="cvanm">Name</label><div class="cv-erow"><input id="cvanm" maxlength="40" value="'+esc(a.name)+'" autocomplete="off"><button class="nb sm" data-cv="aname" data-id="'+esc(a.id)+'" type="button">Save name</button></div>'+
+      '<label>Photo</label><div class="cv-erow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,56,a.name||a.email)+'</span><button class="nb sm ol" data-cv="aphoto" data-id="'+esc(a.id)+'" type="button">Upload new photo</button>'+(a.photo?'<button class="nb sm ol" data-cv="aphotoclear" data-id="'+esc(a.id)+'" type="button">Remove photo</button>':'')+'</div>'+
+      '<label>Class</label><div class="cv-erow"><button class="nb sm ol" data-cv="aclass" data-id="'+esc(a.id)+'" data-on="'+(a.inClass?'0':'1')+'" type="button">'+(a.inClass?'Remove from class':'Add to class')+'</button></div>'+
+      '<label>Account</label>'+(del?'<div class="cv-erow"><input id="cvadc" placeholder="Type '+esc(a.email)+' to confirm" autocomplete="off"><button class="nb sm bad" data-cv="adelgo" data-id="'+esc(a.id)+'" data-email="'+esc(a.email)+'" type="button">Delete forever</button><button class="nb sm ol" data-cv="adel" data-id="" type="button">Cancel</button></div><p class="mut">This removes the account, its saved papers, backups, photo and class membership. It cannot be undone.</p>':'<div class="cv-erow"><button class="nb sm ol" data-cv="adel" data-id="'+esc(a.id)+'" type="button">Delete account...</button></div>')+
+      '</div>';
+    return row+'</li>';
+  }).join('')+'</ul>'+(CV.amsg?'<p class="acmsg" role="status">'+esc(CV.amsg)+'</p>':'')+'<input id="cvaphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>';
+  return h;
+}
+function cvAdm(body,after){
+  CV.amsg='Saving...';cvDraw();
+  cvApi(body).then(function(r){CV.amsg='Done.';after&&after(r);cvDraw();cvAdminRefresh()}).catch(function(e){CV.amsg=e.message;cvDraw()});
+}
+function cvAdminRefresh(){cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(){});cvApi({action:'roster'}).then(function(o){CV.roster=o;cvDraw()}).catch(function(){})}
+document.addEventListener('change',function(ev){
+  var el=ev.target;if(!el||el.id!=='cvaphoto')return;
+  var f=el.files&&el.files[0];el.value='';
+  cvCrop(f,function(photo){cvAdm({action:'admin_photo',memberId:CV.aedit,photo:photo})},function(m){CV.amsg=m;cvDraw()});
+});
 function cvSetPhoto(id,photo){
   CV.photoMsg='Saving photo...';cvDraw();
   cvApi({action:'setphoto',memberId:id,photo:photo}).then(function(){
     (CV.roster.members||[]).forEach(function(m){if(m.id===id)m.photo=photo});CV.photoMsg=photo?'Photo saved.':'Photo removed.';cvDraw();
   }).catch(function(e){CV.photoMsg=e.message;cvDraw()});
 }
-function cvCropFile(file,id){
+function cvCrop(file,ok,bad){
   if(!file)return;
-  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>10*1024*1024){CV.photoMsg='Choose a JPEG, PNG or WebP image smaller than 10 MB.';cvDraw();return}
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>10*1024*1024)return bad('Choose a JPEG, PNG or WebP image smaller than 10 MB.');
   var url=URL.createObjectURL(file),img=new Image();
-  img.onerror=function(){URL.revokeObjectURL(url);CV.photoMsg='This image could not be opened.';cvDraw()};
+  img.onerror=function(){URL.revokeObjectURL(url);bad('This image could not be opened.')};
   img.onload=function(){
     URL.revokeObjectURL(url);
     try{
@@ -217,11 +246,12 @@ function cvCropFile(file,id){
       var x=c.getContext('2d'),side=Math.min(img.naturalWidth,img.naturalHeight);
       x.fillStyle='#fff';x.fillRect(0,0,128,128);
       x.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,128,128);
-      cvSetPhoto(id,c.toDataURL('image/jpeg',0.8));
-    }catch(e){CV.photoMsg='This image could not be prepared.';cvDraw()}
+      ok(c.toDataURL('image/jpeg',0.8));
+    }catch(e){bad('This image could not be prepared.')}
   };
   img.src=url;
 }
+function cvCropFile(file,id){cvCrop(file,function(p){cvSetPhoto(id,p)},function(m){CV.photoMsg=m;cvDraw()})}
 document.addEventListener('change',function(ev){
   var el=ev.target;if(!el||el.id!=='cvphoto')return;
   var f=el.files&&el.files[0];el.value='';cvCropFile(f,CV.photoFor);
@@ -231,12 +261,12 @@ function cvHTML(){
   if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
   if(CV.st===null)return cvPg('<div class="feature"><p>Loading your class...</p></div>'+(CV.msg?'<p class="mut">'+esc(CV.msg)+'</p>':''));
   if(!CV.st.configured)return cvPg('<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>');
-  if(!CV.st.member)return cvPg(cvJoinHTML());
+  if(!CV.st.member)return cvPg(cvJoinHTML()+cvAdminHTML());
   var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
   if(!b){
     var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and diagrams are not shared.</p>'+
       '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
-    h+=cvRosterHTML();
+    h+=cvRosterHTML()+cvAdminHTML();
     h+='<h2 class="pt" style="margin-top:18px">Papers</h2><p class="mut">Open a paper to read every question as it appears in the exam, with what your class wrote under each written part.</p><div class="acts">'+cvBanks().map(function(x){
       var n=CV.over&&CV.over.counts&&CV.over.counts[x.id]||0;
       return '<a class="nb ol" href="#/class/'+esc(x.id)+'/1">'+esc(x.name)+'<small>'+n+' shared</small></a>';
@@ -278,6 +308,13 @@ function cvResultHTML(res){
 document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
+  if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.adel='';CV.amsg='';cvDraw();return}
+  if(a==='aname'){cvAdm({action:'admin_name',memberId:el.getAttribute('data-id'),name:(document.getElementById('cvanm')||{}).value||''});return}
+  if(a==='aphoto'){var fa=document.getElementById('cvaphoto');if(fa)fa.click();return}
+  if(a==='aphotoclear'){cvAdm({action:'admin_photo',memberId:el.getAttribute('data-id'),photo:''});return}
+  if(a==='aclass'){cvAdm({action:'admin_class',memberId:el.getAttribute('data-id'),inClass:el.getAttribute('data-on')==='1'});return}
+  if(a==='adel'){CV.adel=el.getAttribute('data-id');cvDraw();return}
+  if(a==='adelgo'){cvAdm({action:'admin_delete',memberId:el.getAttribute('data-id'),confirmEmail:(document.getElementById('cvadc')||{}).value||''},function(){CV.adel='';CV.aedit=''});return}
   if(a==='edit'){var eid=el.getAttribute('data-id');CV.editing=CV.editing===eid?'':eid;CV.photoMsg='';cvDraw();return}
   if(a==='savename'){cvSetName(el.getAttribute('data-id'),(document.getElementById('cvnm')||{}).value||'');return}
   if(a==='photo'){CV.photoFor=el.getAttribute('data-id');var fi=document.getElementById('cvphoto');if(fi)fi.click();return}

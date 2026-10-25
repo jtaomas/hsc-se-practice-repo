@@ -169,7 +169,62 @@ function createClassStore(options) {
     return { photo };
   }
 
-  return { configured, setPhoto, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  // ---- Platform admin: every account on the site, not only class members. ----
+  async function adminUsers() {
+    const store = await provider();
+    const listed = await store.list({ prefix: 'users/' });
+    const ids = (listed.blobs || []).map(b => String(b.pathname).slice('users/'.length).replace(/\.json$/, '')).filter(id => ID.test(id)).slice(0, 1000);
+    const inClass = new Set(((await store.list({ prefix: 'class/members/' })).blobs || []).map(b => String(b.pathname).slice('class/members/'.length).replace(/\.json$/, '')));
+    const out = [];
+    for (let i = 0; i < ids.length; i += 8) {
+      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => {
+        const u = await read('users/' + id + '.json');
+        if (!u) return null;
+        const m = inClass.has(id) ? await getMember(id) : null;
+        const profile = await read('profiles/' + id + '.json');
+        return { id, email: u.data.email || '', name: (m && m.name) || u.data.name || '', inClass: !!m, photo: (profile && profile.data && profile.data.photo) || '', created: u.data.created || 0 };
+      }));
+      rows.forEach(r => { if (r) out.push(r); });
+    }
+    return out.sort((a, b) => a.email.localeCompare(b.email));
+  }
+  async function adminUser(id) {
+    if (!ID.test(id)) throw error(400, 'bad_member', 'Choose an account.');
+    const u = await read('users/' + id + '.json');
+    if (!u) throw error(404, 'no_user', 'That account does not exist.');
+    return u.data;
+  }
+  async function adminSetName(id, name) {
+    await adminUser(id);
+    const clean = cleanName(name);
+    await update('users/' + id + '.json', cur => cur ? Object.assign({}, cur, { name: clean }) : null);
+    if (await getMember(id)) await update('class/members/' + id + '.json', cur => Object.assign({}, cur, { name: clean }));
+    return { name: clean };
+  }
+  async function adminSetPhoto(id, photo) {
+    await adminUser(id);
+    await update('profiles/' + id + '.json', cur => Object.assign({}, cur, { photo }));
+    return { photo };
+  }
+  async function adminSetClass(id, on) {
+    const u = await adminUser(id);
+    if (!on) { await leave(id); return { inClass: false }; }
+    const existing = await getMember(id);
+    if (!existing) {
+      const name = cleanName(u.name || String(u.email || '').split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+      await update('class/members/' + id + '.json', () => ({ name, joined: now() }));
+    }
+    return { inClass: true };
+  }
+  async function adminDelete(id) {
+    await adminUser(id);
+    const store = await provider();
+    const backups = ((await store.list({ prefix: 'backup/' + id + '/' })).blobs || []).map(b => b.pathname);
+    await store.del(['users/' + id + '.json', 'progress/' + id + '.json', 'profiles/' + id + '.json', 'class/members/' + id + '.json'].concat(backups));
+    return { deleted: true };
+  }
+
+  return { configured, setPhoto, adminUsers, adminUser, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, normaliseCode, QUOTA, MAX_MEMBERS, error };

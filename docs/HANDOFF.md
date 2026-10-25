@@ -108,3 +108,8 @@ Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128Ã
 ## Class roster and admin
 - Class page lists everyone in the class with avatars (`roster` action in `api/class.js`, `cvRosterHTML` in `public/classview.js`).
 - Admins (emails in env `CLASS_ADMINS`, comma separated; default `thomas.luu@education.nsw.gov.au`) see "Change photo" / "Remove" on every member (`setphoto` action, same JPEG validation as the profile photo).
+
+## Platform admin
+- `thomas.luu@education.nsw.gov.au` (env `CLASS_ADMINS`) is an admin of the whole site, not only the class. The Class page shows an "All accounts" list for admins (actions `admin_users`, `admin_name`, `admin_photo`, `admin_class`, `admin_delete` in `api/class.js`, store functions `admin*` in `server/class-store.js`).
+- Admins can rename, change photo, add/remove from the class, and delete any non-admin account (deletes user, progress, profile, backups, membership; needs the account email typed to confirm). Email and password changes are not supported (the account id is a hash of the email).
+- Note: `members()` in `server/class-store.js` auto-purges accounts named hi/test (and sam/priya/joyce on real D1). That came from another contributor's commit d08b77d and would delete a real student with those names.

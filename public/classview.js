@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -49,7 +49,15 @@ function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||''
 function cvStatus(){
   if(CV.st!==null||CV.loadSt||!S.tok)return Promise.resolve();
   CV.loadSt=true;
-  return cvApi({action:'status'}).then(function(r){CV.st=r;if(r.admin)cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(e){CV.amsg=e.message});return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
+  return cvApi({action:'status'}).then(function(r){CV.st=r;if(r.admin)cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(e){CV.amsg=e.message});return r.member?Promise.all([cvApi({action:'overview'}).then(function(o){CV.over=o;CV.overAt=Date.now()}).catch(function(){}),cvApi({action:'roster'}).then(function(o){CV.roster=o}).catch(function(){})]):null}).catch(function(e){CV.st={configured:true,member:false};CV.msg=e.message}).then(function(){CV.loadSt=false;cvDraw()});
+}
+function cvAutoStatus(){
+  if(!S.tok||/[?&]archive=1\b/.test(location.search))return;
+  if(CV.st===null&&!CV.loadSt)cvStatus();
+  else if(CV.st&&CV.st.member&&!CV.loadSt&&(!CV.overAt||Date.now()-CV.overAt>20000)){
+    CV.overAt=Date.now();
+    cvApi({action:'overview'}).then(function(o){CV.over=o;cvDraw()}).catch(function(){});
+  }
 }
 function cvLoadAnswers(id,quiet){
   if(CV.loadAns)return Promise.resolve();
@@ -85,6 +93,10 @@ function cvDraw(){
   Array.prototype.forEach.call(document.querySelectorAll('.cvslot'),function(el){
     var b=BANKS.filter(function(x){return x.id===el.getAttribute('data-b')})[0];
     if(b)el.innerHTML=cvSlotInner(b,+el.getAttribute('data-n'),+el.getAttribute('data-i'));
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.notion-presence-slot'),function(el){
+    var b=BANKS.filter(function(x){return x.id===el.getAttribute('data-b')})[0];
+    if(b&&typeof trialAvatarsHTML==='function')el.innerHTML=trialAvatarsHTML(b,el.getAttribute('data-inline')==='1');
   });
 }
 function classSlot(b,n,i){

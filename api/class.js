@@ -144,24 +144,57 @@ function createHandler(deps) {
           const done = await Promise.all(slice.map(m => store.papersOf(m.id).catch(() => ({}))));
           slice.forEach((m, idx) => {
             const u = done[idx] || {};
+            let latestOpenId = null;
+            let latestOpenTs = -1;
+            let latestOpenSp = null;
+            Object.keys(u).forEach(k => {
+              if (BANK_ID.test(k)) {
+                const sp = u[k];
+                if (sp && !sp.done && (sp.start || sp.upd)) {
+                  const ts = Math.max(sp.upd || 0, sp.start || 0);
+                  if (ts > latestOpenTs) {
+                    latestOpenTs = ts;
+                    latestOpenId = k;
+                    latestOpenSp = sp;
+                  }
+                }
+              }
+            });
+            const isCurrent = latestOpenSp && (
+              (latestOpenSp.mode === 'exam' && latestOpenSp.start && clock() - latestOpenSp.start < 3 * 3600e3) ||
+              (latestOpenTs > 0 && clock() - latestOpenTs < 45 * 60 * 1000) ||
+              !latestOpenSp.upd
+            );
+            if (!isCurrent) latestOpenId = null;
             Object.keys(u).forEach(id => {
               if (BANK_ID.test(id)) {
                 if (sharedPaper(u[id])) counts[id] = (counts[id] || 0) + 1;
                 const sp = u[id];
-                if (sp && (sp.done || sp.start)) {
+                if (sp && (sp.done || sp.start || sp.upd)) {
                   papers[id] = papers[id] || [];
+                  const lastTs = Math.max(sp.upd || 0, sp.start || 0);
                   papers[id].push({
                     id: m.id,
                     mine: m.id === sess.id,
                     name: m.name,
                     photo: m.photo || '',
-                    status: sp.done ? 'Submitted' : (sp.mode === 'exam' ? 'Sitting exam' : 'In progress')
+                    status: sp.done ? 'Submitted' : (sp.mode === 'exam' ? 'Sitting exam' : 'In progress'),
+                    current: id === latestOpenId && !sp.done,
+                    upd: lastTs
                   });
                 }
               }
             });
           });
         }
+        Object.keys(papers).forEach(id => {
+          papers[id].sort((a, b) => {
+            const ra = a.current ? 0 : (a.status === 'Submitted' ? 2 : 1);
+            const rb = b.current ? 0 : (b.status === 'Submitted' ? 2 : 1);
+            if (ra !== rb) return ra - rb;
+            return (b.upd || 0) - (a.upd || 0);
+          });
+        });
         return res.status(200).json({ members: members.length, counts, papers });
       }
 

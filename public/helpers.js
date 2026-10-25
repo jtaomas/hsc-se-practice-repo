@@ -115,31 +115,114 @@ function notionAvatarSVG(seed, sz, label){
   return '<svg class="notion-av" viewBox="0 0 36 36" width="' + sz + '" height="' + sz + '" role="img" aria-label="' + esc(label || 'Profile') + '"><circle cx="18" cy="18" r="18" fill="' + bg + '"/>' + hairSvg + shoulders + neck + face + blushCheeks + eyes + nose + smile + '</svg>';
 }
 
-function getPaperStudents(b){
-  var list = [];
-  var u = S.u[b.id];
-  if(u && (u.start || u.done)){
-    var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : '');
-    var rawName = S.ae ? S.ae.split('@')[0].replace(/[._]/g, ' ') : (S.owner || 'You');
-    var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
-    if(typeof CV !== 'undefined' && CV.st && CV.st.name) name = CV.st.name;
-    var status = u.done ? 'Submitted' : 'In progress';
-    list.push({ name: name, email: email, status: status, seed: email, photo: S.photo || '', isMe: true });
+function isMyCurrentPaper(bid){
+  if(typeof S === 'undefined' || !S || !S.u) return false;
+  bid = String(bid);
+  var u = S.u[bid];
+  if(!u || u.done || (!u.start && !u.upd)) return false;
+
+  var openIds = [];
+  var maxTouch = -1;
+  var latestId = null;
+  Object.keys(S.u).forEach(function(pid){
+    var x = S.u[pid];
+    if(x && !x.done && (x.start || x.upd)){
+      var spid = String(pid);
+      openIds.push(spid);
+      var touch = Math.max(x.upd || 0, x.start || 0);
+      if(touch > maxTouch || latestId === null){
+        maxTouch = touch;
+        latestId = spid;
+      }
+    }
+  });
+
+  if(typeof CUR !== 'undefined' && CUR && CUR.b && CUR.b.id != null){
+    var curId = String(CUR.b.id);
+    if(openIds.indexOf(curId) >= 0){
+      return curId === bid;
+    }
   }
+  return latestId != null && latestId === bid;
+}
+
+function getPaperStudents(b){
+  if(!b || b.id == null) return [];
+  var list = [];
+  var bid = String(b.id);
+  var u = (typeof S !== 'undefined' && S && S.u) ? S.u[bid] : null;
+
+  if(u && (u.start || u.done || u.upd)){
+    var myStatus = null;
+    var myState = null;
+
+    if(u.done){
+      myStatus = 'Submitted';
+      myState = 'done';
+    } else if(isMyCurrentPaper(bid)){
+      myStatus = 'In progress';
+      myState = 'live';
+    } else {
+      var hasAns = !!(u.ans && Object.keys(u.ans).length > 0);
+      if(hasAns){
+        myStatus = 'In progress';
+        myState = 'working';
+      }
+    }
+
+    if(myStatus && myState){
+      var email = S.ae || (S.owner && S.owner.indexOf('@') >= 0 ? S.owner : '');
+      var rawName = S.ae ? S.ae.split('@')[0].replace(/[._]/g, ' ') : (S.owner || 'You');
+      var name = rawName.split(' ').map(function(w){return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''}).join(' ').trim() || 'You';
+      if(typeof CV !== 'undefined' && CV.st && CV.st.name) name = CV.st.name;
+      list.push({
+        name: name,
+        email: email,
+        status: myStatus,
+        state: myState,
+        seed: email,
+        photo: S.photo || '',
+        isMe: true
+      });
+    }
+  }
+
   if(typeof CV !== 'undefined' && CV.over && CV.over.papers && CV.over.papers[b.id]){
     CV.over.papers[b.id].forEach(function(m){
-      if(!m.mine || !list.some(function(item){return item.isMe})){
+      var isMe = !!m.mine;
+      if(!isMe || !list.some(function(item){return item.isMe})){
+        var isSub = m.status === 'Submitted';
+        var status = isSub ? 'Submitted' : 'In progress';
+        var state = 'live';
+        if(isSub){
+          state = 'done';
+        } else if(isMe){
+          state = isMyCurrentPaper(b.id) ? 'live' : 'working';
+        } else {
+          state = (m.current === false ? 'working' : 'live');
+        }
         list.push({
           name: m.name,
-          email: m.mine ? (S.ae || '') : '',
-          status: m.status === 'Submitted' ? 'Submitted' : 'In progress',
+          email: isMe ? (S.ae || '') : '',
+          status: status,
+          state: state,
           seed: m.id || m.name,
-          photo: m.mine ? (S.photo || '') : (m.photo || ''),
-          isMe: !!m.mine
+          photo: isMe ? (S.photo || '') : (m.photo || ''),
+          isMe: isMe
         });
       }
     });
   }
+
+  var rank = function(st){
+    if(st === 'live') return 0;
+    if(st === 'working') return 1;
+    return 2;
+  };
+  list.sort(function(a, b){
+    return rank(a.state) - rank(b.state);
+  });
+
   return list;
 }
 
@@ -149,17 +232,18 @@ function trialAvatarsHTML(b, isInline){
   var display = students.slice(0, 3);
   var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
   var stack = display.map(function(s){
-    return '<span class="notion-avatar" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + '</span>';
+    var stateCls = s.state === 'done' ? ' av-done' : (s.state === 'live' ? ' av-live' : ' av-working');
+    return '<span class="notion-avatar' + stateCls + '" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + '</span>';
   }).join('') + more;
 
   var popList = students.map(function(s){
-    return '<div class="notion-pop-row">' +
-      '<span class="notion-pop-av">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + '</span>' +
+    return '<div class="notion-pop-row ' + (s.state === 'done' ? 'av-done' : (s.state === 'live' ? 'av-live' : 'av-working')) + '">' +
+      '<span class="notion-pop-av ' + (s.state === 'done' ? 'av-done' : (s.state === 'live' ? 'av-live' : 'av-working')) + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
         (s.email ? '<div class="notion-pop-email">' + esc(s.email) + '</div>' : '') +
       '</div>' +
-      '<span class="notion-pop-badge ' + (s.status === 'Submitted' ? 'ok' : 'live') + '">' + esc(s.status) + '</span>' +
+      '<span class="notion-pop-badge ' + (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')) + '">' + esc(s.status) + '</span>' +
     '</div>';
   }).join('');
 

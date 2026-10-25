@@ -133,7 +133,7 @@ function expireExams(){
 function frame(title,main,opt){
   opt=opt||{};
   var b=CUR.b||(opt.bid?bank(opt.bid):null);
-  var presenceHtml=(b&&typeof trialAvatarsHTML==='function')?trialAvatarsHTML(b,true):'';
+  var presenceHtml=(b&&typeof trialAvatarsHTML==='function')?'<span class="notion-presence-slot" data-b="'+esc(b.id)+'" data-inline="1">'+trialAvatarsHTML(b,true)+'</span>':'';
   var right;
   if(opt.timer){
     right='<span class="hr">'+presenceHtml+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>';
@@ -193,8 +193,9 @@ function infoHTML(){
 function homePage(){
   CUR={b:null,n:0};
   var visible=BANKS.filter(function(b){return !b.hidden}),full=visible.filter(function(b){return !b.mini}).length,mini=visible.length-full;
-  var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
-    return '<a class="nb bk-card" href="#/'+b.id+'"><div class="bk-row"><div class="bk-col"><span class="bk-name">'+esc(b.name)+'</span><small>'+esc(b.sub)+' &middot; '+st+'</small></div>'+trialAvatarsHTML(b)+'</div></a>'}).join('');
+  var sitting=typeof examSitting==='function'?examSitting():null;
+  var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(sitting&&sitting.id===b.id?'In progress':'')):'';
+    return '<a class="nb bk-card" href="#/'+b.id+'"><div class="bk-row"><div class="bk-col"><span class="bk-name">'+esc(b.name)+'</span><small>'+esc(b.sub)+(st?' &middot; '+st:'')+'</small></div><span class="notion-presence-slot" data-b="'+esc(b.id)+'" data-inline="0">'+(typeof trialAvatarsHTML==='function'?trialAvatarsHTML(b):'')+'</span></div></a>'}).join('');
   return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid">'+
     '<div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. Full-length original papers feature 27 questions arranged in the 2025 HSC online examination sequence. Converted trial papers preserve school trial questions and mark allocations.</p><div class="bks">'+books+'</div><p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Your work saves locally as you write. Sign in with your NSW education email to sync across devices and access AI marking.</p></div>'+
     '<div class="feature"><h2 class="pt">Review and analyse</h2>'+
@@ -240,7 +241,7 @@ function landingPage(b){
   }
 
   var leftHtml=
-    '<div class="gi-header-row"><h1 class="gi-title">General Instructions</h1>'+(typeof trialAvatarsHTML==='function'?trialAvatarsHTML(b,true):'')+'</div>'+
+    '<div class="gi-header-row"><h1 class="gi-title">General Instructions</h1><span class="notion-presence-slot" data-b="'+esc(b.id)+'" data-inline="1">'+(typeof trialAvatarsHTML==='function'?trialAvatarsHTML(b,true):'')+'</span></div>'+
     '<h2 class="gi-section">Reading time</h2>'+
     '<p class="gi-p">This practice site gives no reading time. In the real examination you have 10 minutes of reading time first. During reading time you cannot answer questions or leave the examination, but you can move between questions, flag questions and highlight text.</p>'+
     '<h2 class="gi-section">Working time</h2>'+
@@ -388,6 +389,7 @@ function render(){
   if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review')&&CUR.b===b){afterQ();navArrows(true)}
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
+  if(typeof cvAutoStatus==='function')cvAutoStatus();
   tick();
 }
 /* ---------- exam lock, review hub, practice marking ---------- */

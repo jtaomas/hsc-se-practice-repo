@@ -537,3 +537,10 @@ table.hoa.db{margin:12px 0}
 .cvquote{margin:6px 0 0;padding:4px 10px;border-left:3px solid #ddd;font-size:.92em}
 .cvbest{padding:10px 12px;background:#f4f8ff;border-radius:4px;line-height:1.55}
 .cvslot{margin:14px 0 4px}.cvbox .acts{margin-top:8px}
+.cvbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;padding:14px 0 6px;border-bottom:1px solid #d0d0d0;margin-bottom:6px}
+.cvro{pointer-events:none}.cvro .ptog{display:none}
+.cvagg{margin-top:12px;padding:10px 12px;border:1px solid #c8d7ee;border-left:4px solid #002664;background:#f4f8ff;border-radius:4px}
+.cvagg .cvres{border:0;padding:0;margin-top:6px;background:transparent}
+.cvcode{margin:4px 0 0;padding:8px 10px;background:#1b1b1b;color:#f2f2f2;overflow:auto;white-space:pre;font-size:.9em;border-radius:3px}
+.cvbox .cvhd{display:flex;gap:10px;align-items:center;justify-content:space-between}
+

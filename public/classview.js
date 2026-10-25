@@ -1,5 +1,5 @@
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -29,6 +29,7 @@ function classEnsure(b){
 }
 function cvDraw(){
   var r=document.getElementById('cvroot');if(r&&/^#\/class/.test(location.hash))r.innerHTML=cvHTML();
+  if(r&&typeof navArrows==='function')navArrows(true);
   Array.prototype.forEach.call(document.querySelectorAll('.cvslot'),function(el){
     var b=BANKS.filter(function(x){return x.id===el.getAttribute('data-b')})[0];
     if(b)el.innerHTML=cvSlotInner(b,+el.getAttribute('data-n'),+el.getAttribute('data-i'));
@@ -50,50 +51,91 @@ function cvSlotInner(b,n,i){
 }
 /* Shared by the class page and the review panel. */
 function cvPartBody(bankId,key,qn,pi,list){
-  var k=bankId+'|'+key,r=CV.res[k],run=CV.run[k],isOpen=CV.open[k],busy=run&&!run.err;
-  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div><div class="acts">'+
-    (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+
-    (list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Analysing...':(r?'Run analysis again':'Analyse class answers'))+'</button>':'<span class="mut">'+(list.length?'Needs at least 2 shared answers to analyse.':'No one has shared an answer to this part yet.')+'</span>')+'</div>';
-  if(run&&run.err)h+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
+  var k=bankId+'|'+key,r=CV.res[k],run=CV.run[k],isOpen=CV.open[k]!==false,busy=run&&!run.err;
+  var bk=BANKS.filter(function(x){return x.id===bankId})[0],it=bk&&bk.qs[qn-1]&&bk.qs[qn-1].it[pi],code=!!it&&it.t!=='tx';
+  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
+    (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
+  if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
+  else if(isOpen)h+=list.map(function(a){
+    var wc=cvPlain(a.text).split(' ').filter(Boolean).length;
+    return '<div class="cvans"><div class="cvwho">'+esc(a.mine?'You':a.name)+' <span class="mut">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
+      (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+'</div>';
+  }).join('');
+  /* The aggregator: always shown, so it is clear where the model answer will appear. */
+  h+='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
   if(r)h+=cvResultHTML(r);
-  if(isOpen)h+=list.map(function(a){return '<div class="cvans"><div class="cvwho">'+esc(a.mine?'You':a.name)+'</div><div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div></div>'}).join('');
+  else h+='<p class="mut">The best points from everyone\'s answers combined into one model answer, checked against the syllabus.'+(list.length>=2?'':' It needs at least 2 shared answers ('+list.length+' so far).')+'</p>';
+  if(run&&run.err)h+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
+  h+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
   return h;
 }
-function classPage(bankId){
-  CV.bank=cvBanks().some(function(b){return b.id===bankId})?bankId:CV.bank;
+function classPage(bankId,n){
+  CV.bank=cvBanks().some(function(b){return b.id===bankId})?bankId:'';
+  var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
+  CV.n=b?Math.min(b.qs.length,Math.max(1,+n||1)):0;
   CUR={b:null,n:0};
-  return frame('Class','<div class="pg"><h1 class="pt">Class</h1><div id="cvroot">'+cvHTML()+'</div></div>');
+  return frame(b?'Class: '+b.name:'Class','<div id="cvroot">'+cvHTML()+'</div>',b?{bar:true}:{});
 }
 function classBind(){
   if(!S.tok)return;
   cvStatus().then(function(){if(CV.st&&CV.st.member&&CV.bank&&(CV.ansBank!==CV.bank||Date.now()-CV.ansAt>60000))cvLoadAnswers(CV.bank,CV.ansBank===CV.bank)});
+  if(typeof navArrows==='function')navArrows(true);
 }
+/* The paper as students saw it in the exam, one question at a time, with the class answers under each written part. */
+function cvPartLabel(q,it){
+  var mk=(q.it.length>1&&!/marks?\)/i.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
+  return (it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mk;
+}
+function cvPartView(b,n,i){
+  var q=b.qs[n-1],it=q.it[i];
+  if(cvOpenItem(it))return '<div class="part"><p class="hoa-q">'+cvPartLabel(q,it)+'</p>'+classSlot(b,n,i)+'</div>';
+  if(it.t==='dr')return '<div class="part"><p class="hoa-q">'+cvPartLabel(q,it)+'</p><div class="aib">Diagrams are not shared with the class.</div></div>';
+  var bs=BS(b.id),sv=bs.ans,h;
+  bs.ans={};
+  try{h=itemHTML(b,n,i,false)}finally{bs.ans=sv}
+  return '<div class="cvro">'+h+'</div>';
+}
+function cvQuestionHTML(b,n){
+  var q=b.qs[n-1],title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
+  var st=(q.st||'')+(q.db&&typeof dbTables==='function'?dbTables(q.db):'');
+  var items=q.it.map(function(it,i){return cvPartView(b,n,i)}).join('');
+  var acts='<div class="acts"><button class="nb ol" data-cv="goq" data-n="'+(n-1)+'" type="button"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button>'+
+    '<button class="nb" data-cv="goq" data-n="'+(n+1)+'" type="button"'+(n===b.qs.length?' disabled':'')+'><span>Next question</span>'+IC.right+'</button></div>';
+  if(q.two)return '<div class="qwrap two"><div class="qleft">'+title+st+'</div><div><div class="item">'+items+'</div>'+acts+'</div></div>';
+  return '<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
+}
+function cvNavHTML(b){
+  var h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
+  for(var n=1;n<=b.qs.length;n++){
+    var any=false;
+    if(CV.ansBank===b.id&&CV.ans)b.qs[n-1].it.forEach(function(it,i){var l=CV.ans.parts[n+'.'+i];if(l&&l.length)any=true});
+    h+='<button type="button" class="nav-elem'+(n===CV.n?' cur':'')+'" data-cv="goq" data-n="'+n+'" aria-label="Question '+n+(any?', has class answers':'')+'">'+n+(any?'<span class="an">'+IC.tick+'</span>':'')+'</button>';
+  }
+  return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>';
+}
+function cvPg(inner){return '<div class="pg"><h1 class="pt">Class</h1>'+inner+'</div>'}
 function cvHTML(){
-  if(!S.tok)return '<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>';
+  if(!S.tok)return cvPg('<div class="feature"><p><b>Sign in to see your class.</b> <a href="#/account">Open Account</a>. When you create an account, enter your name and the class code.</p></div>');
   var lock=typeof examLock==='function'?examLock():null;
-  if(lock)return '<div class="feature"><p><b>Class answers are locked while you sit an exam.</b></p><p>Submit '+esc(lock.name)+' or wait for its working time to end.</p><div class="acts"><a class="nb" href="#/'+esc(lock.id)+'/q/'+(BS(lock.id).cur||1)+'">Return to the exam</a></div></div>';
-  if(CV.st===null)return '<div class="feature"><p>Loading your class...</p></div>'+(CV.msg?'<p class="mut">'+esc(CV.msg)+'</p>':'');
-  if(!CV.st.configured)return '<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>';
-  if(!CV.st.member)return cvJoinHTML();
-  var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and diagrams are not shared.</p>'+
-    '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
-  h+='<h2 class="pt" style="margin-top:18px">Papers</h2><div class="acts">'+cvBanks().map(function(b){
-    var n=CV.over&&CV.over.counts&&CV.over.counts[b.id]||0;
-    return '<button class="nb'+(CV.bank===b.id?'':' ol')+'" data-cv="bank" data-id="'+esc(b.id)+'" type="button">'+esc(b.name)+'<small>'+n+' shared</small></button>';
-  }).join('')+'</div>';
-  if(CV.msg)h+='<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>';
-  if(!CV.bank)return h+'<p class="mut">Choose a paper to see what the class wrote. To read the sample answer and your own marking beside it, use <a href="#/review">Review</a>.</p>';
-  var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];if(!b)return h;
-  if(CV.ansBank!==b.id||!CV.ans)return h+'<p>Loading class answers...</p>';
-  h+='<p class="mut">'+CV.ans.submitted.length+' of '+CV.ans.members+' members have shared answers for this paper'+(CV.ans.submitted.length?': '+CV.ans.submitted.map(function(s){return esc(s.mine?'You':s.name)}).join(', '):'')+'.</p>';
-  b.qs.forEach(function(q,qi){
-    q.it.forEach(function(it,pi){
-      var key=(qi+1)+'.'+pi,list=CV.ans.parts[key];if(!list||!cvOpenItem(it))return;
-      h+='<div class="feature cvpart" style="margin-top:14px"><div class="cvhd"><b>Question '+(qi+1)+(q.it.length>1?' part '+(pi+1):'')+'</b></div>'+
-        '<div class="cvq">'+esc(cvPlain(it.q||'').slice(0,600))+'</div><div class="cvbox">'+cvPartBody(b.id,key,qi+1,pi,list)+'</div></div>';
-    });
-  });
-  return h;
+  if(lock)return cvPg('<div class="feature"><p><b>Class answers are locked while you sit an exam.</b></p><p>Submit '+esc(lock.name)+' or wait for its working time to end.</p><div class="acts"><a class="nb" href="#/'+esc(lock.id)+'/q/'+(BS(lock.id).cur||1)+'">Return to the exam</a></div></div>');
+  if(CV.st===null)return cvPg('<div class="feature"><p>Loading your class...</p></div>'+(CV.msg?'<p class="mut">'+esc(CV.msg)+'</p>':''));
+  if(!CV.st.configured)return cvPg('<div class="feature"><p>The class has not been set up on this site yet. The site owner needs to set the class code.</p></div>');
+  if(!CV.st.member)return cvPg(cvJoinHTML());
+  var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
+  if(!b){
+    var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and diagrams are not shared.</p>'+
+      '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
+    h+='<h2 class="pt" style="margin-top:18px">Papers</h2><p class="mut">Open a paper to read every question as it appears in the exam, with what your class wrote under each written part.</p><div class="acts">'+cvBanks().map(function(x){
+      var n=CV.over&&CV.over.counts&&CV.over.counts[x.id]||0;
+      return '<a class="nb ol" href="#/class/'+esc(x.id)+'/1">'+esc(x.name)+'<small>'+n+' shared</small></a>';
+    }).join('')+'</div>';
+    if(CV.msg)h+='<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>';
+    return cvPg(h);
+  }
+  var head='<div class="cvbar"><a href="#/class">&larr; All papers</a> <b>'+esc(b.name)+'</b>'+(CV.ans&&CV.ansBank===b.id?' <span class="mut">'+CV.ans.submitted.length+' of '+CV.ans.members+' members have shared answers'+(CV.ans.submitted.length?': '+CV.ans.submitted.map(function(s){return esc(s.mine?'You':s.name)}).join(', '):'')+'</span>':'')+'</div>'+
+    (CV.msg?'<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>':'');
+  var body=(CV.ansBank!==b.id||!CV.ans)&&!CV.msg?'<p>Loading class answers...</p>':'';
+  return cvNavHTML(b)+'<main class="ex" id="qarea">'+head+cvQuestionHTML(b,CV.n)+body+'</main>';
 }
 function cvJoinHTML(){
   return '<div class="feature"><h2 class="pt">Join your class</h2><p>Enter your name and the class code from your teacher. Classmates see your name next to your submitted written answers.</p>'+
@@ -105,9 +147,10 @@ function cvList(items,fn){return items&&items.length?items.map(fn).join(''):''}
 function cvWho(r,letters){return (letters||[]).map(function(l){return esc(r.names&&r.names[l]||l)}).join(', ')}
 function cvResultHTML(res){
   var r=res.result||{},h='<div class="cvres">';
+  if(r.combined)h+='<div class="cvbest">'+esc(r.combined).replace(/\n/g,'<br>')+'</div><p class="mut">About '+cvPlain(r.combined).split(' ').length+' words (target about '+res.targetWords+'). Built only from points the class made, checked against the syllabus.</p>';
   if(res.keyword)h+='<p class="mut">NESA key word: <b>'+esc(res.keyword.word)+'</b> &mdash; '+esc(res.keyword.meaning)+'</p>';
   if(r.directive)h+='<p><b>What the question asks:</b> '+esc(r.directive)+'</p>';
-  h+='<h3>Main points the class made</h3><ul class="cvpts">'+cvList(r.mainPoints,function(p){
+  h+='<h3>Main points behind it</h3><ul class="cvpts">'+cvList(r.mainPoints,function(p){
     var tag=p.answersQuestion==='yes'?'Answers the question':p.answersQuestion==='partly'?'Partly answers':'Off the question';
     return '<li><b>'+esc(p.point)+'</b> <span class="pill '+(p.answersQuestion==='yes'?'ok':p.answersQuestion==='partly'?'part':'bad')+'">'+tag+'</span>'+
       (p.syllabus?'<br><span class="mut">Syllabus: '+esc(p.syllabus)+'</span>':'')+
@@ -115,14 +158,13 @@ function cvResultHTML(res){
       cvList(p.quotes,function(q){return '<blockquote class="cvquote">&ldquo;'+esc(q.text)+'&rdquo; <span class="mut">'+esc(res.names&&res.names[q.who]||q.who)+'</span></blockquote>'})+'</li>';
   })+'</ul>';
   if(r.missed&&r.missed.length)h+='<h3>Missed by the class</h3><ul>'+r.missed.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul>';
-  if(r.combined)h+='<h3>Best combined answer</h3><div class="cvbest">'+esc(r.combined).replace(/\n/g,'<br>')+'</div><p class="mut">About '+cvPlain(r.combined).split(' ').length+' words (target about '+res.targetWords+'). Built only from points the class made, checked against the syllabus.</p>';
   return h+'</div>';
 }
 document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
-  if(a==='bank'){CV.bank=el.getAttribute('data-id');CV.msg='';cvDraw();classBind();return}
-  if(a==='toggle'){var k=el.getAttribute('data-k');CV.open[k]=!CV.open[k];cvDraw();return}
+  if(a==='goq'){location.hash='#/class/'+CV.bank+'/'+(+el.getAttribute('data-n')||1);return}
+  if(a==='toggle'){var k=el.getAttribute('data-k');CV.open[k]=CV.open[k]===false;cvDraw();return}
   if(a==='join'){
     var nm=(document.getElementById('cvname')||{}).value||'',cd=(document.getElementById('cvcode')||{}).value||'';
     CV.joining=true;CV.msg='';cvDraw();

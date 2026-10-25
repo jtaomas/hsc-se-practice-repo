@@ -163,7 +163,7 @@ function render(){
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
   else if(h[0]==='account')html=accountPage();
-  else if(h[0]==='class')html=classPage(h[1]||'');
+  else if(h[0]==='class')html=classPage(h[1]||'',h[2]);
   else if(h[0]==='compare')html=comparisonPage();
   else if(!b)html=homePage();
   else if(!h[1])html=landingPage(b);

@@ -1,3 +1,38 @@
+function extractKeyPoints(text){
+  if(!text)return [];
+  var clean=String(text).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  var sents=clean.split(/(?<=[.!?])\s+/).filter(function(st){
+    st=st.trim();
+    return st.length>=16&&!/^(e\.g\.|i\.e\.|etc\.)/i.test(st);
+  });
+  if(!sents.length){
+    if(clean.length>12)return [{point:clean}];
+    return [];
+  }
+  return sents.slice(0,4).map(function(st){
+    return {point:st.replace(/^[-*•\d.)\s]+/,'').trim()};
+  });
+}
+function cvAnswerPoints(res,studentName,text){
+  var points=[];
+  if(res&&res.result&&Array.isArray(res.result.mainPoints)){
+    var letter=null;
+    if(res.names){
+      Object.keys(res.names).forEach(function(l){
+        if(res.names[l]===studentName||(studentName==='You'&&res.names[l]==='You'))letter=l;
+      });
+    }
+    res.result.mainPoints.forEach(function(p){
+      if(letter&&p.madeBy&&p.madeBy.indexOf(letter)>=0){
+        points.push({point:p.point,status:p.answersQuestion,why:p.why});
+      }
+    });
+  }
+  if(!points.length&&text){
+    points=extractKeyPoints(text);
+  }
+  return points;
+}
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
 var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,run:{},res:{},open:{},joining:false};
 function cvApi(body){
@@ -58,8 +93,21 @@ function cvPartBody(bankId,key,qn,pi,list){
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
     var wc=cvPlain(a.text).split(' ').filter(Boolean).length;
-    return '<div class="cvans"><div class="cvwho">'+esc(a.mine?'You':a.name)+' <span class="mut">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
-      (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+'</div>';
+    var author=a.mine?'You':a.name;
+    var pts=cvAnswerPoints(r,author,a.text);
+    var ptsHTML='';
+    if(pts&&pts.length){
+      ptsHTML='<div class="cv-main-pts"><div class="cv-pts-head"><span class="cv-pts-title"><b>Main points in this response:</b></span>'+
+        (r?'<span class="cv-badge">Syllabus assessed</span>':'<span class="cv-badge mut">Key points</span>')+'</div>'+
+        '<ul class="cv-pts-list">'+pts.map(function(p){
+          return '<li><b>'+esc(p.point)+'</b>'+
+            (p.status?' <span class="pill '+(p.status==='yes'?'ok':p.status==='partly'?'part':'bad')+'">'+(p.status==='yes'?'Answers the question':p.status==='partly'?'Partly answers':'Off the question')+'</span>':'')+
+            (p.why?'<br><span class="mut">'+esc(p.why)+'</span>':'')+'</li>';
+        }).join('')+'</ul></div>';
+    }
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+esc(author)+'</span><span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
+      (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+
+      ptsHTML+'</div>';
   }).join('');
   /* The aggregator: always shown, so it is clear where the model answer will appear. */
   h+='<div class="cvagg"><div class="cvhd"><b>Class model answer</b></div>';
@@ -74,7 +122,7 @@ function classPage(bankId,n){
   var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
   CV.n=b?Math.min(b.qs.length,Math.max(1,+n||1)):0;
   CUR={b:null,n:0};
-  return frame(b?'Class: '+b.name:'Class','<div id="cvroot">'+cvHTML()+'</div>',b?{bar:true}:{});
+  return frame(b?'Class: '+b.name:'Class','<div id="cvroot">'+cvHTML()+'</div>',b?{nav:cvNavHTML(b),bar:true}:{});
 }
 function classBind(){
   if(!S.tok)return;
@@ -102,7 +150,7 @@ function cvQuestionHTML(b,n){
   var acts='<div class="acts"><button class="nb ol" data-cv="goq" data-n="'+(n-1)+'" type="button"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button>'+
     '<button class="nb" data-cv="goq" data-n="'+(n+1)+'" type="button"'+(n===b.qs.length?' disabled':'')+'><span>Next question</span>'+IC.right+'</button></div>';
   if(q.two)return '<div class="qwrap two"><div class="qleft">'+title+st+'</div><div><div class="item">'+items+'</div>'+acts+'</div></div>';
-  return '<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
+  return '<div class="qwrap cvwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
 }
 function cvNavHTML(b){
   var h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
@@ -130,10 +178,12 @@ function cvHTML(){
     if(CV.msg)h+='<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>';
     return cvPg(h);
   }
-  var head='<div class="cvbar"><a href="#/class">&larr; All papers</a> <b>'+esc(b.name)+'</b>'+(CV.ans&&CV.ansBank===b.id?' <span class="mut">'+CV.ans.submitted.length+' of '+CV.ans.members+' members have shared answers'+(CV.ans.submitted.length?': '+CV.ans.submitted.map(function(s){return esc(s.mine?'You':s.name)}).join(', '):'')+'</span>':'')+'</div>'+
+  var head='<div class="cvbar"><div class="cv-crumb"><a href="#/class" class="cv-back">&larr; All papers</a> <span class="cv-sep">/</span> <b class="cv-pname">'+esc(b.name)+'</b></div>'+
+    (CV.ans&&CV.ansBank===b.id?'<div class="cv-stats"><span class="cv-pill">'+CV.ans.submitted.length+' of '+CV.ans.members+' shared</span>'+
+      (CV.ans.submitted.length?' <span class="cv-members">('+CV.ans.submitted.map(function(s){return esc(s.mine?'You':s.name)}).join(', ')+')</span>':'')+'</div>':'')+'</div>'+
     (CV.msg?'<p class="acmsg" role="alert">'+esc(CV.msg)+'</p>':'');
   var body=(CV.ansBank!==b.id||!CV.ans)&&!CV.msg?'<p>Loading class answers...</p>':'';
-  return cvNavHTML(b)+'<main class="ex" id="qarea">'+head+cvQuestionHTML(b,CV.n)+body+'</main>';
+  return '<main class="ex cv-main" id="qarea">'+head+cvQuestionHTML(b,CV.n)+body+'</main>';
 }
 function cvJoinHTML(){
   return '<div class="feature"><h2 class="pt">Join your class</h2><p>Enter your name and the class code from your teacher. Classmates see your name next to your submitted written answers.</p>'+

@@ -53,10 +53,8 @@ function loadCVCache(){
     if (raw) {
       var parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        if (parsed.over) CV.over = parsed.over;
         if (parsed.roster) CV.roster = parsed.roster;
         if (parsed.st) CV.st = parsed.st;
-        CV.overAt = parsed.overAt || 0;
       }
     }
   } catch(e){}
@@ -64,10 +62,8 @@ function loadCVCache(){
 function saveCVCache(){
   try {
     localStorage.setItem(CV_CACHE_KEY, JSON.stringify({
-      over: CV.over,
       roster: CV.roster,
-      st: CV.st,
-      overAt: CV.overAt || Date.now()
+      st: CV.st
     }));
   } catch(e){}
 }

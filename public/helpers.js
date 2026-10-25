@@ -152,6 +152,7 @@ function isMyCurrentPaper(bid){
 
 function getPaperStudents(b){
   if(!b || b.id == null) return [];
+  if(typeof CV === 'undefined' || !CV.over || !CV.over.papers) return [];
   var list = [];
   var bid = String(b.id);
   var u = (typeof S !== 'undefined' && S && S.u) ? S.u[bid] : null;

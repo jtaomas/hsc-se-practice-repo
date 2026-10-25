@@ -137,6 +137,7 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
 .band{background:#f2f2f2;padding:8px 22px;display:flex;justify-content:flex-end;gap:6px;border-bottom:1px solid #e0e0e0}
 .band .tbb{font-size:.78em}
 .hgrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.tgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
 .bks{display:flex;flex-direction:column;gap:12px;margin-top:10px}
 .bks a.nb{justify-content:flex-start;text-decoration:none;display:flex;flex-direction:column;align-items:flex-start;gap:0}
 .bks a.nb small{font-weight:400;font-size:.8em;opacity:.9}
@@ -156,6 +157,7 @@ table.res th{background:rgba(95,204,245,.3)}
 @media (max-width:860px){
  .qwrap.two{grid-template-columns:1fr}
  .hgrid{grid-template-columns:1fr}
+  .tgrid{grid-template-columns:1fr}
  .nav-bar{flex-direction:column;align-items:stretch;padding:0 12px}
  .tools{flex-wrap:wrap;padding-bottom:8px}
  .ex{padding:0 12px 18px}

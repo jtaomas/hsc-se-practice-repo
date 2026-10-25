@@ -79,8 +79,8 @@ with sync_playwright() as p:
     tm=pg.inner_text('#tmr');assert re.match(r'2:19:5\d|2:20:00',tm),tm
     pg.evaluate("BS('2').start=1;save('2')")  # let this exam run out so it does not lock the later steps
     # A mini paper keeps its own length and timer through navigation, submission and review.
-    pg.goto(U+'#/');pg.wait_for_selector('.bks a[href="#/10"]')
-    assert 'Mini Paper 1' in pg.inner_text('.bks a[href="#/10"]')
+    pg.goto(U+'#/');pg.wait_for_selector('a[href="#/papers"]')
+    assert 'Start an exam' in pg.inner_text('.feature:has-text("Practice exams")')
     pg.goto(U+'#/papers');pg.wait_for_selector('a[href="#/10"]')
     assert 'Mini Paper 1' in pg.inner_text('.plist')
     pg.click('a[href="#/10"]');pg.wait_for_selector('[data-mode=exam]')

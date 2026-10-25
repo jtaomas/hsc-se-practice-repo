@@ -7,7 +7,7 @@ SITE = os.environ.get('SITE', 'http://127.0.0.1:8767').rstrip('/')
 errors, calls = [], []
 state = {'member': False}
 ANSWERS = {'bankId': '8', 'members': 2, 'submitted': [{'name': 'Priya', 'mine': False}, {'name': 'You', 'mine': True}],
-           'parts': {'17.0': [{'id': 'a', 'name': 'Priya', 'mine': False, 'text': 'Agile <b>sprints</b> allow quick feedback.'}, {'id': 'b', 'name': 'Sam', 'mine': True, 'text': 'Waterfall is linear and suits fixed scope.'}]}}
+           'parts': {'17.0': [{'id': 'a', 'name': 'Priya', 'mine': False, 'mark': 1, 'max': 2, 'text': 'Agile <b>sprints</b> allow quick feedback.'}, {'id': 'b', 'name': 'Sam', 'mine': True, 'mark': 2, 'max': 2, 'text': 'Waterfall is linear and suits fixed scope.'}]}}
 RESULT = {'status': 'ready', 'names': {'A': 'Priya', 'B': 'You'}, 'count': 2, 'keyword': {'word': 'evaluate', 'meaning': 'Make a judgement based on criteria.'}, 'targetWords': 270,
           'result': {'directive': 'Evaluate means make a judgement using criteria.', 'missed': ['Cost of rework'], 'combined': 'Agile supports frequent feedback while waterfall suits fixed scope.',
                      'mainPoints': [{'point': 'Agile gives quick feedback', 'syllabus': 'Agile approach', 'answersQuestion': 'yes', 'why': 'Directly relevant.', 'madeBy': ['A'], 'quotes': [{'who': 'A', 'text': 'quick feedback'}]}]}}
@@ -84,6 +84,9 @@ with sync_playwright() as pw:
     page.click('.nav-elem[data-n="17"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 17 ')
     expect(page.locator('.cvans').first).to_contain_text('Priya')
+    expect(page.locator('.cvans').first.locator('.cv-mark')).to_have_text('1 / 2')
+    expect(page.locator('.cvans').first.locator('.cv-mark')).to_have_class(__import__('re').compile(r'\bbad\b'))
+    expect(page.locator('.cvans').nth(1).locator('.cv-mark')).to_have_class(__import__('re').compile(r'\bok\b'))
     assert page.locator('.cvtxt b').count() == 0, 'answers must be escaped'
     expect(page.locator('.cvagg').first).to_contain_text('Class model answer')
     page.click('[data-cv=toggle]')

@@ -1072,3 +1072,10 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .rto-h b{margin-right:auto}
 .rto-l{border:0;background:none;color:#002664;text-decoration:underline;cursor:pointer;font:inherit;padding:0}
 .rto .yans{margin:4px 0;max-height:220px}
+
+/* Class answers: each classmate's mark for the part */
+.cv-meta{display:flex;align-items:center;gap:8px}
+.cv-mark{padding:2px 9px;border-radius:10px;font-size:.85em;font-weight:700}
+.cv-mark.ok{background:#e6f4ea;color:#14532d}
+.cv-mark.bad{background:#fdeef1;color:#8a0f2b}
+.cv-mark.none{background:#f1f5f9;color:#64748b;font-weight:500}

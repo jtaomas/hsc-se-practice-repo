@@ -114,6 +114,11 @@ function cvSlotInner(b,n,i){
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
 }
 /* Shared by the class page and the review panel. */
+/* A classmate's mark for the part, coloured like marks everywhere else: green full marks, red anything less. */
+function cvMarkHTML(a){
+  if(typeof a.mark!=='number'||typeof a.max!=='number')return '<span class="cv-mark none" title="Not marked yet">Unmarked</span>';
+  return '<span class="cv-mark '+(a.mark>=a.max?'ok':'bad')+'" title="Mark for this part">'+a.mark+' / '+a.max+'</span>';
+}
 function cvPartBody(bankId,key,qn,pi,list){
   var k=bankId+'|'+key,r=CV.res[k],run=CV.run[k],isOpen=CV.open[k]!==false,busy=run&&!run.err;
   var bk=BANKS.filter(function(x){return x.id===bankId})[0],it=bk&&bk.qs[qn-1]&&bk.qs[qn-1].it[pi],code=!!it&&it.t!=='tx';
@@ -141,7 +146,7 @@ function cvPartBody(bankId,key,qn,pi,list){
             (p.why?'<br><span class="mut">'+esc(p.why)+'</span>':'')+'</li>';
         }).join('')+'</ul></div>';
     }
-    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+'</span><span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></div>'+
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+'</span><span class="cv-meta">'+cvMarkHTML(a)+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
       (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+
       ptsHTML+'</div>';
   }).join('');

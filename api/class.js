@@ -34,6 +34,16 @@ function createHandler(deps) {
     return Object.keys(papers).some(k => { const p = papers[k]; return p && p.mode === 'exam' && p.start && !p.done && clock() - p.start < 3 * 3600e3; });
   }
 
+  // The mark a student holds for one part: the mark they set themselves, else a confirmed AI mark. Null while it is unmarked.
+  // Provisional and needs-review AI results carry no confirmed mark, so they are not shown.
+  function partMark(paper, key, max) {
+    const ok = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
+    const own = paper.self && paper.self[key];
+    if (ok(own)) return own;
+    const ai = paper.ai && paper.ai[key];
+    return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
+  }
+
   // Open-ended answers of every member for one paper, in a fixed order.
   async function classAnswers(bank, me) {
     const members = await store.members();
@@ -50,8 +60,9 @@ function createHandler(deps) {
       if (!engine.isOpen(item)) return;
       const list = [];
       submitted.forEach(r => {
-        const text = engine.answerText(item, r.paper.ans && r.paper.ans[(qi + 1) + '.' + pi]);
-        if (text) list.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text });
+        const key = (qi + 1) + '.' + pi;
+        const text = engine.answerText(item, r.paper.ans && r.paper.ans[key]);
+        if (text) list.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text, mark: partMark(r.paper, key, item.m), max: item.m });
       });
       parts[(qi + 1) + '.' + pi] = list;
     }));

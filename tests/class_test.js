@@ -110,6 +110,17 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await rest(h, { action: 'overview' })).body.papers['8'].find(x => x.name === 'Priya').photo, 'data:image/jpeg;base64,/9j/2Q==');
   assert.deepEqual(ans.parts['17.0'].map(x => [x.name, x.mine]).sort(), [['Priya', false], ['Samuel', true]]);
   assert(!ans.parts['17.0'].some(x => 'email' in x));
+  // Every answer carries its author's mark for the part: their own mark first, else a confirmed AI mark. Provisional, needs-review and out-of-range marks are not shown.
+  const priya = async () => (await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].find(x => x.name === 'Priya');
+  const putPriya = extra => m.put('progress/' + id(2) + '.json', { u: { 8: Object.assign(paper('<p>' + text2 + '</p>'), extra) } });
+  assert.equal((await priya()).mark, null, 'an unmarked answer has no mark');
+  assert.equal((await priya()).max, bank.qs[16].it[0].m);
+  await putPriya({ self: { '17.0': 2 }, ai: { '17.0': { status: 'marked', g: 1 } } }); assert.equal((await priya()).mark, 2, 'their own mark wins');
+  await putPriya({ ai: { '17.0': { status: 'marked', g: 1 } } }); assert.equal((await priya()).mark, 1, 'a confirmed AI mark is used');
+  await putPriya({ ai: { '17.0': { status: 'provisional', g: 1 } } }); assert.equal((await priya()).mark, null);
+  await putPriya({ ai: { '17.0': { status: 'needs_review', g: null } } }); assert.equal((await priya()).mark, null);
+  await putPriya({ ai: { '17.0': { status: 'marked', g: 99 } }, self: { '17.0': -1 } }); assert.equal((await priya()).mark, null, 'out-of-range marks are ignored');
+  await m.put('progress/' + id(2) + '.json', { u: { 8: paper('<p>' + text2 + '</p>') } });
   assert.equal((await rest(h, { action: 'analyse', bankId: '8', questionNumber: 1, partIndex: 0 })).body.code, 'invalid_part', 'multiple choice is not analysed');
   const r1 = (await rest(h, { action: 'analyse', bankId: '8', questionNumber: 17, partIndex: 0 })).body;
   assert.equal(r1.status, 'ready'); assert.equal(r1.count, 2); assert(Object.values(r1.names).includes('You')); assert(Object.values(r1.names).includes('Priya'));

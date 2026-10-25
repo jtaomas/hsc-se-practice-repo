@@ -570,6 +570,7 @@ document.addEventListener('click',function(e){
     el.classList.remove('pop-open');
     var c=el.closest('.bk-card');if(c)c.classList.remove('has-pop-open');
   });
+  $$('details.pmenu[open]').forEach(function(m){if(!m.contains(e.target))m.removeAttribute('open')});
   var el=e.target.closest('[data-act]');
   if((Object.keys(MENU).length||CPK)&&!e.target.closest('.tb')){MENU={};CPK='';redrawTools()}
   if(!el)return;
@@ -648,6 +649,15 @@ document.addEventListener('click',function(e){
       else pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i,rec=aiRecord(pb,qi+1,i);if(d.only==='unconfirmed'&&!(rec&&(rec.status==='provisional'||rec.status==='needs_review')))return;if(rec)aiForce(pb,k);delete bs.ai[k];delete bs.aiErr[k]})});
       delete AIRUN[pb.id];Object.keys(AIQ).forEach(function(k){if(k.indexOf(pb.id+'/')===0)delete AIQ[k]});
       save(pb.id);markAndShow(pb);
+    }
+  }
+  else if(a==='pfilter'){if(d.f==='hidden')PF.hid=true;else{PF.hid=false;PF.f=d.f}render()}
+  else if(a==='phide'){S.hiddenPapers=S.hiddenPapers||{};if(d.v==='0')delete S.hiddenPapers[d.id];else S.hiddenPapers[d.id]=1;persist();render()}
+  else if(a==='pdelete'){
+    var db=BANKS.filter(function(x){return x.id===d.id&&!x.hidden})[0];
+    if(db&&S.u[db.id]&&!aiRunCurrent(db,AIRUN[db.id])&&confirm('Delete your attempt at "'+db.name+'"? Its answers and marks are removed and its score is not kept. This cannot be undone.')){
+      delete TIMEUP[db.id];delete AIRUN[db.id];Object.keys(AIQ).forEach(function(k){if(k.indexOf(db.id+'/')===0)delete AIQ[k]});
+      delete S.u[db.id];save(db.id);render();
     }
   }
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}

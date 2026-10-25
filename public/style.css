@@ -1460,3 +1460,33 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .cvch-bar{height:6px;background:#e3e7ee;margin:4px 0 2px}
 .cvch-bar i{display:block;height:100%;background:#002664}
 .cvch-who{font-size:.9em;color:#4a5568}
+
+/* Papers list: cards, filter chips and the More menu */
+.ph-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ph-row .pt{margin:0}.ph-links{display:flex;gap:8px;flex-wrap:wrap}.ph-links .nb{text-decoration:none}
+.pl-sum{margin:0 0 4px}
+.pf-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.pf-chip{font:inherit;font-size:.88em;border:1.4px solid #002664;background:#fff;color:#002664;border-radius:999px;padding:5px 14px;cursor:pointer}
+.pf-chip span{opacity:.7;margin-left:2px}
+.pf-chip.on{background:#002664;color:#fff}.pf-chip.pf-hid{margin-left:auto;border-style:dashed}
+.plist{display:flex;flex-direction:column;gap:10px}
+.pcard{background:#fff;border:1px solid #d0d0d0;border-left:5px solid #cfd4da;border-radius:4px;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.pcard.pk-done{border-left-color:#1a7f37}.pcard.pk-prog{border-left-color:#f2c200}
+.pc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.pc-name{font-weight:700;font-size:1.05em}.pc-sub{color:#555;font-size:.88em;margin-top:2px}
+.pc-chip{font-size:.78em;font-weight:700;border-radius:999px;padding:2px 10px;background:#e8ebef;color:#333;white-space:nowrap}
+.pc-chip.pk-done{background:#dff3e4;color:#14532d}.pc-chip.pk-prog{background:#fff3c4;color:#5c4400}
+.pc-score{font-size:.95em}.pc-date{display:block;color:#666;font-size:.85em}
+.pc-bar{height:6px;background:#e3e6ea;border-radius:3px;overflow:hidden}.pc-bar i{display:block;height:100%;background:#002664}
+.pc-ai{color:#555;font-size:.85em}.pc-ai .note{display:block}
+.pc-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}.pc-acts a.nb{text-decoration:none}
+.pmenu{position:relative}.pmenu summary{list-style:none}.pmenu summary::-webkit-details-marker{display:none}
+.pmenu summary::after{content:"\25BE";margin-left:4px}
+.pm-list{position:absolute;z-index:20;left:0;top:calc(100% + 4px);min-width:15rem;background:#fff;border:1px solid #b9c0c8;border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column;gap:2px}
+.pm-list .nb,.pm-item{display:block;width:100%;box-sizing:border-box;text-align:left;justify-content:flex-start;background:transparent;border:0;color:#002664;font:inherit;font-size:.9em;font-weight:600;padding:8px 10px;border-radius:3px;cursor:pointer;text-decoration:none;min-width:0}
+.pm-list .nb:hover,.pm-item:hover{background:#eef2f8}
+.pm-list .nb:disabled,.pm-item:disabled{color:#9aa1a9;cursor:default;background:transparent}
+.pm-danger{color:#b81237}.pm-sep{height:1px;background:#e3e6ea;margin:3px 0}
+@media(max-width:560px){.pm-list{min-width:12rem}.pf-chip.pf-hid{margin-left:0}}
+.pcard.pk-new{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pcard.pk-new .pc-chip{display:none}.pcard.pk-new .pc-acts{margin-top:0}

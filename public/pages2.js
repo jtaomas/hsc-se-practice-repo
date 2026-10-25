@@ -16,25 +16,53 @@ function paperMarkBtns(b,run){
   if(unc&&!run)h+='<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'" data-only="unconfirmed">Mark '+unc+' unconfirmed answer'+(unc>1?'s':'')+' again</button>';
   return h+'<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'"'+dis+'>'+(run?'Marking...':'Re-mark entire paper')+'</button>';
 }
+/* Papers list: one card per paper with a single main button; everything else sits in a More menu. Hidden papers are a per-browser choice (S.hiddenPapers). */
+var PF={f:'all',hid:false};
+function paperHidden(id){return !!(S.hiddenPapers&&S.hiddenPapers[id])}
+function paperKind(b){var u=S.u[b.id];return u?(u.done?'done':(u.start?'prog':'new')):'new'}
+function paperCard(b,hiddenView){
+  var u=S.u[b.id],k=paperKind(b),id=esc(b.id),run=null,chips={done:'Submitted',prog:'In progress','new':'Not started'};
+  var h='<div class="pcard pk-'+k+'"><div class="pc-top"><div class="pc-main"><div class="pc-name">'+esc(b.name)+'</div><div class="pc-sub">'+esc(b.sub)+'</div></div><span class="pc-chip pk-'+k+'">'+chips[k]+'</span></div>';
+  var primary,menu='';
+  if(k==='done'){
+    var t=totals(b),pct=t.markedM?Math.round(100*t.T/t.markedM):null;
+    run=aiRunCurrent(b,AIRUN[b.id])?AIRUN[b.id]:null;
+    h+='<div class="pc-score"><b>'+t.T+' / '+t.markedM+'</b> <span class="mut">'+(t.markedM?'('+pct+'% of assessed marks)':'No marks assessed')+(t.P?' · '+t.P+' marks unscored':'')+'</span> <span class="pc-date">Submitted '+fmtD(u.doneAt)+'</span></div>'+
+      (t.markedM?'<div class="pc-bar" aria-hidden="true"><i style="width:'+pct+'%"></i></div>':'')+
+      (t.provisionalParts?'<div class="note">'+provisionalMarksText(t)+'</div>':'')+
+      (run?paperRunBox(b,run):'<div class="pc-ai">'+aiState(b)+'</div>');
+    primary='<a class="nb sm" href="#/'+id+'/review/1">View paper and marking</a>';
+    menu='<a class="pm-item" href="#/'+id+'/results">Results</a><a class="pm-item" href="#/mistakes/'+id+'">Mistakes</a><div class="pm-sep"></div>'+paperMarkBtns(b,run);
+  }else{
+    primary='<a class="nb sm" href="#/'+id+'">'+(k==='prog'?'Continue':'Open')+'</a>';
+  }
+  if(k!=='new'){menu+='<button type="button" class="pm-item pm-danger" data-act="pdelete" data-id="'+id+'"'+(run?' disabled':'')+'>Delete attempt</button>'}
+  if(hiddenView){h+='<div class="pc-acts">'+primary+'<button type="button" class="nb sm ol" data-act="phide" data-id="'+id+'" data-v="0">Show in list</button></div></div>';return h}
+  menu+='<button type="button" class="pm-item" data-act="phide" data-id="'+id+'" data-v="1">Hide paper</button>';
+  return h+'<div class="pc-acts">'+primary+'<details class="pmenu"><summary class="nb sm ol">More</summary><div class="pm-list">'+menu+'</div></details></div></div>';
+}
 function papersPage(){
   CUR={b:null,n:0};
   var visible=BANKS.filter(function(b){return !b.hidden});
-  var rows=visible.map(function(b){
-    var run=null,u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started',sc='',acts='<a class="nb sm" href="#/'+b.id+'">'+(u&&u.start&&!u.done?'Continue':'Open')+'</a>';
-    if(u&&u.done){var t=totals(b);sc='<b>'+t.T+' / '+t.markedM+'</b> <span class="mut">'+(t.markedM?'('+Math.round(100*t.T/t.markedM)+'% of assessed marks)':'No marks assessed')+(t.P?' · '+t.P+' marks unscored':'')+'</span>'+(t.provisionalParts?'<br><span class="note">'+provisionalMarksText(t)+'</span>':'');
-      run=aiRunCurrent(b,AIRUN[b.id])?AIRUN[b.id]:null;
-      acts='<a class="nb sm" href="#/'+b.id+'/review/1">View paper and marking</a><a class="nb sm ol" href="#/'+b.id+'/results">Results</a><a class="nb sm ol" href="#/mistakes/'+b.id+'">Mistakes</a>'+paperMarkBtns(b,run)}
-    return '<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub)+'</div></td><td>'+st+(u&&u.done?'<div class="mut">'+fmtD(u.doneAt)+'</div>':'')+'</td><td>'+sc+(u&&u.done?(run?paperRunBox(b,run):'<div class="mut">'+aiState(b)+'</div>'):'')+'</td><td class="ra">'+acts+'</td></tr>';
-  }).join('');
+  var live=visible.filter(function(b){return !paperHidden(b.id)}),nHid=visible.length-live.length;
+  if(PF.hid&&!nHid)PF.hid=false;
+  var shown=(PF.hid?visible.filter(function(b){return paperHidden(b.id)}):live).filter(function(b){return PF.hid||PF.f==='all'||paperKind(b)===PF.f});
+  function cnt(f){return live.filter(function(b){return f==='all'||paperKind(b)===f}).length}
+  var chipDefs=[['all','All'],['prog','In progress'],['done','Submitted'],['new','Not started']];
+  var filters='<div class="pf-row" role="group" aria-label="Filter papers">'+chipDefs.map(function(c){
+    return '<button type="button" class="pf-chip'+(!PF.hid&&PF.f===c[0]?' on':'')+'" data-act="pfilter" data-f="'+c[0]+'" aria-pressed="'+(!PF.hid&&PF.f===c[0])+'">'+c[1]+' <span>'+cnt(c[0])+'</span></button>';
+  }).join('')+(nHid?'<button type="button" class="pf-chip pf-hid'+(PF.hid?' on':'')+'" data-act="pfilter" data-f="hidden" aria-pressed="'+PF.hid+'">Hidden <span>'+nHid+'</span></button>':'')+'</div>';
+  var rows=shown.map(function(b){return paperCard(b,PF.hid)}).join('');
   var hist=S.hist.filter(function(h){return !BANKS.some(function(b){return b.id===h.id&&b.hidden})}).sort(function(a,b){return b.at-a.at});
   var done=visible.filter(function(b){return S.u[b.id]&&S.u[b.id].done}).length;
   var md=typeof syllabusMasteryData==='function'?syllabusMasteryData():null;
   var stripHTML=md?'<div class="sm-strip">'+md.areas.map(function(a){
     return '<a href="#/mastery" class="sm-strip-item" style="text-decoration:none;color:inherit" title="'+esc(a.name)+'"><b>'+esc(a.id)+':</b> <span style="max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.name)+'</span><span class="sm-pill '+a.band.cls+'">'+(a.pct!=null?a.pct+'%':'-')+'</span></a>';
-  }).join('')+'<a class="nb sm ol" href="#/mastery" style="margin-left:auto;align-self:center">Outcome Mastery &rarr;</a></div>':'';
-  return frame('Papers','<div class="pg"><h1 class="pt">All papers</h1><div class="feature"><p>Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria. '+done+' of '+visible.length+' papers finished.</p><p><a class="nb ol" href="#/class">Class answers</a></p>'+
-    stripHTML+
-    '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Mark</th><th></th></tr>'+rows+'</table></div></div>'+
+  }).join('')+'</div>':'';
+  return frame('Papers','<div class="pg"><div class="ph-row"><h1 class="pt">All papers</h1><div class="ph-links"><a class="nb sm ol" href="#/class">Class answers</a><a class="nb sm ol" href="#/mastery">Outcome Mastery &rarr;</a></div></div><div class="feature"><p class="pl-sum"><b>'+done+' of '+visible.length+' papers finished.</b> Open a finished paper to see your answers beside the AI marking, the sample answer and the criteria.</p>'+
+    stripHTML+filters+
+    '<div class="plist">'+(rows||'<p class="mut">'+(PF.hid?'No hidden papers.':'No papers match this filter.')+'</p>')+'</div>'+
+    (PF.hid?'<p class="mut">Hidden papers stay on this browser only. Use Show in list to bring one back.</p>':'')+'</div>'+
     (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' · '+h.pending+' marks unscored':'')+(h.provisionalParts?'<br><span class="note">'+provisionalMarksText(h)+'</span>':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
 }
 /* What's wrong comes first, then your answer, then the sample answer. */

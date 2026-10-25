@@ -1432,3 +1432,7 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
   gap: 8px;
   font-size: .85em;
 }
+
+/* SQL table names: sit close to their table, with clear space between tables */
+.ttl.dbn,.qleft p.ttl.dbn{margin:14px 0 0}
+.ttl.dbn+.tw table.hoa.db{margin-top:4px}

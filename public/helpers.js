@@ -50,7 +50,7 @@ function Q(tp,st,items,o){o=o||{};var m=0;items.forEach(function(i){m+=i.m});ret
 function tbl(h,rows,cap){return (cap?'<p class="ttl">'+cap+'</p>':'')+'<div class="tw"><table class="hoa"><tr>'+h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
 function cls(list){return '<div class="clsg">'+list.map(function(c){return '<table class="hoa cls"><tr><th>'+c[0]+'</th></tr>'+c[1].map(function(a){return '<tr><td>'+a+'</td></tr>'}).join('')+'</table>'}).join('')+'</div>'}
 function code(s){return '<pre class="pre">'+esc(s)+'</pre>'}
-function dbTables(db){var ns=Object.keys(db);return ns.map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)}),esc(n)).replace('<table class="hoa">','<table class="hoa db">')}).join('')}
+function dbTables(db){var ns=Object.keys(db);return ns.map(function(n){var d=db[n];return tbl(d.c,d.r.map(function(r){return r.map(esc)}),esc(n)).replace('<p class="ttl">','<p class="ttl dbn">').replace('<table class="hoa">','<table class="hoa db">')}).join('')}
 /* bulleted list for stimulus and prompt text: bl(['one','two']) */
 function bl(list){return '<ul class="bl">'+list.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>'}
 /* inline SVG icons used by the toolbar, question bar and buttons (they take the text colour) */

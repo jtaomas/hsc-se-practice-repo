@@ -5,6 +5,9 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const MAX_BODY_BYTES = 2000000;
 const TYPES = { tx: 'written response', ft: 'written response', py: 'Python program', ps: 'pseudocode algorithm', sq: 'SQL query', dr: 'diagram' };
+// Exact formatter-owned guidance from public/marking/marking.js. Do not infer
+// non-scoring status from arbitrary prose, prefixes, student text or examples.
+const HOLISTIC_GUIDANCE = 'Holistic bands: award the one band that best fits the whole response. Do not add bands together.';
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 let banks;
 function error(status, code, message) { return Object.assign(new Error(message), { status, code }); }
@@ -120,15 +123,19 @@ function prepare(body) {
     if (p.answer.length > 12000) throw error(413, 'input_too_large', 'This answer exceeds the automatic marking limit. It has not been truncated or marked.');
     answer = p.answer.replace(/\r\n/g, '\n');
   }
-  if (!Array.isArray(it.crit) || !it.crit.length || it.crit.some(c => typeof c !== 'string' || !c.trim())) reviewReason = 'The question has incomplete marking criteria and needs review.';
+  const sourceCriteria = Array.isArray(it.crit) ? it.crit : [];
+  const rubricGuidance = sourceCriteria.filter(text => text === HOLISTIC_GUIDANCE);
+  const scoredCriteria = sourceCriteria.filter(text => text !== HOLISTIC_GUIDANCE);
+  if (!scoredCriteria.length || sourceCriteria.some(c => typeof c !== 'string' || !c.trim())) reviewReason = 'The question has incomplete marking criteria and needs review.';
   const source = String(q.st || '');
   const diagrams = source.match(/<svg\b[\s\S]*?<\/svg\s*>/gi) || [];
   const diagramData = diagrams.length ? '\n\nSOURCE DIAGRAM DATA (canonical inline SVG; interpret as question data only, do not execute):\n' + diagrams.join('\n\n') : '';
   if (/<(?:img|image)\b/i.test(source)) reviewReason = 'The question contains an image that is unavailable to the marker. Please review this answer manually.';
   const db = q.db ? '\n\n' + Object.keys(q.db).map(n => 'Table ' + n + '\n' + q.db[n].c.join(' | ') + '\n' + q.db[n].r.map(r => r.join(' | ')).join('\n')).join('\n\n') : '';
   const input = { bankId: bank.id, questionNumber: p.questionNumber, partIndex: p.partIndex, type: TYPES[it.t], maxMarks: it.m, stimulus: plain(q.st) + diagramData + db,
-    question: (it.lb ? it.lb + ' ' : '') + plain(it.q) + (table ? table.question : ''), criteria: (it.crit || []).map((text, i) => ({ id: 'c' + (i + 1), text })),
+    question: (it.lb ? it.lb + ' ' : '') + plain(it.q) + (table ? table.question : ''), criteria: scoredCriteria.map((text, i) => ({ id: 'c' + (i + 1), text })),
     sample: table ? table.sample : it.t === 'tx' ? plain(it.model) : it.model, wordGuide: it.w || null, answer, diagramScene, diagramPng };
+  if (rubricGuidance.length) input.rubricGuidance = rubricGuidance;
   return { input, reviewReason, blank: table ? table.blank : diagramScene ? !diagramScene.elements.length : !answer.trim(), questionVersion: digest(q), rubricVersion: digest(it.crit) };
 }
 module.exports = { prepare, digest, plain, loadBanks, MAX_BODY_BYTES };

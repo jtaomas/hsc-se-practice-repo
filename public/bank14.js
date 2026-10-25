@@ -11,6 +11,22 @@ var DB21={
   ['S05','F1','2026-03-23',200,192],['S06','F2','2026-03-03',150,141],['S07','F2','2026-03-10',150,120],['S08','F2','2026-02-24',150,149],
   ['S09','F3','2026-03-05',300,285],['S10','F3','2026-03-12',300,271],['S11','F3','2026-03-19',300,260],['S12','F4','2026-03-06',100,85],
   ['S13','F4','2026-03-27',100,90]]}};
+var LR=`class LinearRegression:
+    """Works like LinearRegression in scikit-learn. Do not change this class."""
+    def fit(self, xs, ys):
+        n = len(xs)
+        mx = sum(xs) / n
+        my = sum(ys) / n
+        top = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+        bottom = sum((x - mx) ** 2 for x in xs)
+        self.slope = top / bottom
+        self.intercept = my - self.slope * mx
+
+    def predict(self, x):
+        return self.slope * x + self.intercept
+`;
+var DATA=`sunshine = [2, 4, 5, 7, 9, 3, 8]
+charge = [11, 19, 24, 31, 40, 15, 36]`;
 var qs=[];
 
 /* ---------- Questions 1 to 11: 1 mark each ---------- */
@@ -21,15 +37,15 @@ qs.push(Q(PW,'',[
 qs.push(Q(SA,'A council uses two help-desk chatbots.'+bl(['<b>Bot A</b> replies using 400 if-then rules written by council staff.','<b>Bot B</b> was trained on 50 000 past chats, each labelled with the department that solved it. Its accuracy improves as new labelled chats are added.']),[
  mc('Which statement is correct?',['Neither bot is artificial intelligence because neither understands language like a person.','Only Bot B is artificial intelligence, because rule-based systems are never AI.','Bot A uses machine learning because its rules came from staff experience.','Both bots are examples of artificial intelligence, but only Bot B uses machine learning.'],3,'AI is the broad goal of machines behaving intelligently, which a rule-based expert system can do. ML is the subset of AI in which the system learns its behaviour from data, as Bot B does.')]));
 qs.push(Q(SSA,'',[
- mc('A development team draws the architecture of a new system. It decides where input validation will happen and which encryption library each module will call. Which step of developing secure software is the team working on?',['Integration','Installation','Design','Requirements definition'],2,'Design is where the structure of the solution and the security controls within it are planned. Requirements say what the system must do, integration combines built modules and installation deploys the finished system.')]));
+ mc('A development team draws the architecture of a new system. It decides where input validation will happen and which encryption library each module will call. Which step of developing secure software is the team working on?',['Installation','Requirements definition','Design','Integration'],2,'Design is where the structure of the solution and the security controls within it are planned. Requirements say what the system must do, integration combines built modules and installation deploys the finished system.')]));
 qs.push(Q(PW,'',[
- mc('Which of the following is a valid IPv4 address?',['172.16.254.1','2001:db8::7','10.0.300.4','192.168.1.256'],0,'An IPv4 address has four numbers (octets), each from 0 to 255. 256 and 300 are out of range, and 2001:db8::7 is an IPv6 address.')]));
+ mc('Which of the following is a valid IPv4 address?',['172.16.254.1','192.168.1.256','10.0.300.4','2001:db8::7'],0,'An IPv4 address has four numbers (octets), each from 0 to 255. 256 and 300 are out of range, and 2001:db8::7 is an IPv6 address.')]));
 qs.push(Q(SSA,'A council grants system now records the user ID, the time, and the old and new values every time an application is approved or changed. Staff cannot edit or delete these records.',[
- mc('Which fundamental security concept does this feature MAINLY support?',['Authentication','Availability','Confidentiality','Accountability'],3,'A tamper-proof audit log means every action can be traced to the person who performed it, which is accountability.')]));
+ mc('Which fundamental security concept does this feature MAINLY support?',['Availability','Authentication','Confidentiality','Accountability'],3,'A tamper-proof audit log means every action can be traced to the person who performed it, which is accountability.')]));
 qs.push(Q(SA,'A wildlife group has 300 motion-camera photos that ecologists have labelled "koala" or "not koala", and 40 000 photos that nobody has labelled. The group trains one model using both sets of photos.',[
  mc('Which model of training is being used?',['Semi-supervised learning','Unsupervised learning','Reinforcement learning','Supervised learning'],0,'Semi-supervised learning combines a small labelled set with a large unlabelled set. The labelled photos guide the model, and the unlabelled ones help it learn the general structure of the images.')]));
 qs.push(Q(PW,'',[
- mc('Which practice best supports the World Wide Web Consortium (W3C) goal of internationalisation?',['Displaying every date and price in a single fixed format, such as MM/DD/YYYY and US dollars','Using UTF-8 and keeping interface text separate from the code so it can be translated','Using images of text for headings so that the chosen font looks identical in every browser','Detecting the visitor\'s country and blocking regions the site does not support'],1,'Internationalisation means designing a site so it can be adapted to any language and region. UTF-8 handles every script, and separating text from code allows translation. Images of text cannot be translated or read by screen readers.')]));
+ mc('Which practice best supports the World Wide Web Consortium (W3C) goal of internationalisation?',['Using images of text for headings so that the chosen font looks identical in every browser','Using UTF-8 and keeping interface text separate from the code so it can be translated','Detecting the visitor\'s country and blocking regions the site does not support','Displaying every date and price in a single fixed format, such as MM/DD/YYYY and US dollars'],1,'Internationalisation means designing a site so it can be adapted to any language and region. UTF-8 handles every script, and separating text from code allows translation. Images of text cannot be translated or read by screen readers.')]));
 qs.push(Q(SEP,'Software can be developed using different approaches.',[
  mt('Classify each statement as describing the Waterfall, Agile or WAgile approach.',['Statement','Waterfall','Agile','WAgile'],[
   ['Each stage is signed off before the next stage begins.',0],
@@ -37,9 +53,9 @@ qs.push(Q(SEP,'Software can be developed using different approaches.',[
   ['Requirements and budget are fixed at the start, but building and testing happen in short iterations.',2],
   ['Working software is shown to the client every two weeks and the remaining work is re-prioritised.',1]],1,'Waterfall flows through signed-off stages. Agile delivers in short iterations and lets teams tailor their method. WAgile is a hybrid with Waterfall planning and Agile iterations.')]));
 qs.push(Q(SSA,'',[
- ms('Which of the following are side-channel attacks?<br>(More than one may be selected.)',['Recording the sound of a keyboard to work out which keys were pressed','Typing SQL commands into a search box','Recording the power a smart card draws while it encrypts data','Measuring how long a server takes to reject different passwords','Uploading a file named ../../config.ini'],[0,2,3],1,'Side-channel attacks gather information from the physical behaviour of a system (time, power, sound) rather than from a flaw in its logic. SQL injection and path traversal attack the logic directly.')]));
+ ms('Which of the following are side-channel attacks?<br>(More than one may be selected.)',['Measuring how long a server takes to reject different passwords','Recording the power a smart card draws while it encrypts data','Typing SQL commands into a search box','Recording the sound of a keyboard to work out which keys were pressed','Uploading a file named ../../config.ini'],[0,1,3],1,'Side-channel attacks gather information from the physical behaviour of a system (time, power, sound) rather than from a flaw in its logic. SQL injection and path traversal attack the logic directly.')]));
 qs.push(Q(PW,'A video streaming platform stores data about every video it hosts.',[
- mc('Which of the following is metadata about a video?',['The colour values of the pixels in each frame of the video','The recorded audio track that plays alongside the video','The video\'s length, resolution, upload date and number of views','The private key used to encrypt the video file'],2,'Metadata is data that describes other data. Length, resolution, upload date and views describe the video without being the video content itself.')]));
+ mc('Which of the following is metadata about a video?',['The colour values of the pixels in each frame of the video','The private key used to encrypt the video file','The video\'s length, resolution, upload date and number of views','The recorded audio track that plays alongside the video'],2,'Metadata is data that describes other data. Length, resolution, upload date and views describe the video without being the video content itself.')]));
 
 /* ---------- Questions 12 and 13: 2 marks each ---------- */
 qs.push(Q(SA,'Machine learning is used in a range of applications.',[
@@ -65,10 +81,11 @@ NEXT i`)+'<p>The array <b>a</b> contains the following data. Positions are numbe
 
 /* ---------- Question 15: 6 marks ---------- */
 qs.push(Q(SEP,'A school esports league is developing an app to record matches between school teams.',[
- P('(a)',gd('Part of the data dictionary for the app is shown. Select the correct entries to complete the data dictionary. (3 marks)',['Field','Data type','Format','Example','Description'],[
-  ['TeamTag',[['String','Integer','Real','Boolean','Date and time'],0],[['XXXXXXXXXXXX','NN','DD/MM/YYYY HH:MM','NNN.N','Y or N'],0],'RAVENS','Short team name, up to 12 characters'],
-  ['MatchStart',[['String','Integer','Real','Boolean','Date and time'],4],[['XXXXXXXXXXXX','NN','DD/MM/YYYY HH:MM','NNN.N','Y or N'],2],'14/08/2026 15:30','When the match begins'],
-  ['AveragePing',[['String','Integer','Real','Boolean','Date and time'],2],[['XXXXXXXXXXXX','NN','DD/MM/YYYY HH:MM','NNN.N','Y or N'],3],'38.5','Mean network delay in milliseconds']],3,'TeamTag is text. MatchStart holds both a date and a time. AveragePing has a decimal part, so it is a real number.')),
+ P('(a)',gd('Part of the data dictionary for the app is shown. Select the correct entries to complete the data dictionary. (3 marks)',['Variable','Data type','Format for display','Size in bytes','Description','Example'],[
+  ['TeamTag',[['String','Integer','Floating point','Boolean','Date and time'],0],[['XXXXXXXXXXXX','NNN','DD/MM/YYYY hh:mm','NNN.N','X'],0],[['1 bit','2','4','12'],3],'Short team name, up to 12 characters','RAVENS'],
+  ['MatchStart',[['String','Integer','Floating point','Boolean','Date and time'],4],[['XXXXXXXXXXXX','NNN','DD/MM/YYYY hh:mm','NNN.N','X'],2],[['1 bit','2','4','12'],2],'When the match begins','14/08/2026 15:30'],
+  ['AveragePing',[['String','Integer','Floating point','Boolean','Date and time'],2],[['XXXXXXXXXXXX','NNN','DD/MM/YYYY hh:mm','NNN.N','X'],3],[['1 bit','2','4','12'],2],'Mean network delay in milliseconds','38.5'],
+  ['Ranked','Boolean',[['XXXXXXXXXXXX','NNN','DD/MM/YYYY hh:mm','NNN.N','X'],4],[['1 bit','2','4','12'],0],'Whether the match counts towards the ladder','Y']],3,'TeamTag is a string of up to 12 characters, so it needs 12 bytes. A date and time is always stored in 4 bytes, whatever format is used to display it. AveragePing has a decimal part, so it is floating point (4 bytes). A Boolean needs only 1 bit and is displayed as a single character such as Y or N.')),
  P('(b)',tx('The league\'s committee has chosen the Waterfall approach to develop the app. Explain ONE advantage and ONE disadvantage of this choice for the league. (3 marks)',3,65,'An advantage is that the committee agrees all requirements and the budget at the start, and each stage is signed off, so the volunteers know exactly what will be delivered and documentation is complete for whoever maintains the app later. A disadvantage is that the app is only tested and seen as a whole near the end. If students or coaches find that features such as score entry are awkward, changing them is costly and could delay the release past the start of the season.',['1 mark: a relevant advantage of Waterfall (eg clear fixed requirements, documentation, predictable cost and schedule).','1 mark: a relevant disadvantage of Waterfall (eg late testing, hard to change requirements, users see the product late).','1 mark: links the advantage and disadvantage to the esports league scenario.']))]));
 
 /* ---------- Question 16: 9 marks ---------- */
@@ -121,12 +138,12 @@ qs.push(Q(PW,'',[
  tx('Explain how a hash value and a digital signature allow a user\'s device to confirm that a downloaded app update has not been altered and came from the genuine developer.',3,65,'The developer calculates a hash value of the update file, then encrypts that hash with the developer\'s private key to create a digital signature. The device calculates its own hash of the downloaded file and decrypts the signature with the developer\'s public key. If the two hashes match, the file has not been altered, because any change would produce a different hash, and only the holder of the private key could have created the signature, which proves the update is genuine.',['1 mark: hashing produces a value that changes if the file changes (integrity).','1 mark: the signature is created with the private key and checked with the public key (authenticity).','1 mark: explains the comparison of hashes that confirms both.'])]));
 qs.push(Q(PW,'A ferry operator stores its routes and sailings in two related tables, Routes and Sailings.',[
  sq('Construct a SQL query that displays the name of each route and the number of sailings in March 2026 on which the number of Passengers was more than 90% of the Capacity.<br>Use the column headings RouteName and BusySailings. Only routes with at least one such sailing need to be shown. List the results from the highest to the lowest number of busy sailings.',4,`SELECT Routes.RouteName, COUNT(*) AS BusySailings
-FROM Routes
-JOIN Sailings ON Routes.RouteID = Sailings.RouteID
-WHERE Sailings.SailDate BETWEEN '2026-03-01' AND '2026-03-31'
-  AND Sailings.Passengers > Sailings.Capacity * 0.9
+FROM Routes, Sailings
+WHERE Routes.RouteID = Sailings.RouteID
+AND Sailings.SailDate >= '2026-03-01' AND Sailings.SailDate <= '2026-03-31'
+AND Sailings.Passengers > Sailings.Capacity * 0.9
 GROUP BY Routes.RouteName
-ORDER BY BusySailings DESC`,true,['1 mark: joins Routes and Sailings on RouteID.','1 mark: restricts sailings to March 2026.','1 mark: correct condition comparing Passengers with 90% of Capacity (strictly greater than).','1 mark: groups by route, counts, uses the required headings and orders from highest to lowest.'])],{two:true,db:DB21}));
+ORDER BY BusySailings DESC`,true,['1 mark: links Routes and Sailings on RouteID (in the WHERE clause or with a JOIN).','1 mark: restricts sailings to March 2026.','1 mark: correct condition comparing Passengers with 90% of Capacity (strictly greater than).','1 mark: groups by route, counts, uses the required headings and orders from highest to lowest.'])],{two:true,db:DB21}));
 qs.push(Q(SEP,'A ferry booking program is being designed. The main module <b>Book trip</b> calls four modules in order.'+bl(['<b>Get passenger details</b> returns a passenger record.','<b>Choose sailing</b> repeatedly calls <b>Check seats</b> until a sailing with free seats is chosen. It returns the sailing ID.','<b>Take payment</b> receives the passenger record and sailing ID. It calls <b>Apply concession</b> only if the passenger holds a concession card. It returns a paid flag.','<b>Issue ticket</b> receives the passenger record, sailing ID and paid flag.']),[
  dr('Create a structure chart for the ferry booking program. Show the data and control parameters passed between modules, the repetition and the decision.',3,'Book trip at the top, with four modules beneath it from left to right: Get passenger details, Choose sailing, Take payment and Issue ticket. Check seats sits under Choose sailing with a curved repetition arrow. Apply concession sits under Take payment with a decision diamond. Data couples (open circles): passenger record returned from Get passenger details; sailing ID returned from Choose sailing; passenger record and sailing ID passed to Take payment; passenger record and sailing ID passed to Issue ticket. Control couples (filled circles): paid flag returned from Take payment and passed to Issue ticket; a free-seats flag returned from Check seats.',['1 mark: correct hierarchy of the six modules, called in order from left to right.','1 mark: repetition shown on Choose sailing and Check seats, and a decision shown for Apply concession.','1 mark: data and control parameters shown with correct symbols and directions.'],'structure')],{two:true}));
 
@@ -158,42 +175,36 @@ qs.push(Q(SA,'An orchard uses K-nearest neighbour (KNN) classification to grade 
  P('(a)',gd('Select the grade that KNN would predict for apple N for each value of k. (2 marks)',['Value of k','Predicted grade'],[
   ['k = 1',[['Grade A','Grade B','Grade C'],1]],['k = 3',[['Grade A','Grade B','Grade C'],0]],['k = 5',[['Grade A','Grade B','Grade C'],1]]],2,'Squared distances from N: A 2, D 4, B 5, C 9, E 10, F 13, G 13. k = 1 uses A (Grade B). k = 3 uses A, D and B (two Grade A). k = 5 adds C and E, giving three Grade B.')),
  P('(b)',tx('Explain ONE advantage and ONE limitation of using KNN rather than logistic regression to grade the apples. (3 marks)',3,65,'An advantage is that KNN can classify into three or more grades directly and needs no training stage: new graded apples can be added to the data straight away. A limitation is that every prediction must calculate the distance to every stored apple, which is slow when the orchard grades thousands of apples, and the result depends on the choice of k, as part (a) shows, where the prediction changed from Grade B to Grade A and back.',['1 mark: a relevant advantage of KNN compared with logistic regression.','1 mark: a relevant limitation of KNN.','1 mark: links the points to the apple-grading scenario or the results in part (a).']))],{two:true}));
-qs.push(Q(SA,'A solar-powered ferry records the hours of sunshine each day and the charge added to its batteries (kWh).'+code(`sunshine = [2, 4, 5, 7, 9]
-charge = [11, 19, 24, 31, 40]`)+'<p>A linear regression model <i>y</i> = <i>mx</i> + <i>b</i> can be fitted using these formulas, where x̄ and ȳ are the means of x and y:</p>'+code(`m = Σ((x − x̄)(y − ȳ)) / Σ((x − x̄)²)
-b = ȳ − m × x̄`)+'<p>The program must define a class <code>LinearModel</code> with a <code>fit(xs, ys)</code> method that calculates and stores the slope and intercept, and a <code>predict(x)</code> method. It reads a number of hours and displays the slope and intercept to 2 decimal places and the prediction to 1 decimal place.</p><p>For the input 6 the output is:</p>'+code(`Slope: 4.11
-Intercept: 2.81
-Predicted charge: 27.5`),[
- py('Using object-oriented programming in Python, write the program. Start your program with the two lists shown.',5,`sunshine = [2, 4, 5, 7, 9]
-charge = [11, 19, 24, 31, 40]
-`,`sunshine = [2, 4, 5, 7, 9]
-charge = [11, 19, 24, 31, 40]
+qs.push(Q(SA,'A solar-powered ferry records the hours of sunshine each day and the charge added to its batteries (kWh). A developer has been given a <code>LinearRegression</code> class that works like the one in the scikit-learn library: <code>fit(xs, ys)</code> finds the line of best fit and <code>predict(x)</code> returns the predicted value. You do not need to understand or change how the class works.'+code(LR)+'<p>The data for seven days is:</p>'+code(DATA)+'<p>The program must define a class <code>ChargeForecaster</code> that:</p>'+bl(['creates and stores a LinearRegression object when it is constructed','has a method <code>train(xs, ys)</code> that fits the model','has a method <code>validate(xs, ys)</code> that displays the actual and predicted charge (1 decimal place) for each test day and returns the average of the absolute errors','has a method <code>forecast(hours)</code> that returns the predicted charge.'])+'<p>The program trains the model on the first five days, validates it on the last two days (days 6 and 7), displays the average error to 2 decimal places, then reads a number of hours and displays the forecast to 1 decimal place.</p><p>For the input 6 the output is:</p>'+code(`Day 6: actual 15, predicted 15.1
+Day 7: actual 36, predicted 35.7
+Average error: 0.23
+Forecast for 6.0 hours: 27.5`),[
+ py('Using object-oriented programming in Python, write the program. Start your program with the lines shown.',5,LR+'\n'+DATA+'\n',LR+'\n'+DATA+`
 
-class LinearModel:
+class ChargeForecaster:
     def __init__(self):
-        self.slope = 0
-        self.intercept = 0
+        self.model = LinearRegression()
 
-    def fit(self, xs, ys):
-        n = len(xs)
-        mean_x = sum(xs) / n
-        mean_y = sum(ys) / n
-        top = 0
-        bottom = 0
-        for i in range(n):
-            top += (xs[i] - mean_x) * (ys[i] - mean_y)
-            bottom += (xs[i] - mean_x) ** 2
-        self.slope = top / bottom
-        self.intercept = mean_y - self.slope * mean_x
+    def train(self, xs, ys):
+        self.model.fit(xs, ys)
 
-    def predict(self, x):
-        return self.slope * x + self.intercept
+    def validate(self, xs, ys):
+        total_error = 0
+        for i in range(len(xs)):
+            predicted = self.model.predict(xs[i])
+            print("Day " + str(i + 6) + ": actual " + str(ys[i]) + ", predicted " + str(round(predicted, 1)))
+            total_error = total_error + abs(ys[i] - predicted)
+        return total_error / len(xs)
 
-model = LinearModel()
-model.fit(sunshine, charge)
+    def forecast(self, hours):
+        return self.model.predict(hours)
+
+forecaster = ChargeForecaster()
+forecaster.train(sunshine[:5], charge[:5])
+error = forecaster.validate(sunshine[5:], charge[5:])
+print("Average error:", round(error, 2))
 hours = float(input("Hours of sunshine: "))
-print("Slope:", round(model.slope, 2))
-print("Intercept:", round(model.intercept, 2))
-print("Predicted charge:", round(model.predict(hours), 1))`,[{i:['6'],o:'Slope: 4.11\nIntercept: 2.81\nPredicted charge: 27.5'},{i:['10'],o:'Slope: 4.11\nIntercept: 2.81\nPredicted charge: 43.9'},{i:['3'],o:'Slope: 4.11\nIntercept: 2.81\nPredicted charge: 15.1'}],['1 mark: defines the LinearModel class with attributes for slope and intercept.','1 mark: fit calculates the means correctly.','1 mark: fit calculates and stores the slope and intercept using the formulas.','1 mark: predict returns mx + b, and an object is created and used with the input.','1 mark: output in the required format and rounding.'])],{two:true}));
+print("Forecast for " + str(hours) + " hours:", round(forecaster.forecast(hours), 1))`,[{i:['6'],o:'Day 6: actual 15, predicted 15.1\nDay 7: actual 36, predicted 35.7\nAverage error: 0.23\nForecast for 6.0 hours: 27.5'},{i:['10'],o:'Day 6: actual 15, predicted 15.1\nDay 7: actual 36, predicted 35.7\nAverage error: 0.23\nForecast for 10.0 hours: 43.9'},{i:['1.5'],o:'Day 6: actual 15, predicted 15.1\nDay 7: actual 36, predicted 35.7\nAverage error: 0.23\nForecast for 1.5 hours: 9.0'}],['1 mark: defines ChargeForecaster with a constructor that creates and stores a LinearRegression object.','1 mark: train passes the training data to the model\'s fit method.','1 mark: splits the data correctly, training on days 1 to 5 and validating on days 6 and 7.','1 mark: validate displays actual and predicted values and returns the average absolute error.','1 mark: forecast uses the model\'s predict method, and all output is in the required format.'])],{two:true}));
 qs.push(Q(SA,'A mining company in remote Western Australia introduces autonomous haul trucks and drill rigs.'+bl(['The vehicles are supervised from an operations centre in Perth, 1200 km away.','Fatigue-related incidents on site fall sharply.','The number of truck drivers flown in to the site each fortnight falls from 140 to 35, while 60 new roles are created in Perth for remote operators, data analysts and technicians.','Machine learning plans routes and speeds that cut fuel use by 12%.','Businesses in the nearby town report fewer customers.']),[
  tx('Assess the impact of this automation on individuals, society and the environment.',6,185,'For individuals, the clearest benefit is worker safety: fatigue incidents have fallen sharply because people are no longer driving heavy vehicles on long shifts. However, 105 driving roles have gone. The 60 new roles in Perth need different skills such as data analysis, remote supervision and maintenance of automated systems, so many drivers would need retraining and may be unable or unwilling to relocate. The nature of employment shifts from manual operation to monitoring and technical work.<br>For society, the effect is uneven. Profits and high-skilled jobs move to the city, while the town that depended on fly-in workers loses business, which can widen the gap in wealth between regional and urban communities. The company could reduce this by funding retraining and local roles.<br>For the environment, a 12% cut in fuel use reduces emissions and running costs, and optimised routes reduce wear. The environmental cost of manufacturing sensors and running the operations centre is smaller but real.<br>Overall the automation is strongly positive for safety, efficiency and the environment, but its social benefits depend on how the company supports displaced workers and the town.',['6 marks: makes an informed judgement about the impact on individuals, society and the environment, with detailed, balanced reasoning supported by the scenario.','5 marks: assesses impacts on all three with clear reasoning and use of the scenario.','3–4 marks: explains positive and negative impacts, but coverage of one area or the judgement is limited.','2 marks: describes some impacts of the automation.','1 mark: provides some relevant information.'])],{two:true}));
 

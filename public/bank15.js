@@ -15,13 +15,13 @@ var qs=[];
 
 /* ---------- Questions 1 to 11: 1 mark each ---------- */
 qs.push(Q(SEP,'An Agile team has just finished a two-week iteration of a festival app.',[
- mc('Which activity should happen next?',['Write the complete system documentation before any more code is written','Begin a parallel implementation of the whole system','Demonstrate the working features to the client and re-prioritise the remaining work','Freeze the requirements for the rest of the project'],2,'Each Agile iteration ends with a review of the working increment and the backlog is re-prioritised using the client\'s feedback before the next iteration starts.')]));
-qs.push(Q(PW,'A network administrator blocks incoming connections to port 21 on a company server.',[
- mc('Which service is MOST directly affected?',['Plain FTP file transfers','Secure web pages (HTTPS)','Domain name lookups (DNS)','Sending email (SMTP)'],0,'Port 21 is the control port for FTP. HTTPS uses 443, SMTP uses 25 (or 587) and DNS uses 53.')]));
+ mc('Which activity should happen next?',['Write the complete system documentation before any more code is written','Freeze the requirements for the rest of the project','Demonstrate the working features to the client and re-prioritise the remaining work','Begin a parallel implementation of the whole system'],2,'Each Agile iteration ends with a review of the working increment and the backlog is re-prioritised using the client\'s feedback before the next iteration starts.')]));
+qs.push(Q(SEP,'Each member of a festival app team adds an entry to the team\'s process diary every Friday.',[
+ mc('Which entry best meets the purpose of a process diary?',['Fri 14 Mar, Priya: Map search done. Slow loading fixed by caching. Next: marker clusters. Used library docs.','Fri 14 Mar: Worked hard on the festival app again this week. Everything is going well and on track.','Fri 14 Mar, Priya: A list of every website I visited during the week, with no other comments.','Fri 14 Mar, Priya: The complete source code of the map module, copied and pasted in full below.'],0,'A process diary entry records the date, the person, progress and tasks achieved, problems and how they were managed, plans for upcoming tasks, reflection and resources used. Priya\'s entry about the map search includes these; the other entries are vague or are not a record of the process.')]));
 qs.push(Q(SA,'A logistic regression model is used to filter email. For one email it outputs the value 0.83.',[
- mc('What does this value represent?',['The slope of the line that separates spam from non-spam','The number of spam emails the model has seen, in thousands','The percentage of words in the email that are spam words','The estimated probability that the email belongs to the "spam" class'],3,'Logistic regression passes a weighted sum through a sigmoid function, giving a value between 0 and 1 that is read as a probability. With a threshold of 0.5, this email would be classified as spam.')]));
+ mc('What does this value represent?',['The slope of the line that separates spam from non-spam','The percentage of words in the email that are spam words','The number of spam emails the model has seen, in thousands','The estimated probability that the email belongs to the "spam" class'],3,'Logistic regression passes a weighted sum through a sigmoid function, giving a value between 0 and 1 that is read as a probability. With a threshold of 0.5, this email would be classified as spam.')]));
 qs.push(Q(SSA,'',[
- mc('Which practice best protects users of a web application from session hijacking after they log in?',['Keep the same session ID for several months so that users rarely have to log in again','Issue a new random session ID at login, send it only over HTTPS and expire it when idle','Use the user\'s email address as the session ID so that it is easy to trace in the logs','Put the session ID in the web address so that the page can be bookmarked and shared'],1,'Session IDs must be unpredictable, renewed at login, protected in transit and short-lived, so a stolen or guessed ID is of little use to an attacker.')]));
+ mc('Which practice best protects users of a web application from session hijacking after they log in?',['Put the session ID in the web address so that the page can be bookmarked and shared','Issue a new random session ID at login, send it only over HTTPS and expire it when idle','Use the user\'s email address as the session ID so that it is easy to trace in the logs','Keep the same session ID for several months so that users rarely have to log in again'],1,'Session IDs must be unpredictable, renewed at login, protected in transit and short-lived, so a stolen or guessed ID is of little use to an attacker.')]));
 qs.push(Q(PW,'Consider the following cascading style sheet (CSS) code.'+code(`.btn {
   background-color: navy;
   color: white;
@@ -33,7 +33,7 @@ qs.push(Q(PW,'Consider the following cascading style sheet (CSS) code.'+code(`.b
     font-size: 1.2rem;
   }
 }`),[
- mc('How does an element with the class btn appear on a phone screen that is 400 pixels wide?',['In the browser\'s default style, because a media query cancels earlier rules','White with navy text, as wide as its container','Navy with white text and 200 pixels wide','Navy with white text, as wide as its container, with larger text'],3,'Both rules apply on a narrow screen. The media query changes only the width and font size, so the colours from the first rule remain.')],{two:true}));
+ mc('How does an element with the class btn appear on a phone screen that is 400 pixels wide?',['Navy with white text and 200 pixels wide','In the browser\'s default style, because a media query cancels earlier rules','White with navy text, as wide as its container','Navy with white text, as wide as its container, with larger text'],3,'Both rules apply on a narrow screen. The media query changes only the width and font size, so the colours from the first rule remain.')],{two:true}));
 qs.push(Q(SEP,'A team is generating ideas for a festival app.',[
  dm('Match each tool to the way it is being used by dragging the labels into the boxes.',['Brainstorming','Mind map','Storyboard','Data dictionary'],[
   ['Team members call out feature ideas for ten minutes without criticising any of them.',0],
@@ -51,11 +51,23 @@ qs.push(Q(SSA,'An online ticketing system uses this logic when a user buys a sea
     seatsLeft = seatsLeft - 1
     Confirm booking
 ENDIF`)+'<p>Two people buy the last seat at the same moment, and both bookings are confirmed.</p>',[
- mc('Which change would best prevent this problem?',['Check the value of seatsLeft a second time, just before taking the payment','Lock the record so that checking and updating seatsLeft happen as one step','Encrypt the value of seatsLeft wherever it is stored in the database','Display a warning to every buyer that the event is nearly sold out'],1,'This is a race condition: both requests read seatsLeft before either updates it. Making the check and the update atomic means the second request waits and then sees that no seats are left.')],{two:true}));
-qs.push(Q(PW,'',[
- mc('What is the main purpose of a template engine in web development?',['To encrypt form data in the browser before it is sent to the server','To translate every page of a website into other languages automatically','To fill a reusable page layout with data, so one layout displays many records','To compress the images on each page so that the pages load faster'],2,'A template engine fills placeholders in a layout with data from the server, generating the HTML for, for example, every act page from one template.')]));
+ mc('Which change would best prevent this problem?',['Check the value of seatsLeft a second time, just before taking the payment','Lock the record so that checking and updating seatsLeft happen as one step','Display a warning to every buyer that the event is nearly sold out','Encrypt the value of seatsLeft wherever it is stored in the database'],1,'This is a race condition: both requests read seatsLeft before either updates it. Making the check and the update atomic means the second request waits and then sees that no seats are left.')],{two:true}));
+qs.push(Q(SEP,'Consider the following Python code.'+code(`count = 0
+
+def add_visit(n):
+    count = n + 1
+    return count
+
+def record():
+    global count
+    count = count + 5
+
+add_visit(10)
+record()
+print(count)`),[
+ mc('What is displayed when this code is run?',['0','16','5','11'],2,'Inside add_visit, count is a new local variable, so the global count stays 0. record declares count as global and adds 5 to it, so 5 is displayed.')],{two:true}));
 qs.push(Q(SEP,'A student developer cannot get the map feature of a project to work.',[
- ms('Which of the following are appropriate strategies for responding to this difficulty?<br>(More than one may be selected.)',['Copying a large block of code from a website without checking its licence','Asking a peer to look at the code with them','Searching developer forums and official documentation for similar problems','Removing the feature without telling the client','Outsourcing the map component to a contractor with mapping experience'],[1,2,4],1,'Looking for a solution online, collaborating with peers and outsourcing are all legitimate strategies. Copying code without checking its licence and hiding changes from the client are unethical.')]));
+ ms('Which of the following are appropriate strategies for responding to this difficulty?<br>(More than one may be selected.)',['Removing the feature without telling the client','Asking a peer to look at the code with them','Copying a large block of code from a website without checking its licence','Outsourcing the map component to a contractor with mapping experience','Searching developer forums and official documentation for similar problems'],[1,3,4],1,'Looking for a solution online, collaborating with peers and outsourcing are all legitimate strategies. Copying code without checking its licence and hiding changes from the client are unethical.')]));
 qs.push(Q(PW,'A developer creates a page using the following HTML. The developer did not write any CSS rules for the classes used.'+code(`<link rel="stylesheet" href="https://cdn.example.com/kitcss/5.3/kit.min.css">
 ...
 <button class="btn btn-primary btn-lg">Buy tickets</button>
@@ -63,7 +75,7 @@ qs.push(Q(PW,'A developer creates a page using the following HTML. The developer
   <div class="col-6">Line-up</div>
   <div class="col-6">Map</div>
 </div>`)+'<p>When the page is viewed, the button and the two columns are fully styled.</p>',[
- mc('What is the most likely explanation?',['The linked style sheet is a library of predesigned CSS classes, which the developer applies by name','A template engine has generated the CSS rules from the class names','The styles are stored in the HTML elements themselves','The browser automatically styles any element whose class contains "btn" or "col"'],0,'Front-end libraries supply predesigned classes for buttons, grids and other components. Linking the style sheet and adding the class names applies them, giving a consistent look quickly.')],{two:true}));
+ mc('What is the most likely explanation?',['The linked style sheet is a library of predesigned CSS classes, which the developer applies by name','The browser automatically styles any element whose class contains "btn" or "col"','The styles are stored in the HTML elements themselves','A template engine has generated the CSS rules from the class names'],0,'Front-end libraries supply predesigned classes for buttons, grids and other components. Linking the style sheet and adding the class names applies them, giving a consistent look quickly.')],{two:true}));
 
 /* ---------- Questions 12 and 13: 2 marks each ---------- */
 qs.push(Q(PW,'',[
@@ -123,20 +135,7 @@ qs.push(Q(PW,'A volunteer-run community radio station broadcasts on FM and strea
 
 /* ---------- Questions 17 to 19 ---------- */
 qs.push(Q(SEP,'A citizen-science group counts birds at 20 survey sites. The counts are stored in the array <b>Counts</b>, with positions numbered from 1 to 20. All of the counts are different.',[
- ps('Using pseudocode, write an algorithm that displays the highest count and the second-highest count WITHOUT sorting the array.',3,`BEGIN topTwo
-    highest = Counts[1]
-    second = -1
-    FOR i = 2 TO 20
-        IF Counts[i] > highest THEN
-            second = highest
-            highest = Counts[i]
-        ELSEIF Counts[i] > second THEN
-            second = Counts[i]
-        ENDIF
-    NEXT i
-    Display "Highest: ", highest
-    Display "Second highest: ", second
-END topTwo`,['1 mark: a loop that visits every element of the array.','1 mark: when a new highest is found, the old highest becomes the second highest.','1 mark: updates the second highest correctly otherwise and displays both values.'])],{two:true}));
+ dr('Draw a flowchart for an algorithm that displays the highest count and the second-highest count WITHOUT sorting the array. Use the standard flowchart symbols.',3,'Terminator "Begin". Process: highest = Counts[1], second = -1, i = 2. Decision "i <= 20?" (pre-test loop). Yes branch: decision "Counts[i] > highest?"; Yes leads to process "second = highest, highest = Counts[i]"; No leads to decision "Counts[i] > second?" with Yes to process "second = Counts[i]". Both paths join and go to process "i = i + 1", which returns to the loop decision. No branch of "i <= 20?" leads to an input/output parallelogram "Display highest, second", then terminator "End". Every arrow from a decision is labelled Yes or No.',['1 mark: correct symbols (terminators, process rectangles, decision diamonds, input/output parallelogram) with arrowheads and labelled decision branches.','1 mark: a correctly structured loop that visits every element from position 2 to 20.','1 mark: correct nested decisions that update the highest and second-highest values, with both displayed after the loop.'],'flowchart')],{two:true}));
 qs.push(Q(SSA,'A hospital is developing two applications that use the same medication database.'+bl(['A patient app used mostly by elderly people to view their prescriptions and request repeats.','A console used by trained pharmacists to dispense and change medications.']),[
  tx('Describe how the capabilities and experience of these end users should influence the secure design features of each application.',3,65,'Elderly patients may have limited technical experience and poorer eyesight, so security must be simple: large clear screens, sign-in with a passkey or face recognition instead of complex passwords, sensible defaults and plain-language warnings, so they are not tempted to bypass security. Pharmacists are trained and handle sensitive changes, so their console can use stronger controls such as multi-factor authentication, role-based permissions, short session timeouts and audit logs of every change, because they can be trained to use them.',['1 mark: a secure design feature suited to the elderly patients\' capabilities.','1 mark: a secure design feature suited to the trained pharmacists.','1 mark: explains why user capability or experience leads to the different features.'])]));
 qs.push(Q(PW,'The file <code>survey.txt</code> holds one line for each survey site. The first lines of the program, shown below, create the file.'+code(`lines = ["Site 1: wren, magpie", "Site 2: kookaburra",
@@ -176,11 +175,11 @@ qs.push(Q(SA,'',[
  tx('Distinguish between a decision tree and a neural network as models for designing machine learning solutions. Refer to how easily each model\'s decisions can be explained.',3,65,'A decision tree makes a prediction by following a series of yes/no tests on features from the root to a leaf, so every decision can be traced and explained, for example "wind over 40 km/h, so the track is closed". A neural network passes inputs through layers of connected nodes with learned weights and activation functions. It can model far more complex patterns, such as images or speech, but its reasoning is spread across thousands of weights, so it is hard to explain why it made a particular decision.',['1 mark: describes how a decision tree reaches a decision.','1 mark: describes how a neural network reaches a decision.','1 mark: contrasts their explainability (and/or complexity of patterns handled).'])]));
 qs.push(Q(PW,'A music festival stores its acts and performances in two related tables, Acts and Performances.',[
  sq('Construct a SQL query that displays each Genre and the total Crowd for performances on Saturday, excluding performances on the Forest stage.<br>Use the column headings Genre and TotalCrowd. List the results from the highest to the lowest total crowd.',4,`SELECT Acts.Genre, SUM(Performances.Crowd) AS TotalCrowd
-FROM Acts
-JOIN Performances ON Acts.ActID = Performances.ActID
-WHERE Performances.Day = 'Saturday' AND Performances.Stage <> 'Forest'
+FROM Acts, Performances
+WHERE Acts.ActID = Performances.ActID
+AND Performances.Day = 'Saturday' AND Performances.Stage <> 'Forest'
 GROUP BY Acts.Genre
-ORDER BY TotalCrowd DESC`,true,['1 mark: joins Acts and Performances on ActID.','1 mark: WHERE clause selects Saturday and excludes the Forest stage.','1 mark: groups by Genre and sums Crowd.','1 mark: uses the required headings and orders from highest to lowest.'])],{two:true,db:DB21}));
+ORDER BY TotalCrowd DESC`,true,['1 mark: links Acts and Performances on ActID (in the WHERE clause or with a JOIN).','1 mark: WHERE clause selects Saturday and excludes the Forest stage.','1 mark: groups by Genre and sums Crowd.','1 mark: uses the required headings and orders from highest to lowest.'])],{two:true,db:DB21}));
 qs.push(Q(SA,'A national park service uses a trained model to decide what to do with a walking track each morning.'+bl(['If the fire danger rating is Extreme, the track is closed.','If the rating is High, the track is closed when the wind speed is above 40 km/h. Otherwise it opens with a warning.','If the rating is Low or Moderate, the track opens.']),[
  dr('Draw a decision tree for the model.',3,'Root node: "Fire danger rating?" with three branches. Extreme leads to the leaf "Close track". High leads to a decision node "Wind > 40 km/h?" with Yes to "Close track" and No to "Open with warning". Low or Moderate leads to the leaf "Open track". (Equivalent trees using binary questions, eg "Extreme?" then "High?", are acceptable.)',['1 mark: root test on fire danger rating with correctly labelled branches.','1 mark: wind speed test placed only on the High branch.','1 mark: all four outcomes correct, with labelled branches and leaves.'],'tree')],{two:true}));
 
@@ -204,41 +203,44 @@ qs.push(Q(SEP,'A team is building a festival app. The Gantt chart shows the proj
  ['Build ticketing','','','','','D','P','P','','',''],
  ['Build map','','','','','D','P','','','',''],
  ['Payments integration','','','','','','','P','P','',''],
- ['Testing (needs both builds)','','','','','','','','P','P',''],
- ['Installation','','','','','','','','','','P']],{D:'#9fd8a8',P:'#bcd4f6'},'Festival app project (weeks)')+'<p><b>D</b> (green) shows weeks of work completed. <b>P</b> (blue) shows planned weeks of work not yet completed.</p>',[
+ ['Testing','','','','','','','','P','P',''],
+ ['Installation','','','','','','','','','','P'],
+ ['Launch milestone','','','','','','','','','','◆']],{D:'#9fd8a8',P:'#bcd4f6'},'Festival app project (week beginning 2 February)')+'<p><b>D</b> (green) shows weeks of work completed. <b>P</b> (blue) shows planned weeks of work not yet completed. ◆ marks a milestone. Payments integration depends on Build ticketing, and Testing depends on both builds.</p>',[
  P('(a)',gd('Select the correct entry for each row. (2 marks)',['Item','Answer'],[
   ['Status of Build ticketing',[STATUS,2]],['Status of Build map',[STATUS,2]],['Status of Payments integration',[STATUS,1]],
-  ['Task that cannot begin until both builds are finished',[['Design','Payments integration','Testing','Installation'],2]]],2,'By the end of week 6, ticketing should have two weeks done and the map should be finished, but each has only one week done. Payments integration is not due to start until week 7. Testing depends on both builds.')),
+  ['Task that cannot begin until both builds are finished',[['Design','Payments integration','Testing','Installation'],2]],
+  ['Will the launch milestone be met if the remaining tasks take as long as planned?',[['Yes','No'],1]]],2,'The launch milestone will slip unless the team catches up, because testing cannot start until both late builds finish. By the end of week 6, ticketing should have two weeks done and the map should be finished, but each has only one week done. Payments integration is not due to start until week 7. Testing depends on both builds.')),
  P('(b)',tx('Explain how project management software and collaboration tools could help the team track progress and bring the project back on schedule. (3 marks)',3,65,'Project management software updates the Gantt chart as tasks are marked complete, so the manager can see immediately that both builds are behind and that testing will be delayed, and can reassign people or adjust dependent tasks. Collaboration tools such as a shared task board, chat channels and a shared code repository let developers see who is working on what, raise blockers quickly and share work, so a developer finishing payments early could help with the map.',['1 mark: explains how scheduling and tracking software shows progress against the plan.','1 mark: explains how collaboration tools help the team communicate or share work.','1 mark: links these to recovering the schedule in this project.']))],{two:true}));
-qs.push(Q(SA,'A wildlife app uses a small neural network to decide whether a recorded bird call is from a kookaburra. Each neuron multiplies its inputs by its weights, adds its bias and applies the sigmoid function <i>s</i>(<i>z</i>) = 1 / (1 + e<sup>−z</sup>). In Python, e<sup>−z</sup> is <code>math.exp(-z)</code>.'+tbl(['Neuron','Inputs','Weights','Bias'],[['Hidden 1','frequency, length','0.8, −1.2','0.5'],['Hidden 2','frequency, length','−0.6, 1.5','−1.0'],['Output','Hidden 1, Hidden 2','1.4, 2.1','−1.6']])+'<p>The program must define a class <code>Neuron</code> whose constructor stores a list of weights and a bias, and whose method <code>activate(inputs)</code> returns the neuron\'s output. It reads the call frequency (kHz) and length (seconds), then displays the output rounded to 2 decimal places and the prediction. An output above 0.5 means <code>Kookaburra</code>; otherwise the prediction is <code>Not a kookaburra</code>.</p><p>For the inputs 1.2 and 2.0 the output is:</p>'+code(`Output: 0.61
-Kookaburra`),[
- py('Using object-oriented programming in Python, write the program.',5,`import math
-`,`import math
+qs.push(Q(SA,'A council uses a small, already-trained neural network to decide whether to send a flood alert. Each neurone accepts binary input signals (1 or 0). It multiplies each input by its weighting and adds the results. If the total is greater than or equal to the neurone\'s threshold it outputs 1; otherwise it outputs 0.'+tbl(['Neurone','Inputs','Weightings','Threshold'],[['Hidden 1','rain, river, dam','0.6, 0.7, 0.1','1.2'],['Hidden 2','rain, river, dam','0.2, 0.5, 0.9','1.3'],['Output','Hidden 1, Hidden 2','0.8, 0.8','0.8']])+'<p>The inputs are <b>rain</b> (1 if heavy rain is forecast), <b>river</b> (1 if the river is above its warning level) and <b>dam</b> (1 if the dam upstream is releasing water).</p><p>The program must define a class <code>Neurone</code> whose constructor stores a list of weightings and a threshold, and whose method <code>fire(inputs)</code> returns 1 or 0. It reads the three inputs, then displays the outputs of the two hidden neurones and the decision: <code>Flood alert</code> if the output neurone fires, otherwise <code>No alert</code>.</p><p>For the inputs 1, 1 and 0 the output is:</p>'+code(`Hidden outputs: 1 0
+Flood alert`),[
+ py('Using object-oriented programming in Python, write the program that carries out the execution cycle of this network.',5,'',`class Neurone:
+    def __init__(self, weightings, threshold):
+        self.weightings = weightings
+        self.threshold = threshold
 
-class Neuron:
-    def __init__(self, weights, bias):
-        self.weights = weights
-        self.bias = bias
-
-    def activate(self, inputs):
-        total = self.bias
+    def fire(self, inputs):
+        total = 0
         for i in range(len(inputs)):
-            total = total + inputs[i] * self.weights[i]
-        return 1 / (1 + math.exp(-total))
+            total = total + inputs[i] * self.weightings[i]
+        if total >= self.threshold:
+            return 1
+        return 0
 
-hidden1 = Neuron([0.8, -1.2], 0.5)
-hidden2 = Neuron([-0.6, 1.5], -1.0)
-output = Neuron([1.4, 2.1], -1.6)
+hidden1 = Neurone([0.6, 0.7, 0.1], 1.2)
+hidden2 = Neurone([0.2, 0.5, 0.9], 1.3)
+output = Neurone([0.8, 0.8], 0.8)
 
-frequency = float(input("Frequency (kHz): "))
-length = float(input("Length (s): "))
-features = [frequency, length]
-result = output.activate([hidden1.activate(features), hidden2.activate(features)])
-print("Output:", round(result, 2))
-if result > 0.5:
-    print("Kookaburra")
+rain = int(input("Heavy rain forecast (1 or 0): "))
+river = int(input("River above warning level (1 or 0): "))
+dam = int(input("Dam releasing water (1 or 0): "))
+signals = [rain, river, dam]
+h1 = hidden1.fire(signals)
+h2 = hidden2.fire(signals)
+print("Hidden outputs:", h1, h2)
+if output.fire([h1, h2]) == 1:
+    print("Flood alert")
 else:
-    print("Not a kookaburra")`,[{i:['1.2','2.0'],o:'Output: 0.61\nKookaburra'},{i:['3.5','0.4'],o:'Output: 0.47\nNot a kookaburra'},{i:['0.8','3.1'],o:'Output: 0.63\nKookaburra'},{i:['2.0','1.0'],o:'Output: 0.52\nKookaburra'}],['1 mark: Neuron class with a constructor storing weights and bias.','1 mark: activate calculates the weighted sum plus bias.','1 mark: activate applies the sigmoid function correctly.','1 mark: creates three neurons with the given values and feeds the hidden outputs into the output neuron.','1 mark: correct output, rounding and prediction.'])],{two:true}));
+    print("No alert")`,[{i:['1','1','0'],o:'Hidden outputs: 1 0\nFlood alert'},{i:['0','1','1'],o:'Hidden outputs: 0 1\nFlood alert'},{i:['1','0','1'],o:'Hidden outputs: 0 0\nNo alert'},{i:['1','1','1'],o:'Hidden outputs: 1 1\nFlood alert'},{i:['0','0','0'],o:'Hidden outputs: 0 0\nNo alert'}],['1 mark: Neurone class with a constructor storing the weightings and threshold.','1 mark: fire calculates the weighted total of the inputs.','1 mark: fire compares the total with the threshold and returns 1 or 0.','1 mark: creates three neurones with the given values and passes the hidden outputs to the output neurone.','1 mark: reads the inputs and displays the hidden outputs and decision in the required format.'])],{two:true}));
 qs.push(Q(SSA,'<b>GigGrid</b>, a start-up, built a festival app in six weeks.'+bl(['To save time, it copied code from an open-source scheduling library whose licence requires any app that includes it to publish its own source code. GigGrid\'s app is closed-source.','The line-up pages use band photos found online, without permission.','The app records each attendee\'s precise location every minute to show crowd heat maps. The data is kept indefinitely on a server that still uses its default administrator password.','GigGrid plans to sell attendees\' location histories to advertisers.']),[
  tx('Evaluate the social, ethical and legal issues arising from the development of GigGrid\'s app. In your answer, refer to copyright, intellectual property, privacy and data security.',6,185,'Copyright and intellectual property: GigGrid has breached the open-source licence. The library\'s authors allowed reuse only on condition that derived apps publish their source, so using it in a closed-source app infringes their copyright and could force GigGrid to release its code or remove the feature. Using band photos without permission infringes the photographers\' copyright, exposing GigGrid to takedown notices and damages, and is ethically unfair to creators whose work is their income.<br>Privacy: tracking precise location every minute collects far more data than a heat map needs, which could be shown with anonymous, aggregated counts. Keeping it forever and planning to sell it without clear, informed consent is unethical and likely breaches privacy law, which requires collection to be necessary, disclosed and used only for the stated purpose. Location histories can reveal where people live and who they are with.<br>Data security: a default administrator password makes a breach very likely. A breach of location data could cause real harm, damage trust in GigGrid and the festival, and trigger regulatory penalties and mandatory breach notifications.<br>Socially, fast development benefited GigGrid, but it shifted the risks onto artists and attendees. GigGrid should replace or comply with the library licence, license or remove the photos, minimise and anonymise location data with consent and deletion periods, and secure the server. As it stands, the app\'s legal and ethical problems outweigh the benefit of the quick launch.',['6 marks: makes an informed judgement, evaluating copyright, intellectual property, privacy and data security issues in detail, with clear links to the scenario and social, ethical and legal consequences.','5 marks: evaluates all four areas with clear reasoning and use of the scenario.','3–4 marks: explains several issues, but some areas or the judgement are limited.','2 marks: describes some social, ethical or legal issues.','1 mark: provides some relevant information.'])],{two:true}));
 

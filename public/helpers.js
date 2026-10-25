@@ -150,6 +150,23 @@ function isMyCurrentPaper(bid){
   return latestId != null && latestId === bid;
 }
 
+/* Live presence. PR is filled by the heartbeat in classview.js from the server's own clock, never from cached data.
+   prSeen(id) is null whenever presence cannot be trusted (not loaded, switched off, or no reply for 90s), so the page then
+   makes no claim at all instead of showing people as offline. */
+var PR={list:{},recv:0,disabled:false};
+function prKnown(){return !!PR.recv&&!PR.disabled&&Date.now()-PR.recv<90000}
+function prSeen(id){
+  if(!prKnown())return null;
+  var e=PR.list[id];
+  if(!e)return {online:false,bank:''};
+  var on=e.age+(Date.now()-PR.recv)<75000;
+  return {online:on,bank:on?e.bank:''};
+}
+function prHereBank(){
+  if(typeof location==='undefined'||!location)return '';
+  var h=String(location.hash||'').replace(/^#\/?/,'').split('/')[0];
+  return /^(?:[1-9]|1[0-9])$/.test(h)?h:'';
+}
 function getPaperStudents(b){
   if(!b || b.id == null) return [];
   if(typeof CV === 'undefined' || !CV.over || !CV.over.papers) return [];
@@ -187,7 +204,9 @@ function getPaperStudents(b){
         state: myState,
         seed: email,
         photo: S.photo || '',
-        isMe: true
+        isMe: true,
+        online: prKnown() ? true : null,
+        here: prKnown() && prHereBank() === bid
       });
     }
   }
@@ -207,16 +226,41 @@ function getPaperStudents(b){
         } else {
           state = (m.current === false ? 'working' : 'live');
         }
+        var seen = isMe ? (prKnown() ? {online: true, bank: prHereBank()} : null) : prSeen(m.id);
         list.push({
+          id: m.id,
           name: m.name,
           email: isMe ? (S.ae || '') : '',
           status: status,
           state: state,
           seed: m.id || m.name,
           photo: isMe ? (S.photo || '') : (m.photo || ''),
-          isMe: isMe
+          isMe: isMe,
+          online: seen ? seen.online : null,
+          here: !!(seen && seen.online && seen.bank === bid)
         });
       }
+    });
+  }
+
+  /* Anyone online and looking at this paper is shown even before they start it, as in a shared document. */
+  if(prKnown() && typeof CV !== 'undefined' && CV.roster && Array.isArray(CV.roster.members)){
+    CV.roster.members.forEach(function(rm){
+      var seen = prSeen(rm.id);
+      if(!seen || !seen.online || seen.bank !== bid) return;
+      if(rm.mine ? list.some(function(x){return x.isMe}) : list.some(function(x){return x.id === rm.id})) return;
+      list.push({
+        id: rm.id,
+        name: rm.name,
+        email: rm.mine ? (S.ae || '') : '',
+        status: 'Viewing',
+        state: 'live',
+        seed: rm.id,
+        photo: rm.mine ? (S.photo || '') : (rm.photo || ''),
+        isMe: !!rm.mine,
+        online: true,
+        here: true
+      });
     });
   }
 
@@ -225,39 +269,62 @@ function getPaperStudents(b){
     if(st === 'working') return 1;
     return 2;
   };
+  /* With live presence: viewing this paper, then online elsewhere, then offline (unfinished before submitted). */
+  var live = prKnown();
+  var prank = function(x){
+    if(x.online && x.here) return 0;
+    if(x.online) return 1;
+    return x.status === 'Submitted' ? 3 : 2;
+  };
+  list.forEach(function(x, i){x.ix = i});
   list.sort(function(a, b){
-    return rank(a.state) - rank(b.state);
+    var d = live ? prank(a) - prank(b) : rank(a.state) - rank(b.state);
+    return d || a.ix - b.ix;
   });
 
   return list;
 }
 
+function presenceClass(s){
+  if(s.online === true) return ' av-live pr-on';
+  if(s.online === false) return ' pr-off';
+  return s.state === 'done' ? ' av-done' : (s.state === 'live' ? ' av-live' : ' av-working');
+}
+function presenceLabel(s){
+  if(s.online === true) return s.here ? 'Viewing now' : 'Online';
+  return s.status;
+}
 function trialAvatarsHTML(b, isInline){
   var students = getPaperStudents(b);
   if(!students.length) return '';
+  var known = prKnown();
+  var nOn = students.filter(function(s){return s.online === true}).length;
   var display = students.slice(0, 3);
   var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
   var stack = display.map(function(s){
-    var stateCls = s.state === 'done' ? ' av-done' : (s.state === 'live' ? ' av-live' : ' av-working');
-    return '<span class="notion-avatar' + stateCls + '" title="' + esc(s.name) + ' (' + esc(s.status) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + '</span>';
+    return '<span class="notion-avatar' + presenceClass(s) + '" title="' + esc(s.name) + ' (' + esc(presenceLabel(s)) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + (s.online === true ? '<i class="pr-dot" aria-hidden="true"></i>' : '') + '</span>';
   }).join('') + more;
 
   var popList = students.map(function(s){
-    return '<div class="notion-pop-row ' + (s.state === 'done' ? 'av-done' : (s.state === 'live' ? 'av-live' : 'av-working')) + '">' +
-      '<span class="notion-pop-av ' + (s.state === 'done' ? 'av-done' : (s.state === 'live' ? 'av-live' : 'av-working')) + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + '</span>' +
+    var cls = presenceClass(s);
+    var badge = s.online === true ? 'live' : (s.online === false ? 'off' : (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')));
+    var sub = s.email ? s.email : (s.online === true && s.status !== 'Viewing' ? s.status : '');
+    return '<div class="notion-pop-row' + cls + '">' +
+      '<span class="notion-pop-av' + cls + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + (s.online === true ? '<i class="pr-dot" aria-hidden="true"></i>' : '') + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
-        (s.email ? '<div class="notion-pop-email">' + esc(s.email) + '</div>' : '') +
+        (sub ? '<div class="notion-pop-email">' + esc(sub) + '</div>' : '') +
       '</div>' +
-      '<span class="notion-pop-badge ' + (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')) + '">' + esc(s.status) + '</span>' +
+      '<span class="notion-pop-badge ' + badge + '">' + esc(presenceLabel(s)) + '</span>' +
     '</div>';
   }).join('');
 
+  var title = 'On this paper (' + students.length + ')' + (known ? ' <span class="notion-pop-on">' + nOn + ' online</span>' : '');
   return '<div class="notion-avatars' + (isInline ? ' inline' : '') + '" data-act="presence-toggle" tabindex="0" role="button" aria-label="Students on this paper">' +
     '<div class="notion-avatar-stack">' + stack + '</div>' +
     '<div class="notion-presence-pop">' +
       '<div class="notion-pop-hd">' +
-        '<span class="notion-pop-hd-title">On this paper (' + students.length + ')</span>' +
+        '<span class="notion-pop-hd-title">' + title + '</span>' +
       '</div>' +
       '<div class="notion-pop-list">' + popList + '</div>' +
     '</div>' +

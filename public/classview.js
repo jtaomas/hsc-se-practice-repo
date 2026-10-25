@@ -113,10 +113,12 @@ function cvStatus(force){
     CV.loadSt=false;
     saveCVCache();
     cvDraw();
+    PRX.blocked=false;prStart();
   });
 }
 function cvAutoStatus(){
   if(!S.tok||/[?&]archive=1\b/.test(location.search))return;
+  if(!PRX.started&&CV.st&&CV.st.member)prStart();
   if(CV.st===null&&!CV.loadSt){
     cvStatus();
   }else if(!CV.loadSt&&(!CV.overAt||Date.now()-CV.overAt>20000)){
@@ -753,3 +755,55 @@ document.addEventListener('click',function(ev){
   }
   if(a==='analyse')cvAnalyse(el.getAttribute('data-b')||CV.bank,el.getAttribute('data-k'),+el.getAttribute('data-q'),+el.getAttribute('data-p'));
 });
+
+/* Live presence heartbeat. Tells the server this tab is open and reads back who else is (server clock only, see prSeen in helpers.js).
+   Only a signed-in class member sends it, only while the tab is visible, and every failure is silent: the page then simply
+   makes no presence claim. Switched off site-wide with DISABLE_PRESENCE. */
+var PRX={timer:0,busy:false,last:0,fails:0,sig:'',started:false,blocked:false};
+function prSig(){
+  var out=[];
+  Object.keys(PR.list).forEach(function(id){var s=prSeen(id);if(s&&s.online)out.push(id+':'+s.bank)});
+  return (prKnown()?'k':'u')+out.sort().join(',');
+}
+function prRedraw(){
+  if(typeof trialAvatarsHTML!=='function')return;
+  Array.prototype.forEach.call(document.querySelectorAll('.notion-presence-slot'),function(el){
+    var b=BANKS.filter(function(x){return x.id===el.getAttribute('data-b')})[0];
+    if(!b)return;
+    var open=!!el.querySelector('.notion-avatars.pop-open');
+    el.innerHTML=trialAvatarsHTML(b,el.getAttribute('data-inline')==='1');
+    if(open){var av=el.querySelector('.notion-avatars');if(av)av.classList.add('pop-open')}
+  });
+}
+function prCanBeat(){return !!S.tok&&!!CV.st&&!!CV.st.member&&!PRX.blocked&&!/[?&]archive=1\b/.test(location.search)}
+function prNext(ms){clearTimeout(PRX.timer);PRX.timer=setTimeout(prBeat,ms)}
+function prBeat(){
+  if(!prCanBeat()){prNext(30000);return}
+  if(document.visibilityState==='hidden'){prNext(30000);return}
+  if(PRX.busy)return;
+  PRX.busy=true;PRX.last=Date.now();
+  cvApi({action:'presence',bank:prHereBank()}).then(function(r){
+    var m={};(r.online||[]).forEach(function(o){if(o&&typeof o.id==='string'&&typeof o.ageMs==='number')m[o.id]={age:o.ageMs,bank:typeof o.bank==='string'?o.bank:''}});
+    PR.list=m;PR.recv=Date.now();PR.disabled=!!r.disabled;PRX.fails=0;
+  }).catch(function(e){
+    PRX.fails++;
+    if(e&&(e.status===401||e.status===403))PRX.blocked=true;
+  }).then(function(){
+    PRX.busy=false;
+    var sig=prSig();
+    if(sig!==PRX.sig){PRX.sig=sig;prRedraw()}
+    prNext(Math.min(25000*Math.pow(2,PRX.fails),120000));
+  });
+}
+function prStart(){
+  if(PRX.started||!prCanBeat())return;
+  PRX.started=true;
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&Date.now()-PRX.last>5000)prNext(0)});
+  window.addEventListener('hashchange',function(){if(Date.now()-PRX.last>4000)prNext(300)});
+  window.addEventListener('pageshow',function(e){if(e.persisted)prNext(0)});
+  window.addEventListener('pagehide',function(){
+    if(!prCanBeat()||PR.disabled)return;
+    try{fetch('/api/class',{method:'POST',keepalive:true,headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify({action:'presence',off:true})}).catch(function(){})}catch(e){}
+  });
+  prNext(0);
+}

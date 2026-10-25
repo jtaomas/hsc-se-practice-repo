@@ -240,6 +240,13 @@ function createHandler(deps) {
       if (!me) return fail(403, 'not_member', 'Join the class with your class code first.');
       if (p.action === 'rename') return res.status(200).json(Object.assign({ ok: true }, await store.rename(sess.id, p.name)));
 
+      // Heartbeat from an open tab. Records that this member is here now and returns who else is, by the server's clock.
+      if (p.action === 'presence') {
+        if (/^(1|true)$/i.test(String(env.DISABLE_PRESENCE || ''))) return res.status(200).json({ ok: true, disabled: true, now: clock(), online: [] });
+        if (p.off === true) { await store.unbeat(sess.id); return res.status(200).json({ ok: true, now: clock(), online: [] }); }
+        await store.beat(sess.id, typeof p.bank === 'string' ? p.bank : '');
+        return res.status(200).json({ ok: true, now: clock(), online: await store.presences() });
+      }
       if (p.action === 'roster') {
         const list = await store.members();
         return res.status(200).json({ admin: isClassAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });

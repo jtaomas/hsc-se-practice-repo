@@ -1490,3 +1490,11 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 @media(max-width:560px){.pm-list{min-width:12rem}.pf-chip.pf-hid{margin-left:0}}
 .pcard.pk-new{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .pcard.pk-new .pc-chip{display:none}.pcard.pk-new .pc-acts{margin-top:0}
+/* Live presence: people who are online are in colour with a green dot, everyone else is greyed out. */
+.notion-avatar .pr-dot,.notion-pop-av .pr-dot{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:#16a34a;border:2px solid #fff;box-sizing:border-box}
+.notion-avatar.pr-on{border:2.5px solid #16a34a;z-index:3}
+.notion-avatar.pr-off{filter:grayscale(1);opacity:.5;z-index:1}
+.notion-pop-av.pr-on .notion-av,.notion-pop-av.pr-on img{border:2px solid #16a34a}
+.notion-pop-row.pr-off .notion-pop-av,.notion-pop-row.pr-off .notion-pop-name,.notion-pop-row.pr-off .notion-pop-email{filter:grayscale(1);opacity:.55}
+.notion-pop-badge.off{background:#f1f5f9;color:#64748b}
+.notion-pop-on{font-weight:400;color:#166534;margin-left:6px}

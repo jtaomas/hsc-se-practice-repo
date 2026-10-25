@@ -364,7 +364,33 @@ function createClassStore(options) {
     return { deleted: true };
   }
 
-  return { configured, list: async o => (await provider()).list(o), getMany, memberCount, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  // Live presence: one small record per member, rewritten by the browser heartbeat. Only the server clock is ever used.
+  const PRESENCE_TTL = 75000;
+  async function beat(id, bank) {
+    if (!ID.test(id)) return;
+    await write('class/presence/' + id + '.json', { t: now(), b: /^(?:[1-9]|1[0-9])$/.test(String(bank || '')) ? String(bank) : '' }, true);
+  }
+  async function unbeat(id) {
+    if (!ID.test(id)) return;
+    await write('class/presence/' + id + '.json', { t: 0, b: '' }, true);
+  }
+  // Members seen within the last 75 seconds, with how old that sighting is according to the server.
+  async function presences() {
+    const list = await members();
+    if (!list.length) return [];
+    const paths = list.map(m => 'class/presence/' + m.id + '.json');
+    const map = await getMany(paths).catch(() => new Map());
+    const t = now(), out = [];
+    list.forEach(m => {
+      const rec = parseJSON(map.get('class/presence/' + m.id + '.json'));
+      if (!rec || typeof rec.t !== 'number' || rec.t <= 0) return;
+      const age = Math.max(0, t - rec.t);
+      if (age < PRESENCE_TTL) out.push({ id: m.id, ageMs: age, bank: typeof rec.b === 'string' ? rec.b : '' });
+    });
+    return out;
+  }
+
+  return { configured, list: async o => (await provider()).list(o), getMany, memberCount, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, beat, unbeat, presences, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, cleanMarks, normaliseCode, QUOTA, MAX_MEMBERS, error };

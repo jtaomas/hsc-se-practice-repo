@@ -86,6 +86,7 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
    - **Rollback in Vercel:** Go to Vercel Deployments, find commit `75b516d`, click the three dots, and click **Promote to Production**.
    - **Disable via env var:** Set `DISABLE_CLASS_SHARING=1` in Vercel Environment Variables.
    - **Rollback in Git:** Run `git revert HEAD` and push to `main`.
+   - **Live presence ("On this paper"):** each open tab of a class member sends a heartbeat (`action: presence`, about every 25s, visible tabs only) that rewrites `class/presence/<id>.json`. The server returns who was seen in the last 75s with ages from its own clock; the browser never trusts cached data for online state, and shows no online/offline claim at all if it has had no reply for 90s. Switch off with `DISABLE_PRESENCE=1` (the list then behaves as before). Tests: `tests/presence_test.js`, presence block in `tests/class_test.js`.
 
 2. **Daily save caps:**
    Limits each account to 1000 progress saves per UTC day (`MAX_DAILY_SAVES` overrides it) to protect Cloudflare D1 free tier limits. Stored directly on the user record at zero extra write cost.

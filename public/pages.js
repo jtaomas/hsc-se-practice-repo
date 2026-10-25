@@ -286,7 +286,7 @@ function landingPage(b){
   });
 }
 function navHTML(b,rv){
-  var bs=BS(b.id),h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
+  var bs=BS(b.id),h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums" data-b="'+b.id+'">';
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
     if(rv){var qc=qCls(b,n);if(qc)c+=' '+qc}
@@ -362,6 +362,7 @@ function render(){
   /* Archived papers (see archive/README.md) are not reachable from the app; ?archive=1 is for tests and maintainers. */
   if(b&&b.archived&&!/[?&]archive=1\b/.test(location.search))b=undefined;
   MENU={};CPK='';
+  var nk0=$('#nums'),sl0=nk0?nk0.scrollLeft:null,bk0=nk0?nk0.getAttribute('data-b'):null;
   expireExams();
   // A paper whose working time ended goes to its results, not back into the exam.
   if(b&&TIMEUP[b.id]&&BS(b.id).done&&(h[1]==='q'||h[1]==='finish')){stopPython();location.replace('#/'+b.id+'/results');return}
@@ -385,6 +386,8 @@ function render(){
   else if(h[1]==='results')html=resultsPage(b);
   else html=landingPage(b);
   $('#app').innerHTML=html;applyTheme();window.scrollTo(0,0);
+  /* keep the question-number strip where the student scrolled it when moving between questions of the same paper */
+  if(sl0!=null&&b&&bk0===b.id){var nk1=$('#nums');if(nk1)nk1.scrollLeft=sl0}
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
   if(!lock&&h[0]==='class')classBind();
   if(!lock&&h[0]==='mistakes')mistakesBind();

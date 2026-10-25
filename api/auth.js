@@ -171,7 +171,7 @@ module.exports = async (req, res) => {
       const id = sha(email);
       const path = 'users/' + id + '.json';
       if (p.action === 'signup') {
-        if (!isEduEmail(email)) return fail(400, 'Please use your education email address (e.g. name@student.det.nsw.edu.au or name@education.nsw.gov.au).');
+        if (!isEduEmail(email)) return fail(400, 'Please use your education email address (e.g. name@education.nsw.gov.au).');
         // Name is shown to classmates. A class code joins the class straight away; a wrong code stops sign-up before anything is created.
         const classCode = String(p.classCode || '').trim();
         const classes = classCode || p.name ? require('../server/class-store') : null;

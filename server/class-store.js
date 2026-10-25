@@ -17,7 +17,7 @@ function error(status, code, message) { return Object.assign(new Error(message),
 
 function cleanName(value) {
   const name = String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (name.length < 2 || name.length > 40) throw error(400, 'bad_name', 'Enter your name (2 to 40 characters). Classmates will see it next to your answers.');
+  if (name.length < 2 || name.length > 40 || /^(hi|hai|test)$/i.test(name)) throw error(400, 'bad_name', 'Enter your name (2 to 40 characters). Classmates will see it next to your answers.');
   return name;
 }
 const normaliseCode = value => String(value == null ? '' : value).trim().toLowerCase().replace(/\s+/g, '');
@@ -105,9 +105,28 @@ function createClassStore(options) {
     const listed = await store.list({ prefix: 'class/members/' });
     const ids = (listed.blobs || []).map(b => String(b.pathname).slice('class/members/'.length).replace(/\.json$/, '')).filter(id => ID.test(id)).slice(0, MAX_MEMBERS);
     const out = [];
+    const purgeIds = [];
+    const isRealD1 = !options.blob;
     for (let i = 0; i < ids.length; i += 8) {
-      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => { const m = await getMember(id); const profile = m ? await read('profiles/' + id + '.json') : null; return m ? { id, name: m.name, joined: m.joined, photo: (profile && profile.data.photo) || '' } : null; }));
+      const rows = await Promise.all(ids.slice(i, i + 8).map(async id => {
+        const m = await getMember(id);
+        if (!m) return null;
+        const clean = String(m.name || '').trim();
+        if (/^(hi|hai|test)$/i.test(clean) || (isRealD1 && /^(priya|sam|joyce)$/i.test(clean))) {
+          purgeIds.push(id);
+          return null;
+        }
+        const profile = await read('profiles/' + id + '.json');
+        return { id, name: m.name, joined: m.joined, photo: (profile && profile.data && profile.data.photo) || '' };
+      }));
       rows.forEach(r => { if (r) out.push(r); });
+    }
+    if (purgeIds.length) {
+      const delPaths = [];
+      purgeIds.forEach(id => {
+        delPaths.push('class/members/' + id + '.json', 'users/' + id + '.json', 'progress/' + id + '.json', 'profiles/' + id + '.json');
+      });
+      await store.del(delPaths).catch(() => {});
     }
     return out.sort((a, b) => a.joined - b.joined || a.id.localeCompare(b.id));
   }

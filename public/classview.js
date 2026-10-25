@@ -42,7 +42,9 @@ function cvCleanText(str){
   return s.replace(/[\s,;]*\]=\-[A-Za-z0-9\-_[\]]{2,20}$/,'.').trim();
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{},ansEditing:''};
+var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{},ansEditing:'',rmPart:{},rmQRun:{}};
+function cvIsAdmin(){return !!(S.admin||(CV.st&&(CV.st.admin||CV.st.classAdmin||(CV.st.roster&&CV.st.roster.admin))))}
+function cvIsSysAdmin(){return !!(S.admin||(CV.st&&CV.st.admin))}
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -288,8 +290,21 @@ function cvPartBody(bankId,key,qn,pi,list){
     if(run&&run.err)g+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
     g+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
   }
-  var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
-    (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
+  var qKey=bankId+'|'+key,qRun=CV.rmQRun&&CV.rmQRun[qKey];
+  var adminActs='';
+  if(cvIsAdmin()&&list.length&&S.tok){
+    var unmk=list.filter(function(x){return x.id&&x.mark==null&&x.done!==false}).length;
+    if(qRun&&qRun.running){
+      adminActs='<span class="mut" style="font-size:12px;margin-left:8px">Remarking question ('+qRun.done+'/'+qRun.total+')...</span>';
+    }else{
+      adminActs='<span class="cv-q-rm-acts" style="display:inline-flex;gap:6px;margin-left:8px;flex-wrap:wrap">'+
+        (unmk?'<button class="nb sm ol" data-cv="remark-q-unmarked" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'" type="button" style="padding:2px 8px;font-size:12px">Remark unmarked ('+unmk+')</button>':'')+
+        '<button class="nb sm ol" data-cv="remark-q-all" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'" type="button" style="padding:2px 8px;font-size:12px">Remark all</button>'+
+        '</span>';
+    }
+  }
+  var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+adminActs+
+    (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button" style="margin-left:auto">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
     a.text=cvCleanText(a.text);
@@ -310,6 +325,19 @@ function cvPartBody(bankId,key,qn,pi,list){
         }).join('')+'</ul></div>';
     }
     var editBtn=a.mine?'<button type="button" class="nb sm ol" data-cv="ansedit" data-k="'+esc(key)+'" style="margin-left:8px;padding:2px 8px;font-size:12px">'+(isEditing?'Cancel':'Edit')+'</button>':'';
+    var rkId=a.id||'';
+    var rKey=rkId+'|'+bankId+'|'+key;
+    var rmRun=CV.rm[cvRmKey(rkId,bankId)];
+    var isRmBusy=(CV.rmPart&&CV.rmPart[rKey])||(rmRun&&rmRun.running);
+    var rmBtn='';
+    if(cvIsAdmin()&&rkId&&S.tok){
+      if(a.done===false){
+        rmBtn='<span class="mut" style="font-size:11px;margin-left:8px" title="Student has not submitted this paper yet">Not submitted</span>';
+      }else{
+        rmBtn='<button type="button" class="nb sm ol cv-rm-btn" data-cv="remark-one" data-id="'+esc(rkId)+'" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'"'+(isRmBusy?' disabled':'')+' style="margin-left:8px;padding:2px 8px;font-size:12px">'+(isRmBusy?'Remarking...':'Remark')+'</button>';
+      }
+    }
+    var progBtn=cvIsAdmin()&&rkId?'<button type="button" class="nb sm ol" data-cv="prog" data-id="'+esc(rkId)+'" style="margin-left:6px;padding:1px 6px;font-size:11px" title="Review student progress and answers">Review</button>':'';
     var bodyHTML='';
     if(isEditing){
       bodyHTML='<div class="cv-edit-panel" style="margin:8px 0;padding:10px;border:1px solid #ccc;border-radius:4px;background:#f9f9f9">'+
@@ -322,7 +350,7 @@ function cvPartBody(bankId,key,qn,pi,list){
     }else{
       bodyHTML=code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>';
     }
-    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+editBtn+'</span><span class="cv-meta">'+cvMarkHTML(a)+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+editBtn+progBtn+'</span><span class="cv-meta">'+cvMarkHTML(a)+rmBtn+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
       bodyHTML+
       ptsHTML+'</div>';
   }).join('');
@@ -451,12 +479,12 @@ function cvRmSummary(run,name){
 }
 function cvRemark(id,isSystem,bid,mode,only){
   var d=CV.prog[id],b=BANKS.filter(function(x){return x.id===bid})[0],key=cvRmKey(id,bid),old=CV.rm[key];
-  if(!d||!b||!d.u||!d.u[bid]||!d.u[bid].done||!S.tok||(old&&old.running)||typeof aiDispatch!=='function')return;
-  if(mode==='all'&&!confirm('Mark every written, code and diagram answer in this paper again with AI? This uses your daily AI marking allowance and replaces the AI marks saved for this student.'))return;
+  if(!d||!b||!d.u||!d.u[bid]||!d.u[bid].done||!S.tok||(old&&old.running)||typeof aiDispatch!=='function')return Promise.reject(new Error('Cannot remark'));
+  if(mode==='all'&&!confirm('Mark every written, code and diagram answer in this paper again with AI? This uses your daily AI marking allowance and replaces the AI marks saved for this student.'))return Promise.resolve();
   var doneAt=d.u[bid].doneAt||0,name=d.name||'the student',tasks=cvWithU(d.u,function(){return cvRmList(b,mode,only)});
   var run={running:true,total:tasks.length,done:0,saved:0,failed:0,err:'',msg:'',ok:false,saving:Promise.resolve()};
   CV.rm[key]=run;
-  if(!tasks.length){run.running=false;run.msg=cvRmSummary(run,name);run.ok=true;cvDraw();return}
+  if(!tasks.length){run.running=false;run.msg=cvRmSummary(run,name);run.ok=true;cvDraw();return Promise.resolve(run)}
   var pending={},idx=0,fatal=null;
   function flush(){
     var keys=Object.keys(pending);if(!keys.length)return run.saving;
@@ -484,11 +512,108 @@ function cvRemark(id,isSystem,bid,mode,only){
     }).catch(function(e){run.failed++;run.err=e.message}).then(function(){run.done++;cvDraw();return next()});
   }
   var workers=[];for(var w=0;w<Math.min(4,tasks.length);w++)workers.push(next());
-  Promise.all(workers).then(flush).then(function(){return run.saving}).then(function(){
+  cvDraw();
+  return Promise.all(workers).then(flush).then(function(){return run.saving}).then(function(){
     if(fatal)run.failed+=tasks.length-idx;
     run.running=false;run.ok=!run.failed;run.msg=cvRmSummary(run,name);cvDraw();
+    if(CV.ansBank===bid)cvLoadAnswers(bid,true);
+    return run;
   });
+}
+
+function cvRemarkOne(id,bid,key){
+  if(!id||!bid||!key)return;
+  var isSystem=cvIsSysAdmin();
+  var rKey=id+'|'+bid+'|'+key;
+  if(CV.rmPart[rKey])return;
+  CV.rmPart[rKey]=1;cvDraw();
+  function execute(){
+    var d=CV.prog[id];
+    if(!d||!d.u||!d.u[bid]){
+      delete CV.rmPart[rKey];cvDraw();
+      alert('Could not find student answers for this paper.');
+      return;
+    }
+    if(!d.u[bid].done){
+      delete CV.rmPart[rKey];cvDraw();
+      alert('This student has not submitted this paper yet.');
+      return;
+    }
+    cvRemark(id,isSystem,bid,'one',key).then(function(){
+      delete CV.rmPart[rKey];
+      if(CV.ansBank===bid)cvLoadAnswers(bid,true);
+      cvDraw();
+    }).catch(function(e){
+      delete CV.rmPart[rKey];
+      cvDraw();
+    });
+  }
+  if(CV.prog[id]&&CV.prog[id].u&&CV.prog[id].u[bid]){
+    execute();
+  }else{
+    cvApi({action:isSystem?'admin_progress':'progress',memberId:id}).then(function(r){
+      CV.prog[id]=r;
+      execute();
+    }).catch(function(e){
+      delete CV.rmPart[rKey];
+      alert('Could not load student progress: '+e.message);
+      cvDraw();
+    });
+  }
+}
+
+function cvRemarkOneSilent(id,bid,key){
+  var isSystem=cvIsSysAdmin();
+  function runNow(){
+    var d=CV.prog[id];
+    if(!d||!d.u||!d.u[bid]||!d.u[bid].done)return Promise.resolve();
+    return cvRemark(id,isSystem,bid,'one',key);
+  }
+  if(CV.prog[id]&&CV.prog[id].u&&CV.prog[id].u[bid])return runNow();
+  return cvApi({action:isSystem?'admin_progress':'progress',memberId:id}).then(function(r){
+    CV.prog[id]=r;
+    return runNow();
+  }).catch(function(){return Promise.resolve()});
+}
+
+function cvRemarkQuestion(bankId,key,onlyUnmarked){
+  if(!CV.ans||!CV.ans.parts||!CV.ans.parts[key])return;
+  var list=CV.ans.parts[key].filter(function(a){return a.id&&a.done!==false});
+  if(onlyUnmarked){
+    list=list.filter(function(a){return a.mark==null});
+  }
+  if(!list.length){
+    alert(onlyUnmarked?'All submitted student answers for this question are already marked.':'No submitted student answers found to remark.');
+    return;
+  }
+  var promptMsg=onlyUnmarked
+    ? 'Mark '+list.length+' unmarked student answer'+(list.length===1?'':'s')+' for this question using AI?'
+    : 'Remark '+list.length+' student answer'+(list.length===1?'':'s')+' for this question using AI?';
+  if(!confirm(promptMsg))return;
+  var qKey=bankId+'|'+key;
+  CV.rmQRun[qKey]={total:list.length,done:0,running:true};
   cvDraw();
+
+  var idx=0;
+  function next(){
+    if(idx>=list.length){
+      delete CV.rmQRun[qKey];
+      if(CV.ansBank===bankId)cvLoadAnswers(bankId,true);
+      cvDraw();
+      return;
+    }
+    var student=list[idx++];
+    cvRemarkOneSilent(student.id,bankId,key).then(function(){
+      if(CV.rmQRun[qKey])CV.rmQRun[qKey].done++;
+      cvDraw();
+      next();
+    }).catch(function(){
+      if(CV.rmQRun[qKey])CV.rmQRun[qKey].done++;
+      cvDraw();
+      next();
+    });
+  }
+  next();
 }
 document.addEventListener('toggle',function(ev){var el=ev.target,k=el&&el.getAttribute&&el.getAttribute('data-cvd');if(k)CV.dopen[k]=!!el.open},true);
 function cvProgHTML(id,isSystem){
@@ -764,6 +889,9 @@ document.addEventListener('click',function(ev){
   if(a==='prog'){var pid=el.getAttribute('data-id');CV.pview=CV.pview===pid?'':pid;if(CV.pview&&!CV.prog[pid])cvLoadProg(pid,false);else cvDraw();return}
   if(a==='aprog'){var apid=el.getAttribute('data-id');CV.apview=CV.apview===apid?'':apid;CV.aedit='';CV.adel='';CV.amsg='';if(CV.apview&&!CV.prog[apid])cvLoadProg(apid,true);else cvDraw();return}
   if(a==='remark'){cvRemark(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1',el.getAttribute('data-b'),el.getAttribute('data-mode')||'one',el.getAttribute('data-k')||'');return}
+  if(a==='remark-one'){cvRemarkOne(el.getAttribute('data-id'),el.getAttribute('data-b'),el.getAttribute('data-k'));return}
+  if(a==='remark-q-all'){cvRemarkQuestion(el.getAttribute('data-b'),el.getAttribute('data-k'),false);return}
+  if(a==='remark-q-unmarked'){cvRemarkQuestion(el.getAttribute('data-b'),el.getAttribute('data-k'),true);return}
   if(a==='progrefresh'){cvLoadProg(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1');return}
   if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.apview='';CV.adel='';CV.amsg='';cvDraw();return}
   if(a==='aname'){cvAdm({action:'admin_name',memberId:el.getAttribute('data-id'),name:(document.getElementById('cvanm')||{}).value||''});return}

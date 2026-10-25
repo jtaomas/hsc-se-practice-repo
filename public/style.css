@@ -867,10 +867,10 @@ table.hoa.db{margin:12px 0}
 .guide pre{background:#f6f6f6}
 .cvwrap .item{border:1px solid #e2e8f0;border-left:3px solid #002664;border-radius:6px;background:#fff;padding:18px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.03)}
 .cvslot{margin-top:16px}.cvbox{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:18px 20px}.cvbox .acts{margin-top:10px}
-.cvbox .cvhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:1.02em}
+.cvbox .cvhd{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin-bottom:10px;font-size:1.02em}
 .cvans{border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;margin:12px 0;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.02)}
-.cvwho{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9}
-.cv-name{font-weight:700;color:#002664;font-size:1em;display:inline-flex;align-items:center;gap:7px}
+.cvwho{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f1f5f9}
+.cv-name{font-weight:700;color:#002664;font-size:1em;display:inline-flex;align-items:center;flex-wrap:wrap;gap:7px}
 /* Photo avatars and drawn avatars sit on the same line: an inline SVG otherwise rides the text baseline while a photo is centred. */
 .notion-av,.profile-photo{vertical-align:middle;flex:none}
 .cv-wc{background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:10px;font-size:.8em;font-weight:500}
@@ -1058,7 +1058,7 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .rto .yans{margin:4px 0;max-height:220px}
 
 /* Class answers: each classmate's mark for the part */
-.cv-meta{display:flex;align-items:center;gap:8px}
+.cv-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .cv-mark{padding:2px 9px;border-radius:10px;font-size:.85em;font-weight:700}
 .cv-mark.ok{background:#e6f4ea;color:#14532d}
 .cv-mark.bad{background:#fdeef1;color:#8a0f2b}

@@ -160,7 +160,7 @@ function createHandler(deps) {
         const key = (qi + 1) + '.' + pi;
         const text = engine.answerText(item, r.paper.ans && r.paper.ans[key]);
         if (text) {
-          const entry = { id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text, mark: partMark(r.paper, key, item.m), max: item.m };
+          const entry = { id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', text, mark: partMark(r.paper, key, item.m), max: item.m, done: !!r.paper.done, doneAt: r.paper.doneAt || 0 };
           const fb = partFeedback(r.paper, key, item.m);
           if (fb) entry.fb = fb;
           list.push(entry);
@@ -299,11 +299,11 @@ function createHandler(deps) {
         return res.status(200).json({ admin: isClassAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });
       }
       if (p.action === 'progress') {
-        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can view member progress reports.');
+        if (!isClassAdmin(sess) && !isSystemAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can view member progress reports.');
         return res.status(200).json(await store.memberProgress(String(p.memberId || '')));
       }
       if (p.action === 'remark_save') {
-        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can mark other students\' answers.');
+        if (!isClassAdmin(sess) && !isSystemAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can mark other students\' answers.');
         const memberId = String(p.memberId || '');
         if (!(await store.getMember(memberId))) return fail(404, 'no_member', 'That person is not in the class.');
         return res.status(200).json(Object.assign({ ok: true }, await saveRemarks(memberId, p)));
@@ -396,7 +396,41 @@ function createHandler(deps) {
       if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
       if (p.action === 'answers') {
         const all = await classAnswers(bank, sess.id);
-        return res.status(200).json({ bankId: bank.id, members: all.members.length, submitted: all.submitted, parts: all.parts });
+        const models = {}, digests = {};
+        const openKeys = [];
+        bank.qs.forEach((q, qi) => q.it.forEach((item, pi) => {
+          if (!engine.isOpen(item) || item.t === 'sq') return;
+          const key = (qi + 1) + '.' + pi;
+          const entries = all.parts[key] || [];
+          if (entries.length >= 2) {
+            openKeys.push({ qn: qi + 1, pi, key, entries, item });
+          }
+        }));
+        if (openKeys.length) {
+          const synthItems = openKeys.map(ok => {
+            const context = engine.partContext(bank, ok.qn, ok.pi);
+            const labelled = engine.label(ok.entries, bank.id + '.' + ok.qn + '.' + ok.pi);
+            const digest = engine.digestFor(context, labelled);
+            digests[ok.key] = digest;
+            const names = {}; labelled.forEach(x => { names[x.letter] = x.mine ? 'You' : x.name; });
+            const decorate = result => ({ status: 'ready', result, names, count: labelled.length, keyword: context.keyword, targetWords: engine.targetWords(context.marks), model: engine.MODEL, harness: engine.HARNESS_VERSION, digest });
+            return { ok, digest, decorate };
+          });
+          const cachePaths = synthItems.map(d => 'class/synth/' + d.digest + '.json');
+          const cacheMap = typeof store.getMany === 'function' ? await store.getMany(cachePaths).catch(() => null) : null;
+          for (const s of synthItems) {
+            let hit = null;
+            if (cacheMap) {
+              const raw = cacheMap.get('class/synth/' + s.digest + '.json');
+              hit = parseBlobData(raw);
+            }
+            if (!hit) hit = await store.cached(s.digest).catch(() => null);
+            if (hit) {
+              models[s.ok.key] = s.decorate(hit);
+            }
+          }
+        }
+        return res.status(200).json({ bankId: bank.id, members: all.members.length, submitted: all.submitted, parts: all.parts, models, digests });
       }
       if (p.action === 'analyse') {
         const qn = Number(p.questionNumber), pi = Number(p.partIndex);
@@ -409,10 +443,16 @@ function createHandler(deps) {
         const labelled = engine.label(entries, bank.id + '.' + qn + '.' + pi);
         const digest = engine.digestFor(context, labelled);
         const names = {}; labelled.forEach(x => { names[x.letter] = x.mine ? 'You' : x.name; });
-        const decorate = result => ({ status: 'ready', result, names, count: labelled.length, keyword: context.keyword, targetWords: engine.targetWords(context.marks), model: engine.MODEL, harness: engine.HARNESS_VERSION });
-        const hit = await store.cached(digest);
-        if (hit) return res.status(200).json(decorate(hit));
-        if (!aiKey(env)) return fail(503, 'no_key', 'AI analysis is not configured on this site.');
+        const decorate = result => ({ status: 'ready', result, names, count: labelled.length, keyword: context.keyword, targetWords: engine.targetWords(context.marks), model: engine.MODEL, harness: engine.HARNESS_VERSION, digest });
+        if (!p.force) {
+          const hit = await store.cached(digest);
+          if (hit) return res.status(200).json(decorate(hit));
+        }
+        if (!aiKey(env)) {
+          const hit = await store.cached(digest);
+          if (hit) return res.status(200).json(decorate(hit));
+          return fail(503, 'no_key', 'AI analysis is not configured on this site.');
+        }
         await store.spend(sess.id);
         const result = await engine.analyse(context, labelled, { apiKey: aiKey(env) });
         await store.remember(digest, result);

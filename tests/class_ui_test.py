@@ -29,6 +29,10 @@ def route(r):
         if a == 'admin_delete':
             if p.get('confirmEmail') != 'kid@student.det.nsw.edu.au': return r.fulfill(status=400, content_type='application/json', body=json.dumps({'code': 'confirm', 'error': 'Type the account email to confirm.'}))
             return ok({'ok': True})
+        if a in ('progress', 'admin_progress'):
+            return ok({'id': p['memberId'], 'name': 'Priya', 'email': 'priya@education.nsw.gov.au', 'inClass': True, 'ts': 1700000000000,
+                       'u': {'8': {'start': 1700000000000, 'done': True, 'doneAt': 1700003600000, 'mode': 'exam', 'ans': {'1.0': 0, '17.0': '<p>Agile sprints allow quick feedback.</p>'}}},
+                       'hist': [{'id': '8', 'name': 'PEM 2026 Trial', 'at': 1699900000000, 'T': 64, 'M': 80}]})
         if a == 'setname': return ok({'ok': True, 'name': p['name']})
         if a == 'setphoto': return ok({'ok': True, 'photo': p['photo']})
         if a == 'overview': return ok({'members': 2, 'counts': {'8': 2}})
@@ -57,7 +61,14 @@ with sync_playwright() as pw:
     expect(page.locator('.cv-people:not(.cv-accts) .cv-person')).to_have_count(2)
     expect(page.locator('.cv-people:not(.cv-accts) .cv-person').nth(1)).to_contain_text('Priya')
     expect(page.locator('[data-cv=edit]')).to_have_count(0)
+    page.locator('[data-cv=prog]').nth(1).click()
+    expect(page.locator('.cv-prog')).to_contain_text('1 submitted')
+    expect(page.locator('.cv-prog')).to_contain_text('Earlier attempts (1)')
+    expect(page.locator('.cv-prog')).to_contain_text('64 / 80')
+    page.locator('[data-cv=prog]').nth(1).click()
     expect(page.locator('.cv-accts .cv-person')).to_have_count(1)
+    page.locator('[data-cv=aprog]').click()
+    expect(page.locator('.cv-prog')).to_contain_text('Current and submitted papers (1)')
     page.locator('[data-cv=aedit]').click()
     page.fill('#cvanm', 'Kid Renamed'); page.click('[data-cv=aname]')
     expect(page.locator('#cvroot')).to_contain_text('Name saved as')

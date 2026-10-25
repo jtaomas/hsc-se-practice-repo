@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -179,12 +179,161 @@ function cvNavHTML(b){
   }
   return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>';
 }
-/* Everyone in the class, one row each, like a Google Classroom people list. Admins edit any name or photo. */
+/* Everyone in the class, one row each, like a Google Classroom people list. Admins edit any name or photo, and view progress reports. */
+function cvWithU(uMap,fn){
+  var sv=S.u,tmp={};
+  Object.keys(uMap||{}).forEach(function(k){
+    var p=uMap[k];
+    if(p&&typeof p==='object'){
+      tmp[k]={ans:p.ans||{},flags:p.flags||{},self:p.self||{},chk:p.chk||{},ai:p.ai||{},aiErr:p.aiErr||{},start:p.start||0,done:!!p.done,doneAt:p.doneAt||0,upd:p.upd||0,mode:p.mode||'exam',cur:p.cur||1};
+    }
+  });
+  S.u=tmp;
+  try{return fn(tmp)}finally{S.u=sv}
+}
+function cvFormatAns(it,a){
+  if(!isAns(it,a))return '<span class="mut">No response</span>';
+  if(it.t==='mc')return '<b>'+String.fromCharCode(65+(+a))+'.</b> '+esc(cvPlain(it.o&&it.o[a]||''));
+  if(it.t==='ms'){
+    var arr=Array.isArray(a)?a:[];
+    return arr.map(function(x){return '<b>'+String.fromCharCode(65+(+x))+'.</b> '+esc(cvPlain(it.o&&it.o[x]||''))}).join('<br>');
+  }
+  if(it.t==='tx'){
+    var txt=cvPlain(a),wc=txt?txt.split(/\s+/).length:0;
+    return '<div class="yans">'+esc(txt)+'</div><span class="mut">'+wc+' word'+(wc===1?'':'s')+'</span>';
+  }
+  if(it.t==='py'||it.t==='ps'||it.t==='sq')return '<pre class="yans">'+esc(String(a))+'</pre>';
+  if(it.t==='dr'){
+    var dt=typeof xdText==='function'&&a&&a.e?xdText(a.e):'';
+    return dt?'<pre class="yans">'+esc(dt)+'</pre>':'<span class="mut">Diagram ('+(a&&a.e?a.e.length:0)+' elements)</span>';
+  }
+  if(it.t==='ft'){
+    var cells=Object.keys(a||{}).filter(function(k){return String(a[k]).trim()}).map(function(k){return '['+k+'] '+a[k]}).join(' | ');
+    return '<div class="yans">'+esc(cells)+'</div>';
+  }
+  if(typeof units==='function'){
+    var u=units(it,a);
+    return esc(u[0]+' of '+u[1]+' correct');
+  }
+  return '<span class="mut">Answered</span>';
+}
+function cvLoadProg(id,isSystem){
+  CV.progRun[id]={loading:true};cvDraw();
+  cvApi({action:isSystem?'admin_progress':'progress',memberId:id}).then(function(r){
+    delete CV.progRun[id];CV.prog[id]=r;cvDraw();
+  }).catch(function(e){
+    CV.progRun[id]={err:e.message};cvDraw();
+  });
+}
+function cvProgHTML(id,isSystem){
+  var run=CV.progRun[id],d=CV.prog[id];
+  if(run&&run.loading&&!d)return '<p class="mut">Loading progress report...</p>';
+  if(run&&run.err&&!d)return '<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
+  if(!d)return '<p class="mut">Loading progress report...</p>';
+  return cvWithU(d.u,function(uMap){
+    var banks=cvBanks(),paperRows=[],respBlocks=[],doneCount=0,progCount=0,totQ=0,totParts=0,totWords=0,lastTs=d.ts||0;
+    banks.forEach(function(b){
+      var p=uMap[b.id];if(!p)return;
+      var ansQ=0,ansParts=0,allParts=0,pWords=0,partRows=[];
+      var t=totals(b);
+      b.qs.forEach(function(q,qi){
+        var qn=qi+1;
+        if(qAnswered(b,qn))ansQ++;
+        q.it.forEach(function(it,pi){
+          allParts++;
+          var k=qn+'.'+pi,a=p.ans[k],ans=isAns(it,a),s=score(b,qn,pi);
+          if(ans){
+            ansParts++;
+            if(it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'){
+              var w=cvPlain(a);if(w)pWords+=w.split(/\s+/).length;
+            }
+          }
+          if(ans||p.done){
+            var qLabel='Q'+qn+(q.it.length>1?String.fromCharCode(97+pi):'');
+            var tName=typeof mkTypeName==='function'?mkTypeName(it):it.t.toUpperCase();
+            var pillCls=!s.set||s.src==='provisional'?'part':s.g===s.m?'ok':s.g===0?'bad':'part';
+            var pillTxt=s.set?(s.src==='provisional'?'Provisional '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
+            var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
+            partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+
+              '<td>'+cvFormatAns(it,a)+aiSum+'</td>'+
+              '<td><span class="pill '+pillCls+'">'+pillTxt+'</span></td>'+
+              '<td class="ra"><a class="nb sm ol" href="#/class/'+esc(b.id)+'/'+qn+'">Class Q'+qn+'</a> <a class="nb sm ol" href="#/'+esc(b.id)+'/review/'+qn+'">Review Q'+qn+'</a></td></tr>');
+          }
+        });
+      });
+      if(!p.start&&!p.done&&!ansParts)return;
+      if(p.done)doneCount++;else progCount++;
+      totQ+=ansQ;totParts+=ansParts;totWords+=pWords;
+      if(p.upd&&p.upd>lastTs)lastTs=p.upd;
+      if(p.doneAt&&p.doneAt>lastTs)lastTs=p.doneAt;
+      if(p.start&&p.start>lastTs)lastTs=p.start;
+      var sitting=!p.done&&p.mode==='exam'&&p.start&&(Date.now()-p.start<paperDuration(b)*1000);
+      var stBadge=p.done?'<span class="pill ok">Submitted</span>':sitting?'<span class="pill part">Sitting exam</span>':'<span class="pill part">'+(p.mode==='practice'?'Practice':'Exam')+' in progress</span>';
+      var meta=[];
+      if(!p.done&&p.cur)meta.push('On Q'+p.cur);
+      if(p.start)meta.push('Started '+fmtD(p.start));
+      if(p.done&&p.doneAt)meta.push('Submitted '+fmtD(p.doneAt));
+      else if(p.upd)meta.push('Saved '+fmtD(p.upd));
+      var markStr=p.done||t.markedM>0?('<b>'+t.T+' / '+t.markedM+'</b>'+(t.markedM?' <span class="mut">('+Math.round(100*t.T/t.markedM)+'%)</span>':'')+(t.P?'<div class="mut">'+t.P+' unscored</div>':'')):'<span class="mut">Not marked yet</span>';
+      var targetQ=p.cur||1;
+      paperRows.push('<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub||'')+' &middot; '+(p.mode==='practice'?'Practice mode':'Exam mode')+'</div></td>'+
+        '<td>'+stBadge+(meta.length?'<div class="mut">'+esc(meta.join(' · '))+'</div>':'')+'</td>'+
+        '<td><b>'+ansQ+' / '+b.qs.length+'</b> questions<div class="mut">'+ansParts+' / '+allParts+' parts'+(pWords?' &middot; '+pWords+' words':'')+'</div></td>'+
+        '<td>'+markStr+'</td>'+
+        '<td class="ra"><a class="nb sm ol" href="#/class/'+esc(b.id)+'/'+targetQ+'">Class paper</a> <a class="nb sm ol" href="#/'+esc(b.id)+'/review/'+targetQ+'">Review paper</a></td></tr>');
+      if(partRows.length){
+        respBlocks.push('<details class="xdd"><summary>'+esc(b.name)+' &mdash; responses and marks ('+ansParts+' answered)</summary>'+
+          '<div class="tw"><table class="res plist"><tr><th>Part</th><th>Response</th><th>Mark</th><th></th></tr>'+partRows.join('')+'</table></div></details>');
+      }
+    });
+    var hist=(d.hist||[]).slice().sort(function(a,b){return (b.at||0)-(a.at||0)});
+    hist.forEach(function(h){if(h.at&&h.at>lastTs)lastTs=h.at});
+    var sumParts=[];
+    sumParts.push(doneCount+' submitted');
+    sumParts.push(progCount+' in progress');
+    sumParts.push(totQ+' question'+(totQ===1?'':'s')+' answered ('+totParts+' part'+(totParts===1?'':'s')+(totWords?', '+totWords+' words':'')+')');
+    if(hist.length)sumParts.push(hist.length+' earlier attempt'+(hist.length===1?'':'s'));
+    if(lastTs)sumParts.push('Last active '+fmtD(lastTs));
+    var out='<div class="cv-prog-sum"><span><b>Progress report:</b> '+esc(sumParts.join(' · '))+'</span>'+
+      '<button class="nb sm ol" data-cv="progrefresh" data-id="'+esc(id)+'" data-sys="'+(isSystem?'1':'0')+'" type="button"'+(run&&run.loading?' disabled':'')+'>'+(run&&run.loading?'Refreshing...':'Refresh')+'</button></div>';
+    if(!paperRows.length&&!hist.length){
+      out+='<p class="mut">No papers started or answers saved yet.</p>';
+      return out;
+    }
+    if(paperRows.length){
+      out+='<label>Current and submitted papers ('+paperRows.length+')</label>'+
+        '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Work done</th><th>Mark</th><th></th></tr>'+paperRows.join('')+'</table></div>'+
+        respBlocks.join('');
+    }
+    if(hist.length){
+      out+='<label>Earlier attempts ('+hist.length+')</label>'+
+        '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th><th></th></tr>'+
+        hist.map(function(h){
+          return '<tr><td><b>'+esc(h.name||('Paper '+h.id))+'</b></td><td>'+fmtD(h.at)+'</td><td><b>'+h.T+' / '+h.M+'</b>'+(h.M?' <span class="mut">('+Math.round(100*h.T/h.M)+'%)</span>':'')+(h.pending?' <span class="mut">&middot; '+h.pending+' unscored</span>':'')+'</td>'+
+            '<td class="ra"><a class="nb sm ol" href="#/class/'+esc(h.id)+'/1">Class paper</a> <a class="nb sm ol" href="#/'+esc(h.id)+'/review/1">Review paper</a></td></tr>';
+        }).join('')+'</table></div>';
+    }
+    return out;
+  });
+}
+function cvMemberSub(id){
+  if(!CV.over||!CV.over.papers)return '';
+  var tags=[];
+  cvBanks().forEach(function(b){
+    var list=CV.over.papers[b.id]||[];
+    list.forEach(function(x){if(x.id===id)tags.push(b.name+': '+x.status)});
+  });
+  return tags.length?'<br><small class="mut">'+esc(tags.join(' · '))+'</small>':'';
+}
 function cvRosterHTML(){
   var r=CV.roster;if(!r)return '';
+  var canProg=!!(r.admin||(CV.st&&(CV.st.admin||CV.st.classAdmin)));
   return '<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+
     '<ul class="cv-people">'+r.members.map(function(m){
-      return '<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span></div></li>';
+      var open=canProg&&CV.pview===m.id;
+      return '<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+(canProg?cvMemberSub(m.id):'')+'</span>'+
+        (canProg?'<button class="nb sm ol" data-cv="prog" data-id="'+esc(m.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Progress')+'</button>':'')+'</div>'+
+        (open?'<div class="cv-edit cv-prog">'+cvProgHTML(m.id,false)+'</div>':'')+'</li>';
     }).join('')+'</ul>';
 }
 function cvSetName(id,name){
@@ -193,16 +342,18 @@ function cvSetName(id,name){
     (CV.roster.members||[]).forEach(function(m){if(m.id===id)m.name=x.name});CV.photoMsg='Name saved.';cvDraw();
   }).catch(function(e){CV.photoMsg=e.message;cvDraw()});
 }
-/* Platform admin: every account on the site. Edit name, photo and class membership, or delete the account. */
+/* Platform admin: every account on the site. View progress report, edit name, photo and class membership, or delete the account. */
 function cvAdminHTML(){
   if(!CV.st||!CV.st.admin)return '';
   var u=CV.users;
   var h='<h2 class="pt" style="margin-top:22px">All accounts'+(u?' ('+u.length+')':'')+'</h2><p class="mut">You are an admin. These are every account on the site.</p>';
   if(!u)return h+'<p class="mut">Loading accounts...</p>'+(CV.amsg?'<p class="acmsg" role="alert">'+esc(CV.amsg)+'</p>':'');
   h+='<ul class="cv-people cv-accts">'+u.map(function(a){
-    var open=CV.aedit===a.id,del=CV.adel===a.id;
+    var open=CV.aedit===a.id,popen=CV.apview===a.id,del=CV.adel===a.id;
     var row='<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,40,a.name||a.email)+'</span><span class="cv-pname2">'+esc(a.name||'(no name)')+'<br><small class="mut">'+esc(a.email)+(a.inClass?' &middot; in class':' &middot; not in class')+'</small></span>'+
+      '<button class="nb sm ol" data-cv="aprog" data-id="'+esc(a.id)+'" type="button" aria-expanded="'+popen+'">'+(popen?'Close':'Progress')+'</button>'+
       '<button class="nb sm ol" data-cv="aedit" data-id="'+esc(a.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Edit')+'</button></div>';
+    if(popen)row+='<div class="cv-edit cv-prog">'+cvProgHTML(a.id,true)+'</div>';
     if(open)row+='<div class="cv-edit"><label for="cvanm">Name</label><div class="cv-erow"><input id="cvanm" data-id="'+esc(a.id)+'" maxlength="40" value="'+esc(CV.draft[a.id]!=null?CV.draft[a.id]:a.name)+'" autocomplete="off"><button class="nb sm" data-cv="aname" data-id="'+esc(a.id)+'" type="button">Save name</button></div>'+
       '<label>Photo</label><div class="cv-erow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,56,a.name||a.email)+'</span><button class="nb sm ol" data-cv="aphoto" data-id="'+esc(a.id)+'" type="button">Upload new photo</button>'+(a.photo?'<button class="nb sm ol" data-cv="aphotoclear" data-id="'+esc(a.id)+'" type="button">Remove photo</button>':'')+'</div>'+
       '<label>Class</label><div class="cv-erow"><button class="nb sm ol" data-cv="aclass" data-id="'+esc(a.id)+'" data-on="'+(a.inClass?'0':'1')+'" type="button">'+(a.inClass?'Remove from class':'Add to class')+'</button></div>'+
@@ -303,7 +454,10 @@ function cvResultHTML(res){
 document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
-  if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.adel='';CV.amsg='';cvDraw();return}
+  if(a==='prog'){var pid=el.getAttribute('data-id');CV.pview=CV.pview===pid?'':pid;if(CV.pview&&!CV.prog[pid])cvLoadProg(pid,false);else cvDraw();return}
+  if(a==='aprog'){var apid=el.getAttribute('data-id');CV.apview=CV.apview===apid?'':apid;CV.aedit='';CV.adel='';CV.amsg='';if(CV.apview&&!CV.prog[apid])cvLoadProg(apid,true);else cvDraw();return}
+  if(a==='progrefresh'){cvLoadProg(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1');return}
+  if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.apview='';CV.adel='';CV.amsg='';cvDraw();return}
   if(a==='aname'){cvAdm({action:'admin_name',memberId:el.getAttribute('data-id'),name:(document.getElementById('cvanm')||{}).value||''});return}
   if(a==='aphoto'){var fa=document.getElementById('cvaphoto');if(fa)fa.click();return}
   if(a==='aphotoclear'){cvAdm({action:'admin_photo',memberId:el.getAttribute('data-id'),photo:''});return}

@@ -954,16 +954,23 @@ a.nb.dis{opacity:.45;pointer-events:none}
 .mk-main .acts{margin-top:12px}
 .mk-item.part+.mk-item.part{margin-top:-1px;padding-top:6px;border-top:1px solid #002664}
 
-.cv-people{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;border:1px solid #d0d0d0;max-width:720px}
+.cv-people{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;border:1px solid #d0d0d0;max-width:960px}
 .cv-person{border-bottom:1px solid #d0d0d0;background:#fff}.cv-person:last-child{border-bottom:0}
-.cv-prow{display:flex;align-items:center;gap:12px;padding:10px 14px}
+.cv-prow{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap}
 .cv-pav{flex:none;display:inline-flex;border-radius:50%;overflow:hidden}
 .cv-pav img,.cv-pav svg{border-radius:50%;display:block}
-.cv-pname2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.cv-pname2{flex:1 1 180px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:normal;font-weight:600}
+.cv-pname2 small{font-weight:400}
 .cv-edit{background:#f2f2f2;border-top:1px solid #d0d0d0;padding:12px 14px 14px 66px}
+.cv-edit.cv-prog{padding:14px 18px;background:#f8fafc}
+.cv-prog-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.cv-prog table.res{background:#fff;border:1px solid #d0d0d0;margin:6px 0 12px;font-size:.92em}
+.cv-prog table.res th,.cv-prog table.res td{padding:6px 10px;vertical-align:top}
+.cv-prog .xdd{margin:6px 0 10px;background:#fff;border:1px solid #d0d0d0;padding:8px 12px}
+.cv-prog .yans{margin:4px 0;padding:6px 8px;font-size:.9em;max-height:180px}
 .cv-edit label{display:block;font-weight:700;font-size:.9em;margin:8px 0 4px;color:#002664}.cv-edit label:first-child{margin-top:0}
 .cv-erow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cv-erow input{font:inherit;border:1px solid #002664;padding:7px 10px;min-width:0;flex:1 1 200px;max-width:320px}
-@media(max-width:600px){.cv-edit{padding-left:14px}}
-.cv-accts{max-width:900px}.cv-accts .cv-pname2 small{font-weight:400}.cv-accts .cv-pname2{white-space:normal}.nb.bad{background:#b81237;border-color:#b81237;color:#fff}
+@media(max-width:600px){.cv-edit,.cv-edit.cv-prog{padding-left:14px;padding-right:14px}}
+.cv-accts{max-width:960px}.nb.bad{background:#b81237;border-color:#b81237;color:#fff}
 .acmsg.ok{color:#1a7f37}

@@ -202,6 +202,44 @@ function createClassStore(options) {
     }
     return { inClass: true };
   }
+  async function memberProgress(id) {
+    if (!ID.test(id)) throw error(400, 'bad_member', 'Choose a class member.');
+    const m = await getMember(id);
+    if (!m) throw error(404, 'no_member', 'That person is not in the class.');
+    const u = await read('users/' + id + '.json');
+    const p = await read('progress/' + id + '.json');
+    const d = (p && p.data) || {};
+    return {
+      id,
+      name: m.name,
+      email: (u && u.data && u.data.email) || '',
+      inClass: true,
+      joined: m.joined || 0,
+      created: (u && u.data && u.data.created) || 0,
+      ts: d.ts || 0,
+      u: d.u && typeof d.u === 'object' ? d.u : {},
+      hist: Array.isArray(d.hist) ? d.hist : []
+    };
+  }
+  async function adminProgress(id) {
+    if (!ID.test(id)) throw error(400, 'bad_member', 'Choose an account.');
+    const u = await read('users/' + id + '.json');
+    const m = await getMember(id);
+    if (!u && !m) throw error(404, 'no_user', 'That account does not exist.');
+    const p = await read('progress/' + id + '.json');
+    const d = (p && p.data) || {};
+    return {
+      id,
+      name: (m && m.name) || (u && u.data && u.data.name) || '',
+      email: (u && u.data && u.data.email) || '',
+      inClass: !!m,
+      joined: (m && m.joined) || 0,
+      created: (u && u.data && u.data.created) || 0,
+      ts: d.ts || 0,
+      u: d.u && typeof d.u === 'object' ? d.u : {},
+      hist: Array.isArray(d.hist) ? d.hist : []
+    };
+  }
   async function adminDelete(id) {
     await adminUser(id);
     const store = await provider();
@@ -210,7 +248,7 @@ function createClassStore(options) {
     return { deleted: true };
   }
 
-  return { configured, setPhoto, adminUsers, adminUser, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
+  return { configured, setPhoto, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, normaliseCode, QUOTA, MAX_MEMBERS, error };

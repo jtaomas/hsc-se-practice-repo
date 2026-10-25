@@ -145,10 +145,29 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal((await asTok('ok', { action: 'setname', memberId: id(2), name: 'Zed' })).body.code, 'not_admin');
   assert.equal((await asTok('admin', { action: 'setname', memberId: id(1), name: 'Sam Renamed' })).body.name, 'Sam Renamed');
   assert.equal((await asTok('admin', { action: 'setname', memberId: id(1), name: 'x' })).body.code, 'bad_name');
-  // Platform admin: all accounts, edit, class membership, guarded delete.
+  // Platform admin & class admin progress reports: class admins see class members, system admins see anyone everywhere.
   await m.put('users/' + id(7) + '.json', { email: 'kid@student.det.nsw.edu.au', created: 1 });
-  await m.put('progress/' + id(7) + '.json', { u: {} });
+  await m.put('progress/' + id(7) + '.json', { ts: 500, u: { 8: { start: 100, done: false, mode: 'practice', ans: { '1.0': 1 } } }, hist: [{ id: '8', name: 'PEM 2026 Trial', at: 400, T: 65, M: 80 }] });
   await m.put('backup/' + id(7) + '/a.json', { u: {} });
+  assert.equal((await asTok('ok', { action: 'progress', memberId: id(1) })).body.code, 'not_admin');
+  assert.equal((await asTok('ok', { action: 'admin_progress', memberId: id(7) })).body.code, 'not_admin');
+  const mp = (await asTok('admin', { action: 'progress', memberId: id(1) })).body;
+  assert.equal(mp.name, 'Sam Renamed');
+  assert.ok(mp.u && mp.u['8']);
+  assert.equal((await asTok('admin', { action: 'progress', memberId: id(7) })).body.code, 'no_member');
+  const ap = (await asTok('admin', { action: 'admin_progress', memberId: id(7) })).body;
+  assert.equal(ap.email, 'kid@student.det.nsw.edu.au');
+  assert.equal(ap.inClass, false);
+  assert.equal(ap.hist.length, 1);
+  assert.equal(ap.u['8'].ans['1.0'], 1);
+  // Separate CLASS_ADMINS vs SYSTEM_ADMINS: class admin can inspect class members only, not arbitrary non-class accounts.
+  const hSplit = createHandler({ store, verify: async t => t === 'cadmin' ? { id: id(1), email: 'teacher@education.nsw.gov.au' } : verify(t), synthesis: fake, env: { SYSTEM_ADMINS: 'thomas.luu@education.nsw.gov.au', CLASS_ADMINS: 'teacher@education.nsw.gov.au' } });
+  const cStatus = await rest(hSplit, { action: 'status' }, 'cadmin');
+  assert.equal(cStatus.body.admin, false);
+  assert.equal(cStatus.body.classAdmin, true);
+  assert.equal((await rest(hSplit, { action: 'progress', memberId: id(2) }, 'cadmin')).status, 200);
+  assert.equal((await rest(hSplit, { action: 'progress', memberId: id(7) }, 'cadmin')).body.code, 'no_member');
+  assert.equal((await rest(hSplit, { action: 'admin_progress', memberId: id(7) }, 'cadmin')).body.code, 'not_admin');
   assert.equal((await asTok('ok', { action: 'admin_users' })).body.code, 'not_admin');
   const users = (await asTok('admin', { action: 'admin_users' })).body.users;
   assert.ok(users.some(x => x.id === id(7) && x.inClass === false));

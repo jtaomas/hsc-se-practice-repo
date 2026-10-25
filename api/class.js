@@ -17,9 +17,14 @@ function createHandler(deps) {
   const engine = deps.synthesis || synthesis;
   const env = deps.env || process.env;
   const clock = deps.now || Date.now;
-  // Class admins (comma-separated emails in CLASS_ADMINS) can change other members' photos.
-  const adminList = () => String(env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
-  const isAdmin = sess => !!sess && !!sess.email && adminList().includes(String(sess.email).toLowerCase());
+  // System admins (SYSTEM_ADMINS, defaulting to CLASS_ADMINS or thomas.luu) manage all accounts across the site.
+  // Class admins (CLASS_ADMINS plus any system admin) manage and view progress for members of their class.
+  const parseEmails = raw => String(raw || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+  const sysAdminList = () => parseEmails(env.SYSTEM_ADMINS || env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au');
+  const classAdminList = () => Array.from(new Set(sysAdminList().concat(parseEmails(env.CLASS_ADMINS || 'thomas.luu@education.nsw.gov.au'))));
+  const isSystemAdmin = sess => !!sess && !!sess.email && sysAdminList().includes(String(sess.email).toLowerCase());
+  const isClassAdmin = sess => !!sess && !!sess.email && classAdminList().includes(String(sess.email).toLowerCase());
+  const isAdmin = isSystemAdmin;
   const bankFor = id => banksOf().find(b => b.id === id && !b.hidden && !b.archived);
 
   const sharedPaper = paper => !!paper && (paper.done === true || paper.mode === 'practice');
@@ -67,7 +72,10 @@ function createHandler(deps) {
       const configured = store.configured();
       if (p.action === 'status') {
         const member = configured ? await store.getMember(sess.id) : null;
-        return res.status(200).json({ configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: isAdmin(sess) });
+        const sys = isSystemAdmin(sess), cls = isClassAdmin(sess);
+        const out = { configured, member: !!member, name: member ? member.name : '', count: member ? (await store.members()).length : 0, admin: sys };
+        if (cls && !sys) out.classAdmin = true;
+        return res.status(200).json(out);
       }
       if (p.action === 'join') {
         const joined = await store.join(sess.id, p.name, p.code);
@@ -75,9 +83,10 @@ function createHandler(deps) {
       }
       // Platform admin: works on any account, with or without class membership.
       if (/^admin_/.test(String(p.action))) {
-        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only admins can do this.');
+        if (!isSystemAdmin(sess)) return fail(403, 'not_admin', 'Only admins can do this.');
         if (p.action === 'admin_users') return res.status(200).json({ users: await store.adminUsers() });
         const id = String(p.memberId || '');
+        if (p.action === 'admin_progress') return res.status(200).json(await store.adminProgress(id));
         if (p.action === 'admin_name') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetName(id, p.name)));
         if (p.action === 'admin_photo') {
           const photo = p.photo;
@@ -91,7 +100,7 @@ function createHandler(deps) {
         if (p.action === 'admin_class') return res.status(200).json(Object.assign({ ok: true }, await store.adminSetClass(id, p.inClass === true)));
         if (p.action === 'admin_delete') {
           const target = await store.adminUser(id);
-          if (id === sess.id || adminList().includes(String(target.email || '').toLowerCase())) return fail(400, 'protected', 'Admin accounts cannot be deleted here.');
+          if (id === sess.id || classAdminList().includes(String(target.email || '').toLowerCase())) return fail(400, 'protected', 'Admin accounts cannot be deleted here.');
           if (String(p.confirmEmail || '').toLowerCase() !== String(target.email || '').toLowerCase()) return fail(400, 'confirm', 'Type the account email to confirm.');
           return res.status(200).json(Object.assign({ ok: true }, await store.adminDelete(id)));
         }
@@ -103,15 +112,19 @@ function createHandler(deps) {
 
       if (p.action === 'roster') {
         const list = await store.members();
-        return res.status(200).json({ admin: isAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });
+        return res.status(200).json({ admin: isClassAdmin(sess), members: list.map(m => ({ id: m.id, name: m.name, photo: m.photo || '', mine: m.id === sess.id, joined: m.joined })) });
+      }
+      if (p.action === 'progress') {
+        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can view member progress reports.');
+        return res.status(200).json(await store.memberProgress(String(p.memberId || '')));
       }
       if (p.action === 'setname') {
-        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s names.');
+        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s names.');
         if (typeof p.memberId !== 'string' || !/^[a-f0-9]{64}$/.test(p.memberId)) return fail(400, 'bad_member', 'Choose a class member.');
         return res.status(200).json(Object.assign({ ok: true }, await store.rename(p.memberId, p.name)));
       }
       if (p.action === 'setphoto') {
-        if (!isAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s photos.');
+        if (!isClassAdmin(sess)) return fail(403, 'not_admin', 'Only class admins can change other people\'s photos.');
         const photo = p.photo;
         if (typeof p.memberId !== 'string' || !/^[a-f0-9]{64}$/.test(p.memberId)) return fail(400, 'bad_member', 'Choose a class member.');
         if (typeof photo !== 'string' || photo.length > 44000 || (photo && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))) return fail(400, 'bad_photo', 'Choose a JPEG, PNG or WebP image using the photo picker.');

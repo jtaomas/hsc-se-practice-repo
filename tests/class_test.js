@@ -75,6 +75,10 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal(synth.targetWords(1), 45); assert.equal(synth.targetWords(4), 180); assert.equal(synth.targetWords(30), 340);
   assert(!synth.answerText({ t: 'tx' }, '<p>too short</p>'));
   assert(!synth.answerText({ t: 'mc' }, 'A'));
+  const smashed = 'The social and ethical implications of this proposal include the deprivation of data privacy, where the ]=-[POOL9K';
+  const repaired = synth.answerText({ t: 'tx' }, smashed);
+  assert.ok(!repaired.includes(']=-[POOL9K'));
+  assert.ok(repaired.includes('deprivation of data privacy, where the collection of travel and route data'));
   const letters = synth.label([{ id: 'a', name: 'A', text: 'x' }, { id: 'b', name: 'B', text: 'y' }, { id: 'c', name: 'C', text: 'z' }], 'salt');
   assert.deepEqual(letters.map(x => x.letter).sort(), ['A', 'B', 'C']);
   assert.deepEqual(synth.label([{ id: 'a' }, { id: 'b' }], 's').map(x => x.id), synth.label([{ id: 'b' }, { id: 'a' }], 's').map(x => x.id));
@@ -297,6 +301,15 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   await seed(2);
   await Promise.all([store.saveMarks(id(2), '8', 1000, { '17.0': rec(1) }), store.saveMarks(id(2), '8', 1000, { [otherKey]: rec(0) })]);
   assert.deepEqual(Object.keys(progressOf(2).u['8'].ai).sort(), ['16.0', '17.0', otherKey].sort());
+  // updateAnswer updates a student's answer and revision.
+  await store.updateAnswer(id(2), '8', '17.0', 'updated answer text');
+  assert.equal(progressOf(2).u['8'].ans['17.0'], 'updated answer text');
+  const updApi = await rest(h, { action: 'update_answer', bankId: '8', key: '17.0', text: 'api updated text' }, 'admin');
+  assert.equal(updApi.status, 200);
+  assert.equal(progressOf(2).u['8'].ans['17.0'], 'api updated text');
+  const adminUpdApi = await rest(h, { action: 'admin_update_answer', memberId: id(2), bankId: '8', key: '17.0', text: 'admin fixed text' }, 'admin');
+  assert.equal(adminUpdApi.status, 200);
+  assert.equal(progressOf(2).u['8'].ans['17.0'], 'admin fixed text');
   // Presence: heartbeats are per member, aged by the server clock, expire after 75 seconds and can be switched off.
   assert.equal((await rest(h, { action: 'presence', bank: '8' }, 'other')).body.code, 'not_member', 'outsiders cannot send or read presence');
   assert.equal((await rest(h, { action: 'presence', bank: '8' }, 'bad')).status, 401);

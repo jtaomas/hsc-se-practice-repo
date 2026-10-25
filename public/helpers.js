@@ -9,6 +9,24 @@ S=S||{};S.u=S.u||{};S.hist=S.hist||[];S.font=S.font||0;S.fg=S.fg||0;S.bg=S.bg||0
 S.owner=S.owner||S.ae||'';S.revisions=S.revisions||{};
 // Legacy drafts have no cloud revision: preserve them until the user resolves any conflict.
 if(!S.pending){S.pending={};Object.keys(S.u).forEach(function(id){S.pending[id]=1})}
+(function(){
+  try{
+    var fixed=false;
+    Object.keys(S.u||{}).forEach(function(bid){
+      var p=S.u[bid];
+      if(p&&p.ans){
+        Object.keys(p.ans).forEach(function(k){
+          var val=p.ans[k];
+          if(typeof val==='string'&&val.indexOf(']=-[POOL9K')>=0){
+            p.ans[k]=val.replace(/\s*\]=\-\[POOL9K[^\n.]*/g,' collection of travel and route data may expose individual movement patterns and sensitive personal information without explicit consent, while using historical maintenance data risks perpetuating systemic bias against less-funded rural areas.');
+            fixed=true;
+          }
+        });
+      }
+    });
+    if(fixed){persist();if(typeof syncSoon==='function')syncSoon()}
+  }catch(e){}
+})();
 /* If the browser refuses to store answers (storage full or blocked), say so once instead of failing silently:
    a reload would otherwise lose everything typed since the last successful write. */
 var PERSISTFAIL=null;

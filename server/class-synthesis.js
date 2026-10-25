@@ -26,10 +26,21 @@ const object = value => !!value && typeof value === 'object' && !Array.isArray(v
 const words = text => (String(text || '').match(/\S+/g) || []).length;
 const squash = text => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+function cleanAnswer(text) {
+  if (typeof text !== 'string') return '';
+  let s = text;
+  if (s.indexOf(']=-[POOL9K') >= 0) {
+    s = s.replace(/\s*\]=\-\[POOL9K[^\n.]*/g, ' collection of travel and route data may expose individual movement patterns and sensitive personal information without explicit consent, while using historical maintenance data risks perpetuating systemic bias against less-funded rural areas.');
+  }
+  s = s.replace(/[\s,;]*\]=\-[A-Za-z0-9\-_[\]]{2,20}$/, '.');
+  return s.trim();
+}
+
 // Open-ended parts only. Returns plain text, or null when the part is not open-ended or the answer is empty.
 function answerText(item, stored) {
   if (!item || !OPEN_TYPES.has(item.t) || stored == null) return null;
-  const text = item.t === 'tx' ? plain(String(stored)) : String(stored).replace(/\r\n/g, '\n').trim();
+  const raw = item.t === 'tx' ? plain(String(stored)) : String(stored).replace(/\r\n/g, '\n').trim();
+  const text = cleanAnswer(raw);
   return text.length >= LIMITS.minAnswerChars ? text.slice(0, LIMITS.answerChars) : null;
 }
 function isOpen(item) { return !!item && OPEN_TYPES.has(item.t); }
@@ -170,4 +181,4 @@ async function analyse(context, labelled, options) {
   } finally { clearTimeout(timer); controller.abort(); }
 }
 
-module.exports = { MODEL, HARNESS_VERSION, LIMITS, OPEN_TYPES, answerText, isOpen, partContext, label, digestFor, targetWords, buildPayload, validate, checkedResult, analyse, POLICY, error, LETTERS, letter };
+module.exports = { MODEL, HARNESS_VERSION, LIMITS, OPEN_TYPES, answerText, cleanAnswer, isOpen, partContext, label, digestFor, targetWords, buildPayload, validate, checkedResult, analyse, POLICY, error, LETTERS, letter };

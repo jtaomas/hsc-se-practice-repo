@@ -364,6 +364,20 @@ function createClassStore(options) {
     });
     return { saved: Object.keys(marks) };
   }
+  async function updateAnswer(id, bankId, key, text) {
+    if (!ID.test(id)) throw error(400, 'bad_member', 'Invalid account.');
+    await update('progress/' + id + '.json', current => {
+      const paper = current && current.u && current.u[bankId];
+      if (!isObj(paper)) throw error(404, 'no_paper', 'This student has no saved copy of that paper.');
+      const nextPaper = Object.assign({}, paper, { ans: Object.assign({}, isObj(paper.ans) ? paper.ans : {}, { [key]: text }) });
+      const revisions = Object.assign({}, isObj(current._revisions) ? current._revisions : {});
+      revisions[bankId] = crypto.randomBytes(16).toString('hex');
+      const data = Object.assign({}, current, { u: Object.assign({}, current.u, { [bankId]: nextPaper }), _revisions: revisions });
+      if (Buffer.byteLength(JSON.stringify(data)) > MAX_PROGRESS) throw error(413, 'too_large', 'This student\'s saved progress is too large to update.');
+      return data;
+    });
+    return { ok: true };
+  }
   async function adminDelete(id) {
     await adminUser(id);
     const store = await provider();
@@ -399,7 +413,7 @@ function createClassStore(options) {
     return out;
   }
 
-  return { configured, list: async o => (await provider()).list(o), getMany, memberCount, setPhoto, saveMarks, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, beat, unbeat, presences, paperOf, papersOf, spend, cached, remember, cleanName };
+  return { configured, list: async o => (await provider()).list(o), getMany, memberCount, setPhoto, saveMarks, updateAnswer, memberProgress, adminUsers, adminUser, adminProgress, adminSetName, adminSetPhoto, adminSetClass, adminDelete, checkCode, getMember, join, rename, leave, members, beat, unbeat, presences, paperOf, papersOf, spend, cached, remember, cleanName };
 }
 
 module.exports = { createClassStore, cleanName, cleanMarks, normaliseCode, QUOTA, MAX_MEMBERS, error };

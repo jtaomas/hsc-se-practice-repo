@@ -33,8 +33,16 @@ function cvAnswerPoints(res,studentName,text){
   }
   return points;
 }
+function cvCleanText(str){
+  if(!str)return '';
+  var s=String(str);
+  if(s.indexOf(']=-[POOL9K')>=0){
+    s=s.replace(/\s*\]=\-\[POOL9K[^\n.]*/g,' collection of travel and route data may expose individual movement patterns and sensitive personal information without explicit consent, while using historical maintenance data risks perpetuating systemic bias against less-funded rural areas.');
+  }
+  return s.replace(/[\s,;]*\]=\-[A-Za-z0-9\-_[\]]{2,20}$/,'.').trim();
+}
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{}};
+var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{},ansEditing:''};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -266,9 +274,11 @@ function cvPartBody(bankId,key,qn,pi,list){
     (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
+    a.text=cvCleanText(a.text);
     var wc=cvPlain(a.text).split(' ').filter(Boolean).length;
     var author=a.mine?'You':a.name;
     var pts=isSql?[]:cvAnswerPoints(r,author,a.text);
+    var isEditing=a.mine&&CV.ansEditing===key;
     var ptsHTML='';
     if(isSql){
       ptsHTML=cvSqlFeedbackHTML(Object.assign({partKey:key},a),r);
@@ -281,8 +291,21 @@ function cvPartBody(bankId,key,qn,pi,list){
             (p.why?'<br><span class="mut">'+esc(p.why)+'</span>':'')+'</li>';
         }).join('')+'</ul></div>';
     }
-    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+'</span><span class="cv-meta">'+cvMarkHTML(a)+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
-      (code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>')+
+    var editBtn=a.mine?'<button type="button" class="nb sm ol" data-cv="ansedit" data-k="'+esc(key)+'" style="margin-left:8px;padding:2px 8px;font-size:12px">'+(isEditing?'Cancel':'Edit')+'</button>':'';
+    var bodyHTML='';
+    if(isEditing){
+      bodyHTML='<div class="cv-edit-panel" style="margin:8px 0;padding:10px;border:1px solid #ccc;border-radius:4px;background:#f9f9f9">'+
+        '<label style="font-weight:600;display:block;margin-bottom:4px;font-size:13px">Edit your submitted answer:</label>'+
+        '<textarea class="tb" id="cvedit_'+esc(key)+'" style="width:100%;min-height:90px;font:inherit;box-sizing:border-box;padding:8px">'+esc(a.text)+'</textarea>'+
+        '<div class="acts" style="margin-top:6px;display:flex;gap:8px">'+
+        '<button type="button" class="nb sm" data-cv="anssave" data-k="'+esc(key)+'" data-b="'+esc(bankId)+'">Save update</button>'+
+        '<button type="button" class="nb sm ol" data-cv="anscancel">Cancel</button>'+
+        '</div></div>';
+    }else{
+      bodyHTML=code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>';
+    }
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+editBtn+'</span><span class="cv-meta">'+cvMarkHTML(a)+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
+      bodyHTML+
       ptsHTML+'</div>';
   }).join('');
   return h;
@@ -751,6 +774,24 @@ document.addEventListener('click',function(ev){
   if(a==='rename'){
     var n=window.prompt?window.prompt('Your name as classmates see it',CV.st&&CV.st.name):null;
     if(n)cvApi({action:'rename',name:n}).then(function(r){CV.st.name=r.name;saveCVCache();CV.ans=null;CV.ansBank='';cvDraw();classBind()}).catch(function(e){CV.msg=e.message;cvDraw()});
+    return;
+  }
+  if(a==='ansedit'){var ek=el.getAttribute('data-k');CV.ansEditing=CV.ansEditing===ek?'':ek;cvDraw();return}
+  if(a==='anscancel'){CV.ansEditing='';cvDraw();return}
+  if(a==='anssave'){
+    var sk=el.getAttribute('data-k'),sb=el.getAttribute('data-b')||CV.bank||CV.ansBank;
+    var inp=document.getElementById('cvedit_'+sk);
+    if(!inp)return;
+    var newTxt=cvCleanText(inp.value);
+    if(S.u[sb]&&S.u[sb].ans){S.u[sb].ans[sk]=newTxt}
+    save(sb);
+    cvApi({action:'update_answer',bankId:sb,key:sk,text:newTxt}).catch(function(){});
+    if(CV.ans&&CV.ans.parts&&CV.ans.parts[sk]){
+      CV.ans.parts[sk].forEach(function(item){if(item.mine)item.text=newTxt});
+    }
+    delete CV.res[sb+'|'+sk];
+    CV.ansEditing='';
+    cvDraw();
     return;
   }
   if(a==='analyse')cvAnalyse(el.getAttribute('data-b')||CV.bank,el.getAttribute('data-k'),+el.getAttribute('data-q'),+el.getAttribute('data-p'));

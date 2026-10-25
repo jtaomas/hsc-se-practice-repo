@@ -235,11 +235,33 @@ function createHandler(deps) {
           if (String(p.confirmEmail || '').toLowerCase() !== String(target.email || '').toLowerCase()) return fail(400, 'confirm', 'Type the account email to confirm.');
           return res.status(200).json(Object.assign({ ok: true }, await store.adminDelete(id)));
         }
+        if (p.action === 'admin_update_answer') {
+          const bankId = String(p.bankId || '');
+          if (!BANK_ID.test(bankId)) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+          const bank = bankFor(bankId);
+          if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+          const key = String(p.key || '');
+          if (!/^[1-9]\d?\.\d{1,2}$/.test(key)) return fail(400, 'invalid_part', 'Choose a question part.');
+          const text = String(p.text || '').slice(0, 10000);
+          await store.updateAnswer(id, bank.id, key, text);
+          return res.status(200).json({ ok: true });
+        }
         return fail(400, 'unknown_action', 'Unknown request.');
       }
       const me = await store.getMember(sess.id);
       if (!me) return fail(403, 'not_member', 'Join the class with your class code first.');
       if (p.action === 'rename') return res.status(200).json(Object.assign({ ok: true }, await store.rename(sess.id, p.name)));
+      if (p.action === 'update_answer') {
+        const bankId = String(p.bankId || '');
+        if (!BANK_ID.test(bankId)) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+        const bank = bankFor(bankId);
+        if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+        const key = String(p.key || '');
+        if (!/^[1-9]\d?\.\d{1,2}$/.test(key)) return fail(400, 'invalid_part', 'Choose a question part.');
+        const text = String(p.text || '').slice(0, 10000);
+        await store.updateAnswer(sess.id, bank.id, key, text);
+        return res.status(200).json({ ok: true });
+      }
 
       // Heartbeat from an open tab. Records that this member is here now and returns who else is, by the server's clock.
       if (p.action === 'presence') {

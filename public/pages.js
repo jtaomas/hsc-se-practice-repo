@@ -435,11 +435,11 @@ function pqShown(b,n){var bs=BS(b.id);return aiUnlocked()&&!bs.done&&bs.mode==='
 function pqPanelHTML(b,n){
   var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||!aiUnlocked())return '';
   var shown=pqShown(b,n),run=aiQuestionRun(b,n),open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
-  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answers processed.</b> Feedback appears under each part as it finishes.'
+  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answer'+(run.total===1?'':'s')+' processed.</b>'+aiRunBarHTML(run)+'Feedback appears under each part as it finishes. You can keep working while you wait.'
     :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
     :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
   if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
-  return '<div class="aib" id="pq">'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button>'+(shown?' <button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(run?' disabled':'')+'>Re-mark this question</button>':'')+'</div></div>';
+  return '<div class="aib" id="pq"'+(run?' data-airun="'+esc(aiqKey(b,n))+'"':'')+'>'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button>'+(shown?' <button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(run?' disabled':'')+'>Re-mark this question</button>':'')+'</div></div>';
 }
 function pqMark(){
   var b=CUR.b,n=CUR.n;if(!b||CUR.rv||!aiUnlocked())return;
@@ -454,7 +454,7 @@ function afterQ(){
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
   if(typeof aceMount==='function')aceMount();if(typeof classEnsure==='function')classEnsure(b);
   var bs=BS(b.id);
-  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b);
+  if(rv&&bs.done&&(!bs.checked||checksStale(b)||(S.tok&&aiTodo(b).length)))ensureMarked(b);
 }
 function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});if(typeof aceMount==='function')aceMount();if(typeof classEnsure==='function')classEnsure(b)}
 var MARKINGDEFER=null;
@@ -485,7 +485,7 @@ document.addEventListener('focusout',function(){
 var CHECKRUN={};
 function ensureLocalChecks(b,context){
   var bs=context.paper,n=context.question,key=n?aiqKey(b,n):b.id,old=CHECKRUN[key];
-  if(!n&&bs.checked)return Promise.resolve();
+  if(!n&&bs.checked&&!checksStale(b))return Promise.resolve();
   if(aiRunCurrent(b,old))return old.promise;
   var run=context;CHECKRUN[key]=run;
   run.promise=Promise.resolve().then(function(){if(aiRunCurrent(b,run))return runChecks(b,n)}).then(function(){
@@ -503,12 +503,15 @@ function ensureMarked(b){
   var task=S.tok?runAI(b,function(){refreshMarking(b,context)}):null;
   var checks=ensureLocalChecks(b,context),panel=CUR.b===b?$('#aib'):null;
   if(panel&&aiRunCurrent(b,context))panel.outerHTML=aiStatusHTML(b);
+  // Show the run straight away: without this a review page kept saying
+  // "not marked yet" until the first answer came back.
+  else if(task&&aiRunCurrent(b,AIRUN[b.id]))refreshMarking(b,context);
   return (task||checks).then(function(){refreshMarking(b,context)});
 }
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),provisionals=aiProvisionals(b),todo=aiTodo(b).length;
   if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and set your own marks.</div>';
-  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" role="status" aria-live="polite"><b>AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b><div class="aibar"><span style="width:'+Math.round(100*(rn.done||0)/Math.max(1,rn.total||1))+'%"></span></div> Each answer is assessed against the criteria and appears here as soon as it is done. Some answers may need review; marking can take several minutes.</div>'}
+  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" data-airun="'+esc(b.id)+'"><b role="status">AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b>'+aiRunBarHTML(rn)+' Each answer is assessed against the criteria and appears here as soon as it is done. Some answers may need review; marking can take several minutes.</div>'}
   if(errs.length)return '<div class="aib bad" id="aib"><b>AI marking did not finish for '+errs.length+' answer'+(errs.length>1?'s':'')+'.</b> '+esc(bs.aiErr[errs[0]])+'<br><button class="nb sm" data-act="airetry" style="margin-top:8px">Try again</button></div>';
   if(todo)return '<div class="aib" id="aib"><b>'+todo+' answer'+(todo>1?'s':'')+' awaiting AI marking.</b> <button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   if(reviews||provisionals)return '<div class="aib bad" id="aib">'+(reviews?'<b>'+reviews+' answer'+(reviews>1?'s':'')+' need review.</b> No AI mark was awarded for these answers. ':'')+(provisionals?'<b>'+provisionals+' provisional mark'+(provisionals===1?'':'s')+'.</b> These lower-mark fallbacks remain unresolved and are excluded from verified improvement plans and comparisons. ':'')+'Open the questions to review the criteria and set a mark yourself or with a teacher.</div>';

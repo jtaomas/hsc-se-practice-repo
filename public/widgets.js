@@ -146,6 +146,20 @@ function isAns(it,a){
 function qAnswered(b,n){var bs=BS(b.id);return b.qs[n-1].it.some(function(it,i){return isAns(it,bs.ans[n+'.'+i])})}
 function normOut(x){return String(x).trim().split('\n').map(function(y){return y.replace(/\s+$/,'')}).join('\n')}
 function passTest(out,t){return normOut(out)===normOut(t.o)}
+/* A check result belongs to the exact answer it ran on, so an edited answer
+   never shows an old result (or an old error) as if it were current. */
+function chkHash(a){var t=JSON.stringify(a==null?'':a),h=5381;for(var i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36)+'.'+t.length}
+function chkFresh(it,a,c){return !!c&&(c.h?c.h===chkHash(a):it.t!=='sq')}
+function checksStale(b){
+  var bs=BS(b.id);
+  return b.qs.some(function(q,qi){return q.it.some(function(it,i){
+    var k=(qi+1)+'.'+i,a=bs.ans[k],c=bs.chk[k];
+    if(!isAns(it,a))return false;
+    if(it.t==='sq'&&q.db)return !chkFresh(it,a,c);
+    // Older Python results carry no answer hash; only rerun when one is known to be out of date.
+    return it.t==='py'&&it.tests&&it.tests.length&&!!c&&!!c.h&&c.h!==chkHash(a);
+  })});
+}
 function runChecks(b,only){
   var bs=BS(b.id),state=S,jobs=[];
   b.qs.forEach(function(q,qi){if(only&&qi+1!==only)return;q.it.forEach(function(it,i){
@@ -153,9 +167,9 @@ function runChecks(b,only){
     function current(){return S===state&&S.u[b.id]===bs&&stamp===JSON.stringify({answer:bs.ans[k],item:it,db:q.db})}
     if(it.t==='py'&&a&&it.tests.length){
       var p=0,problem='';
-      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){if(problem||!current())return;return runPy(a+'\n'+(t.app||''),t.i||[]).then(function(o){if(passTest(o,t))p++}).catch(function(e){problem=e.message})})},Promise.resolve()).then(function(){if(current())bs.chk[k]={p:p,t:it.tests.length,error:problem}}));
+      jobs.push(it.tests.reduce(function(pr,t){return pr.then(function(){if(problem||!current())return;return runPy(a+'\n'+(t.app||''),t.i||[]).then(function(o){if(passTest(o,t))p++}).catch(function(e){problem=e.message})})},Promise.resolve()).then(function(){if(current())bs.chk[k]={p:p,t:it.tests.length,error:problem,h:chkHash(a)}}));
     }else if(it.t==='sq'&&a&&q.db){
-      jobs.push(Promise.all([runSQL(q.db,a),runSQL(q.db,it.model)]).then(function(r){if(current())bs.chk[k]={p:sameSQLResult(r[0],r[1],it)?1:0,t:1,error:r[0].error||r[1].error||''}}).catch(function(e){if(current())bs.chk[k]={p:0,t:1,error:e.message||'The query check could not run.'}}));
+      jobs.push(Promise.all([runSQL(q.db,a),runSQL(q.db,it.model)]).then(function(r){if(current())bs.chk[k]={p:sameSQLResult(r[0],r[1],it)?1:0,t:1,error:r[0].error||r[1].error||'',h:chkHash(a)}}).catch(function(e){if(current())bs.chk[k]={p:0,t:1,skip:1,error:e.message||'The query check could not run.',h:chkHash(a)}}));
     }
   })});
   return Promise.all(jobs).then(function(){if(S===state&&S.u[b.id]===bs)save(b.id)});
@@ -238,9 +252,11 @@ function guideHTML(b,n,i){
     else h+='<p class="gh"><b>Sample answer:</b></p><div>'+it.model+'</div>';
     if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>Drawing summary</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
     if(it.crit.length)h+='<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit);
-    var c=bs.chk[k];if(c)h+='<p><b>Practice check:</b> '+(it.t==='sq'?(c.p?'your query matched the sample rows and required column headings':'your query did not match the sample rows and required column headings'):c.p+' of '+c.t+' example test runs gave the expected output')+'. Example checks do not award marks.</p>';
-    else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(isAns(it,a)?'running...':'no answer to check')+'</p>';
-    if(c&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
+    var c=bs.chk[k],fresh=chkFresh(it,a,c);
+    if(fresh&&c.skip)h+='<p><b>Practice check:</b> the automatic check could not run this time, so it says nothing about your answer. Example checks do not award marks.</p>';
+    else if(fresh)h+='<p><b>Practice check:</b> '+(it.t==='sq'?(c.p?'your query matched the sample rows and required column headings':'your query did not match the sample rows and required column headings'):c.p+' of '+c.t+' example test runs gave the expected output')+'. Example checks do not award marks.</p>';
+    else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(!isAns(it,a)?'no answer to check':c&&!bs.done?'your answer has changed since the last check. Mark the question again to re-check it.':'running...')+'</p>';
+    if(fresh&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
     if(typeof classSlot==='function')h+=classSlot(b,n,i);
     h+='<div class="smk"><span>'+(bs.ai[k]&&bs.ai[k].g!=null?'Change the mark:':'Your mark:')+'</span>';for(var j=0;j<=it.m;j++)h+='<button data-act="sm" data-k="'+k+'" data-v="'+j+'"'+(sc.set&&sc.g===j?' class="on"':'')+'>'+j+'</button>';h+='</div>';
   }

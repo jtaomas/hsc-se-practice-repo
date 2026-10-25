@@ -57,15 +57,16 @@ function aiQuestionRun(b,n){var run=AIQ[aiqKey(b,n)];return aiRunCurrent(b,run)?
 function aiUnlocked(){return true}
 /* Practice and whole-paper work share the same ten-request ceiling. Queued
    requests recheck their context before they can send any student work. */
-function aiDispatch(payload,token,current){
+function aiDispatch(payload,token,current,prog){
   return new Promise(function(resolve,reject){
-    AIWORK.queue.push({payload:payload,token:token,current:current,resolve:resolve,reject:reject});aiDrain();
+    AIWORK.queue.push({payload:payload,token:token,current:current,prog:prog,resolve:resolve,reject:reject});aiDrain();
   });
 }
 function aiDrain(){
   while(AIWORK.active<AI_CONCURRENCY&&AIWORK.queue.length){
     (function(job){
       if(!job.current()||!aiUnlocked()){job.resolve(null);return}
+      if(job.prog&&!job.prog.sent)job.prog.sent=Date.now();
       AIWORK.active++;
       Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
     })(AIWORK.queue.shift());
@@ -75,18 +76,61 @@ function aiWorkers(next,count){
   var workers=[];for(var i=0;i<Math.min(AI_CONCURRENCY,count);i++)workers.push(next());
   return Promise.all(workers);
 }
+/* Live progress for answers being marked. /api/mark answers in one reply, so the
+   steps shown are the marking pipeline's usual order, timed from typical runs
+   (two blind markers, then an audit). A one-second ticker updates the
+   progress boxes in place, so a student typing in an editor is not disturbed. */
+var AIPROG={};
+var AI_STEPS=[[0,'Sending your answer, the question and the marking criteria'],[4,'Two markers are assessing your answer independently, criterion by criterion'],[50,'Comparing the two assessments'],[60,'An auditor is checking the evidence behind the mark'],[110,'Checking the feedback and saving the result']];
+function aiProgKey(id,k){return id+'|'+k}
+function aiProgStart(b,k,run){var p={queued:Date.now(),sent:0,run:run};AIPROG[aiProgKey(b.id,k)]=p;return p}
+function aiProgEnd(b,k,p){var key=aiProgKey(b.id,k);if(p&&AIPROG[key]===p)delete AIPROG[key]}
+function aiClock(ms){var s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+':'+('0'+s%60).slice(-2)}
+function aiProgFrac(p,now){if(!p||!p.sent)return 0;return 0.95*(1-Math.exp(-(now-p.sent)/55000))}
+function aiRunFrac(run,now){
+  var f=run.done||0;
+  Object.keys(AIPROG).forEach(function(k){var p=AIPROG[k];if(p.run===run)f+=aiProgFrac(p,now)});
+  return Math.min(1,f/Math.max(1,run.total||1));
+}
+function aiProgInner(p,now){
+  if(!p.sent)return '<p class="aipr-hd"><b>Queued.</b> Waiting for a free marking slot <span class="aipr-t">'+aiClock(now-p.queued)+'</span></p><div class="aibar"><span style="width:0%"></span></div>';
+  var s=(now-p.sent)/1000,cur=0;
+  AI_STEPS.forEach(function(st,i){if(s>=st[0])cur=i});
+  return '<p class="aipr-hd"><b>Marking this answer now</b> <span class="aipr-t">'+aiClock(now-p.sent)+'</span></p>'+
+    '<div class="aibar"><span style="width:'+Math.round(100*aiProgFrac(p,now))+'%"></span></div>'+
+    '<ol class="aipr-steps">'+AI_STEPS.map(function(st,i){return '<li class="'+(i<cur?'past':i===cur?'cur':'next')+'">'+st[1]+'</li>'}).join('')+'</ol>'+
+    '<p class="note">Steps and progress are estimated from typical marking times. The feedback replaces this box as soon as it is ready; it can take up to about four minutes.</p>';
+}
+function aiProgHTML(b,k){
+  var key=aiProgKey(b.id,k),p=AIPROG[key];
+  if(!p)return '<p class="aipr-hd"><b>Waiting to be marked.</b> Other answers are ahead of this one. It starts automatically.</p>';
+  return '<div class="aipr" data-aiprog="'+esc(key)+'">'+aiProgInner(p,Date.now())+'</div>';
+}
+/* Run-level boxes (the practice panel and the review banner) carry data-airun="bank" or "bank/question". */
+function aiRunBarHTML(run){return ' <span class="aipr-t">'+aiClock(Date.now()-(run.t0||Date.now()))+'</span><div class="aibar"><span style="width:'+Math.round(100*aiRunFrac(run,Date.now()))+'%"></span></div>'}
+function aiProgTick(){
+  var now=Date.now();
+  Array.prototype.forEach.call(document.querySelectorAll('[data-aiprog]'),function(el){var p=AIPROG[el.getAttribute('data-aiprog')];if(p)el.innerHTML=aiProgInner(p,now)});
+  Array.prototype.forEach.call(document.querySelectorAll('[data-airun]'),function(el){
+    var k=el.getAttribute('data-airun'),run=k.indexOf('/')>=0?AIQ[k]:AIRUN[k];if(!run)return;
+    var bar=el.querySelector('.aibar span'),t=el.querySelector('.aipr-t');
+    if(bar)bar.style.width=Math.round(100*aiRunFrac(run,now))+'%';
+    if(t&&run.t0)t.textContent=aiClock(now-run.t0);
+  });
+}
+if(typeof setInterval==='function'&&typeof document!=='undefined')setInterval(aiProgTick,1000);
 function runAI(b,onProg){
   var bs=BS(b.id),calls=aiTodo(b).filter(function(t){return !bs.aiErr[t[2]]});
   if(!S.tok||!bs.done||!aiUnlocked())return Promise.resolve();
   if(aiRunCurrent(b,AIRUN[b.id]))return AIRUN[b.id].promise;
   if(!calls.length)return Promise.resolve();
   var idx=0,done=0,fatal=null,total=calls.length,run=aiContext(b);
-  run.total=total;run.done=0;AIRUN[b.id]=run;
+  run.total=total;run.done=0;run.t0=Date.now();AIRUN[b.id]=run;
   function current(){return aiRunCurrent(b,run)&&AIRUN[b.id]===run}
   function progress(){if(onProg)try{onProg(done,total,fatal)}catch(e){console.warn('Marking progress display could not refresh.')}}
   function next(){
     if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
-    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),practice=aiQuestionRun(b,t[0]);
+    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),practice=aiQuestionRun(b,t[0]),prog=null;
     // Submission can reuse an unchanged practice request already in flight.
     var prepared=practice?practice.promise:Promise.resolve();
     return prepared.then(function(){
@@ -95,11 +139,13 @@ function runAI(b,onProg){
     }).then(function(p){
       // Set fatal before dispatch frees its slot, so this batch's queued work
       // cannot start; current() still permits already-sent successes to save.
-      return p&&!fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()}).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
+      if(!p||fatal||!current())return null;
+      prog=aiProgStart(b,t[2],run);
+      return aiDispatch(p,run.token,function(){return !fatal&&current()},prog).catch(function(e){if(e.fatal)fatal=e;throw e});
     }).then(function(r){
       if(!r||!current()||stamp!==aiStamp(b,t[0],t[1]))return;
       aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(current()){run.done=done;save(b.id);progress()}return next()});
+    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);done++;if(current()){run.done=done;save(b.id);progress()}return next()});
   }
   run.promise=aiWorkers(next,calls.length).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
   return run.promise;
@@ -113,18 +159,18 @@ function runAIQuestion(b,n){
   if(old)return old.promise;
   var calls=aiTodo(b).filter(function(t){return t[0]===n&&!bs.aiErr[t[2]]});
   if(!calls.length)return Promise.resolve();
-  var run=aiContext(b,n),idx=0,fatal=null;run.total=calls.length;run.done=0;AIQ[key]=run;
+  var run=aiContext(b,n),idx=0,fatal=null;run.total=calls.length;run.done=0;run.t0=Date.now();AIQ[key]=run;
   function current(){return AIQ[key]===run&&aiRunCurrent(b,run)}
   function progress(){if(current())try{aiqLive(b,n,run)}catch(e){console.warn('Marking progress display could not refresh.')}}
   function next(){
     if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
-    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
+    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),prog=aiProgStart(b,t[2],run);
     var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
     return prepared.then(function(p){
-      return !fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()}).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
+      return !fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()},prog).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
     }).then(function(r){
       if(r&&current()&&stamp===aiStamp(b,t[0],t[1]))aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){run.done++;if(current()){save(b.id);progress()}return next()});
+    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);run.done++;if(current()){save(b.id);progress()}return next()});
   }
   run.promise=aiWorkers(next,calls.length).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
   return run.promise;
@@ -155,7 +201,7 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
   }
   if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
   if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p>'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?'<p>Other answers are still being marked. You can retry this answer when the batch finishes.</p>':'<button class="nb sm" data-act="airetry">Try again</button>')+'</div>';
-  if(live&&isAns(it,a)&&(aiQuestionRun(b,n)||aiRunCurrent(b,AIRUN[b.id])))return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
+  if(live&&isAns(it,a)&&(aiQuestionRun(b,n)||aiRunCurrent(b,AIRUN[b.id])))return '<div class="aib"><h5>AI marking</h5>'+aiProgHTML(b,k)+'</div>';
   if(live&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   return '';
 }

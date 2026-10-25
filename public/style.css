@@ -848,6 +848,15 @@ table.hoa.db{margin:12px 0}
 .dml{position:absolute;right:10px;top:12px;border:1px solid #ddd;padding:4px 8px;color:#555;border-radius:4px}
 @media (max-width:860px){.imc{grid-template-columns:1fr}.modal .box.im{width:100%}.ddm.col{width:min(340px,92vw)}.tbb[data-m]{padding-right:30px}}
 .aibar{height:6px;background:#cfdcec;margin:8px 0 6px}.aibar span{display:block;height:100%;background:#002664;transition:width .3s}
+.aipr-hd{display:flex;align-items:baseline;gap:10px;margin:4px 0}
+.aipr-t{font-variant-numeric:tabular-nums;color:#555;font-size:.9em;font-weight:400}
+.aipr-steps{margin:6px 0 4px 20px;padding:0;font-size:.92em}
+.aipr-steps li{margin:2px 0;color:#9aa3ad}
+.aipr-steps li.past{color:#555}
+.aipr-steps li.cur{color:#002664;font-weight:600}
+.aipr-steps li.cur::after{content:'';display:inline-block;width:6px;height:6px;margin-left:8px;border-radius:50%;background:#002664;vertical-align:middle;animation:aipulse 1.2s ease-in-out infinite}
+@keyframes aipulse{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.aipr-steps li.cur::after{animation:none}.aibar span{transition:none}}
 /* Question number boxes: centre the number with flex so a box can never sit lower than its neighbours. */
 .nav-nums .nav-elem{display:inline-flex;align-items:center;justify-content:center;align-self:center;line-height:1;box-sizing:border-box;vertical-align:middle;transform:none;top:auto}
 
@@ -907,6 +916,8 @@ table.hoa.db{margin:12px 0}
 .cvbest{padding:10px 12px;background:#fff;border:1px solid #bfdbfe;border-radius:4px;line-height:1.55}
 .cvro{pointer-events:none}.cvro .ptog{display:none}
 .cvcode{margin:4px 0 0;padding:8px 10px;background:#1b1b1b;color:#f2f2f2;overflow:auto;white-space:pre;font-size:.9em;border-radius:3px}
+/* Under a marking guide, `.guide pre` would win and give light text on a light background; keep the code readable everywhere. */
+.cvans pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0}
 
 /* ---------- General Instructions page ---------- */
 .gi-page{flex:1;padding:28px 36px 36px;background:var(--pbg,#fff);color:var(--pfg,#000)}

@@ -156,9 +156,27 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const pending=[],frames=[],app={set innerHTML(value){frames.push(value)}};c.$=s=>s==='#app'?app:null;c.window.scrollY=47;c.window.scrollTo=(x,y)=>assert.equal(y,47);c.CUR.rv=false;
     c.resultsPage=()=>JSON.stringify({marks:Object.keys(bs.ai).length,running:!!c.AIRUN[b.id]});
     c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===4);
-    pending[0].resolve(reply(result()));await until(()=>frames.length>0);assert.deepEqual(JSON.parse(frames[0]),{marks:1,running:true});assert.equal(c.aiTodo(b).length,3);
+    // The page shows the run as soon as it starts, not only after the first answer returns.
+    assert.deepEqual(JSON.parse(frames[0]),{marks:0,running:true});
+    pending[0].resolve(reply(result()));await until(()=>frames.length>1);assert.deepEqual(JSON.parse(frames[1]),{marks:1,running:true});assert.equal(c.aiTodo(b).length,3);
     for(let i=1;i<4;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await run;
     assert.deepEqual(JSON.parse(frames.at(-1)),{marks:4,running:false});
+  }
+  // An answer in flight shows live progress, not "not marked yet"; the tracker clears when it returns.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';
+    const d=defer();c.fetch=()=>d.promise;const run=c.runAI(b);
+    await until(()=>c.AIPROG['1|1.0']&&c.AIPROG['1|1.0'].sent);
+    const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
+    assert(html.includes('Marking this answer now')&&html.includes('data-aiprog="1|1.0"')&&!html.includes('not been marked yet'));
+    assert(c.aiStatusHTML(b).includes('data-airun="1"'));
+    d.resolve(reply(result()));await run;assert.equal(Object.keys(c.AIPROG).length,0);assert.equal(c.score(b,1,0).g,2);
+  }
+  // A local check result only describes the exact answer it ran on.
+  {
+    const c=client(),sq={t:'sq'},A='SELECT 1',h=c.chkHash(A);
+    assert(c.chkFresh(sq,A,{p:1,t:1,h}));assert(!c.chkFresh(sq,'SELECT 2',{p:1,t:1,h}));assert(!c.chkFresh(sq,A,{p:0,t:1,error:'near "on": syntax error'}));
+    assert(c.chkFresh({t:'py'},A,{p:1,t:1}),'older Python results without a hash stay visible');
   }
   // Global auth/quota/conflict failures still stop dispatching queued answers; in-flight results are retained.
   for(const status of [401,429,409]){
@@ -182,14 +200,14 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
   ]){
     const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';bs.checked=1;const pending=defer();let started=false,renders=0;
     c.$=s=>s==='#app'?{set innerHTML(_){renders++}}:null;c.resultsPage=()=>'';c.window.scrollTo=()=>{};c.CUR.rv=false;
-    c.fetch=()=>{started=true;return pending.promise};const run=c.markAndShow(b);await until(()=>started);mutate(c,b,bs);pending.resolve(reply(result()));await run;assert.equal(renders,0);
+    c.fetch=()=>{started=true;return pending.promise};const run=c.markAndShow(b);await until(()=>started);assert.equal(renders,1,'the run is shown when it starts');mutate(c,b,bs);pending.resolve(reply(result()));await run;assert.equal(renders,1,'an invalidated run never repaints');
   }
   {
     const c=client(),{b,bs}=paper(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='First';bs.ans['2.0']='Second';bs.checked=1;
     c.location.hash='#/1/review/1';const pending=[];let visible='',draws=0;c.$=s=>s==='#qarea'?{set innerHTML(value){visible=value}}:null;
     c.qHTML=(_,n)=>'Review '+n;c.afterQDraw=()=>{draws++};c.refreshNav=()=>{};c.xdCleanup=()=>{};c.window.scrollTo=()=>{};
     c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===2);
-    c.location.hash='#/1/review/2';c.CUR.n=2;pending[0].resolve(reply(result()));await until(()=>draws>0);assert.equal(visible,'Review 2');
+    assert.equal(visible,'Review 1','the run is shown when it starts');const before=draws;c.location.hash='#/1/review/2';c.CUR.n=2;pending[0].resolve(reply(result()));await until(()=>draws>before);assert.equal(visible,'Review 2');
     pending[1].resolve(reply(result()));await run;assert.equal(visible,'Review 2');
   }
   // Local runtime work is deduplicated and cannot delay AI dispatch, completion, or released marks.

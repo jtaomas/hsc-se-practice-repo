@@ -193,19 +193,15 @@ function homePage(){
   CUR={b:null,n:0};
   var visible=BANKS.filter(function(b){return !b.hidden}),full=visible.filter(function(b){return !b.mini}).length,mini=visible.length-full;
   var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
-    return '<a class="nb" href="#/'+b.id+'">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+st+'</small></a>'}).join('');
+    return '<a class="nb bk-card" href="#/'+b.id+'"><div class="bk-row"><div class="bk-col"><span class="bk-name">'+esc(b.name)+'</span><small>'+esc(b.sub)+' &middot; '+st+'</small></div>'+trialAvatarsHTML(b)+'</div></a>'}).join('');
   return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid">'+
-    '<div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. Full-length original papers feature 27 questions arranged in the 2025 HSC online examination sequence. Converted trial papers preserve school trial questions and mark allocations.</p><div class="bks">'+books+'</div><p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Your work saves locally as you write. Sign in to sync across devices and access AI marking.</p></div>'+
-    '<div class="feature"><h2 class="pt">How it works</h2>'+
-    '<p><b>Exam and practice modes:</b> Sat in timed exam mode with working time on a countdown timer (2 hours 20 minutes for full papers; shorter for mini papers), or in untimed practice mode. You can flag questions and navigate freely.</p>'+
-    '<p><b>HSC question formats:</b> Answer using multiple choice, dropdowns, match tables, typed tables, drag-order, and written responses with live word counts. Built-in tools include a Python runner with execution limits, a pseudocode editor, an interactive SQL database, and an Excalidraw canvas.</p>'+
-    '<p><b>Marking and tracking:</b> Closed questions are auto-marked on submission. Sign in for blind AI assessments of written, code and diagram answers against the criteria, followed by an independent audit or disagreement review. Unresolved assessments may show a labelled provisional mark; answers without a valid proposed score remain unscored. The Papers page archives assessed and provisional marks separately, and My mistakes tracks assessed shortfalls.</p>'+
-    '<p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Original questions are written for practice and do not predict the HSC. Trial papers are credited on their opening pages.</p></div>'+
+    '<div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. Full-length original papers feature 27 questions arranged in the 2025 HSC online examination sequence. Converted trial papers preserve school trial questions and mark allocations.</p><div class="bks">'+books+'</div><p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Your work saves locally as you write. Sign in with your NSW education email to sync across devices and access AI marking.</p></div>'+
     '<div class="feature"><h2 class="pt">Review and analyse</h2>'+
+    '<div class="acts" style="margin:4px 0 16px 0"><a class="nb" href="#/review" style="width:100%;justify-content:center;text-align:center;box-sizing:border-box;padding:13px 20px">Review paper and see class</a></div>'+
     '<p><b>Direct paper review:</b> Open any paper directly in review mode at any time. Compare your answers side by side with official marking criteria, syllabus rubrics, and high-scoring sample answers to verify marks or score your own work.</p>'+
+    '<p><b>Classroom collaboration and synthesis:</b> Read what your classmates wrote under each written part. Run AI class synthesis to extract key syllabus points, compare response strategies, and produce a combined exemplar answer.</p>'+
     '<p><b>AI feedback and coaching:</b> Receive rubric-referenced evidence evaluations that separate syllabus shortfalls from writing quality ratings. Generate post-exam improvement plans that identify error patterns and provide targeted practice.</p>'+
-    '<p><b>Classroom collaboration:</b> Join with your class code to see what classmates wrote for written and programming questions. Run AI class synthesis to extract syllabus points and produce combined exemplar responses.</p>'+
-    '<div class="acts"><a class="nb" href="#/review">Review a paper</a><a class="nb ol" href="#/class">Class answers</a></div></div>'+
+    '</div>'+
     '</div></div>');
 }
 function landingPage(b){

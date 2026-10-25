@@ -37,5 +37,8 @@ Everyone works directly on `main`. No pull request and no side branch is needed.
 3. Run `tests/ui_test.py` against a local server if you touched anything in `public/`.
 4. Write a commit message that says what changed.
 
+## A task is not done until it is pushed
+After your checks pass, commit and push to main (`git pull --rebase` first). Work that is only on the local machine is not finished. Confirm with `git log origin/main` that the commit is there, and say so in your reply.
+
 ## Deploying
 Pushing to `main` deploys to production through Vercel. If a push breaks the site, tell the owner. They can roll back in Vercel under Deployments.

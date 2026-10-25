@@ -1,6 +1,5 @@
 'use strict';
 const { verifySession } = require('./auth');
-const crypto = require('node:crypto');
 
 function createAdminHandler(deps) {
   deps = deps || {};
@@ -28,7 +27,8 @@ function createAdminHandler(deps) {
          const pList = await store.list({ prefix: 'progress/' });
          const users = [];
 
-         for (const b of (pList.blobs || [])) {
+         for (let i = 0; i < (pList.blobs || []).length; i++) {
+             const b = pList.blobs[i];
              const uid = String(b.pathname).slice('progress/'.length).replace(/\.json$/, '');
              const r = await store.get(b.pathname, { access: 'private', useCache: false });
              if (r && r.statusCode === 200 && r.stream) {
@@ -42,7 +42,8 @@ function createAdminHandler(deps) {
 
          const uList = await store.list({ prefix: 'users/' });
          const userMeta = {};
-         for (const b of (uList.blobs || [])) {
+         for (let i = 0; i < (uList.blobs || []).length; i++) {
+             const b = uList.blobs[i];
              const uid = String(b.pathname).slice('users/'.length).replace(/\.json$/, '');
              const r = await store.get(b.pathname, { access: 'private', useCache: false });
              if (r && r.statusCode === 200 && r.stream) {

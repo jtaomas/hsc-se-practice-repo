@@ -21,16 +21,18 @@ function papersPage(){
     '<div class="tw"><table class="res plist"><tr><th>Paper</th><th>Status</th><th>Mark</th><th></th></tr>'+rows+'</table></div></div>'+
     (hist.length?'<h2 class="pt">Earlier attempts</h2><div class="feature"><p>When you start a paper again, the old attempt is kept here as a score. Its answers are cleared.</p><table class="res"><tr><th>Paper</th><th>Finished</th><th>Assessed marks</th></tr>'+hist.map(function(h){return '<tr><td>'+esc(h.name)+'</td><td>'+fmtD(h.at)+'</td><td>'+h.T+' / '+h.M+(h.M?' ('+Math.round(100*h.T/h.M)+'%)':'')+(h.pending?' · '+h.pending+' marks unscored':'')+(h.provisionalParts?'<br><span class="note">'+provisionalMarksText(h)+'</span>':'')+'</td></tr>'}).join('')+'</table></div>':'')+'</div>');
 }
+/* What's wrong comes first, then your answer, then the sample answer. */
 function ansPreview(m){
-  var it=m.it,bs=BS(m.b.id),k=m.n+'.'+m.i,a=bs.ans[k];
-  if(AUTO[it.t])return closedCompare(it,a);
-  var h='';
+  var it=m.it,bs=BS(m.b.id),k=m.n+'.'+m.i,a=bs.ans[k],lost=m.s.m-m.s.g;
+  if(AUTO[it.t])return '<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
+  var h=aiBlock(m.b,m.n,m.i,it,bs,k,a,m.s);
+  if(lost&&h.indexOf('wrongbox')<0)h='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5><p>'+(isAns(it,a)?'There is no AI feedback for this answer. Compare your answer with the sample answer and the marking criteria below to find what is missing.':'You did not answer this part.')+'</p></div>'+h;
+  h+='<p class="gh"><b>Your answer</b></p>';
   if(!isAns(it,a))h+='<p class="mut">You did not answer this part.</p>';
   else if(QT[it.t]&&QT[it.t].preview)h+=QT[it.t].preview(it,a);
   else if(it.t==='tx')h+='<div class="yans">'+a+'</div>';
   else if(it.t==='dr')h+='<pre class="yans">'+esc(xdText(a.e))+'</pre>';
   else h+='<pre class="yans">'+esc(String(a))+'</pre>';
-  h+=aiBlock(m.b,m.n,m.i,it,bs,k,a,m.s);
   h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
@@ -49,7 +51,7 @@ function mkTypeName(it){var c=itemClass(it);return c==='closed'?'Multiple choice
 function mistakesPage(){
   CUR={b:null,n:0};
   var all=mistakeList(),list=mkFiltered(),cur=mkSelected(list);
-  var lost=list.reduce(function(s,m){return s+(m.s.m-m.s.g)},0);
+  var lost=list.reduce(function(s,m){return s+(m.s.m-m.s.g)},0),fixed=list.filter(function(m){return partCls(m.b,m.n,m.i)==='rtok'}).length;
   function sel(name,val,opts){return '<select data-mf="'+name+'" aria-label="'+name+'">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
   if(!all.length)return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1><div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; provisional marks need review and are excluded.</p></div></div>');
   var filters='<div class="mk-filter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden&&!b.archived}).map(function(b){return [b.id,b.name]})))+
@@ -58,10 +60,10 @@ function mistakesPage(){
   var groups='',last='';
   list.forEach(function(m){
     if(m.b.id!==last){last=m.b.id;groups+='<div class="mk-grp">'+esc(m.b.name)+'</div>'}
-    var c=m.s.g===0?'bad':'part';
-    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta">'+esc(mkTypeName(m.it))+' &middot; '+esc(m.q.tp)+'</span><span class="mk-sc">'+m.s.g+' / '+m.s.m+'</span></a>';
+    var c=partCls(m.b,m.n,m.i)||'bad';
+    groups+='<a class="mk-item'+(cur&&mkKey(m)===mkKey(cur)?' cur':'')+' '+c+'" href="'+mkHref(m)+'"'+(cur&&mkKey(m)===mkKey(cur)?' aria-current="true"':'')+'><span class="mk-q">Q'+m.n+(m.q.it.length>1?String.fromCharCode(97+m.i):'')+'</span><span class="mk-meta">'+esc(mkTypeName(m.it))+' &middot; '+esc(m.q.tp)+'</span><span class="mk-sc">'+(c==='rtok'?'Retried &middot; ':'')+m.s.g+' / '+m.s.m+'</span></a>';
   });
-  var side='<aside class="mk-side" aria-label="Your mistakes">'+filters+'<p class="mk-sum">'+list.length+' part'+(list.length===1?'':'s')+' &middot; '+lost+' mark'+(lost===1?'':'s')+' lost</p><nav class="mk-list">'+(groups||'<p class="mut">Nothing matches these filters.</p>')+'</nav></aside>';
+  var side='<aside class="mk-side" aria-label="Your mistakes">'+filters+'<p class="mk-sum">'+list.length+' part'+(list.length===1?'':'s')+' &middot; '+lost+' mark'+(lost===1?'':'s')+' lost'+(fixed?' &middot; <span class="rtk">'+fixed+' fixed by retry</span>':'')+'</p><nav class="mk-list">'+(groups||'<p class="mut">Nothing matches these filters.</p>')+'</nav></aside>';
   return frame('My mistakes','<div class="mkpage">'+side+'<main class="ex mk-main" id="mkmain">'+(cur?mkDetail(list,cur):'<div class="feature"><p>Nothing matches these filters.</p></div>')+'</main></div>',{bar:true});
 }
 function mkDetail(list,m){
@@ -69,12 +71,13 @@ function mkDetail(list,m){
   var st=(q.st||'')+(q.db&&typeof dbTables==='function'?dbTables(q.db):'');
   var mkLabel=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
   var crit=!AUTO[it.t]&&it.crit&&it.crit.length?'<details class="xdd"><summary>Marking criteria</summary>'+critList(it.crit)+'</details>':'';
-  var prev=list[idx-1],next=list[idx+1];
-  return '<div class="qwrap"><h2 class="qt">Question '+m.n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="mk-badge '+(m.s.g===0?'bad':'part')+'">'+m.s.g+' / '+m.s.m+'</span></h2>'+
+  var prev=list[idx-1],next=list[idx+1],pc=partCls(b,m.n,m.i)||'bad';
+  return '<div class="qwrap"><h2 class="qt">Question '+m.n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="mk-badge '+pc+'">'+m.s.g+' / '+m.s.m+'</span>'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,m.n,m.i,'mk'):'')+'</h2>'+
+    (typeof rtStatusHTML==='function'?rtStatusHTML(b,m.n,m.i):'')+
     '<p class="mut mk-where">'+esc(b.name)+' &middot; '+esc(q.tp)+'</p>'+
     '<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+
     '<div class="part"><p class="hoa-q">'+(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mkLabel+'</p>'+
-    '<div class="guide mk-guide">'+(AUTO[it.t]?'':'<h4>Your answer</h4>')+ansPreview(m)+crit+'</div>'+
+    '<div class="guide mk-guide">'+ansPreview(m)+crit+'</div>'+
     classSlot(b,m.n,m.i)+'</div></div>'+
     '<div class="acts"><a class="nb ol'+(prev?'':' dis')+'" '+(prev?'href="'+mkHref(prev)+'"':'aria-disabled="true"')+'>'+IC.left+'<span>Previous mistake</span></a>'+
     '<a class="nb'+(next?'':' dis')+'" '+(next?'href="'+mkHref(next)+'"':'aria-disabled="true"')+'><span>Next mistake</span>'+IC.right+'</a>'+

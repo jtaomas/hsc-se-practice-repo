@@ -41,9 +41,10 @@ function feedbackQuality(quality,b,scene){
 function feedbackDetails(f,scene){
   var losses=f.losses,h='';
   if(losses&&typeof losses.totalLost==='number'){
-    h+='<h5>Where marks were lost</h5><p>'+losses.totalLost+' mark'+(losses.totalLost===1?'':'s')+' below the maximum.</p>';
+    // The explanation and fix for each lost mark lead the feedback ("What's wrong"); this drawer keeps the evidence.
+    h+='<h5>Where marks were lost</h5><p>'+losses.totalLost+' mark'+(losses.totalLost===1?'':'s')+' below the maximum. The parts of your answer each loss is based on:</p>';
     if(losses.allocation==='holistic'&&losses.totalLost)h+='<p class="note">The rubric uses an overall judgement. Categories explain the shortfall; they are not separate numerical deductions.</p>';
-    h+=feedbackArray(losses.items).map(function(l){return '<div class="feedback-loss"><b>'+esc(feedbackLabel(l.category))+(typeof l.marksLost==='number'?' · '+l.marksLost+' mark'+(l.marksLost===1?'':'s'):'')+'</b><p>'+esc(l.explanation||'')+'</p>'+feedbackEvidence(l.evidence,scene)+'<p><b>How to improve:</b> '+esc(l.action||'')+'</p><p class="note">Criteria: '+feedbackArray(l.criterionIds).map(esc).join(', ')+'</p></div>'}).join('');
+    h+=feedbackArray(losses.items).map(function(l){return '<div class="feedback-loss"><b>'+esc(feedbackLabel(l.category))+(typeof l.marksLost==='number'?' · '+l.marksLost+' mark'+(l.marksLost===1?'':'s'):'')+'</b>'+(feedbackArray(l.evidence).length?feedbackEvidence(l.evidence,scene):'<p class="note">Nothing in your answer addresses this.</p>')+'<p class="note">Criteria: '+feedbackArray(l.criterionIds).map(esc).join(', ')+'</p></div>'}).join('');
   }
   if(feedbackArray(f.quality).length)h+='<h5>Response quality</h5>'+feedbackQuality(f.quality,null,scene);
   return h;

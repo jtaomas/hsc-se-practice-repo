@@ -101,6 +101,15 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - My mistakes shows the sample answer open by default, tighter list and detail spacing (CSS block "Concise My mistakes" at the end of `style.css`).
 - Class model answer builds automatically (`cvAutoBuild` in `public/classview.js`) for any part in view with 2+ shared answers, once per visit (cached server-side). It sits above the class answers; main points and gaps are in a collapsed drawer.
 
+## Retries, "What's wrong" first, red and yellow (25 October)
+- Any part that lost marks on a submitted paper can be retried from My mistakes (button beside the score) or from review (button in the marking guide header). `#/<bank>/retry/<n>.<i>[/mk|/rv]` opens just that part in the exam's own layout with the guide hidden, then "Check my answer" marks it. Code is in `public/retry.js`.
+- Retry answers and results are kept in `paper.rt` (`rt.a` answers, `rt.r` results). The page edits them through `ANS()` and `canEdit()` in `helpers.js`, which every answer handler (pages.js, qtypes.js, xd.js, ace-editor.js) now uses. Submitted answers, marks, totals and class sharing are never changed by a retry.
+- Closed questions are checked in the browser and the feedback lists what is still wrong without showing the correct answer. Written, code and diagram parts go to `/api/mark` with the retry answer (signed in) or are self-marked against the guide (guests).
+- Colours are the same everywhere (`partCls`/`qCls` in `widgets.js`): green full marks, red any lost marks (partial marks are red now, not amber), yellow a mistake whose retry earned full marks. `rt.r[key].full` stays set once reached.
+- No retries while any paper is being sat in exam mode, even after "Continue anyway": the buttons disappear and the route refuses.
+- Marking feedback now leads with a red "What's wrong" box (each lost mark, why, and how to fix it, from `losses` or else `improve`), then the summary, then "What earned marks". The Details drawer keeps the evidence behind each lost mark. Closed questions show the same box in review and My mistakes.
+- Test: `tests/retry_ui_test.py` (added to `run_ui_test.py`).
+
 ## Account profile pictures
 
 Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128×128 JPEG in the browser. Authenticated `profile` requests store only the session owner’s picture at `profiles/<id>.json`; an empty picture removes it. The server caps the data URL at 44,000 characters and rejects external URLs, SVG and non-JPEG payloads. No credentials or progress are changed. Account load returns the picture; class membership reads attach it to overview and answer rows. Browser account epochs and the sync queue protect against stale uploads after sign-out or account changes. Tests cover authentication, validation, isolation, sharing, upload, reload and removal.

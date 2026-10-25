@@ -169,7 +169,8 @@ with sync_playwright() as playwright:
     page.goto(URL + '#/1/review/18')
     marking = page.locator('.guide .aib')
     expect(page.locator('.guide > h4 .sc').first).to_contain_text('2 / 3')
-    expect(marking).to_contain_text('To gain')
+    expect(marking.locator('.wrongbox')).to_contain_text('Explain why unique salts prevent precomputed lookup.')
+    assert marking.evaluate("e=>e.querySelector('.wrongbox').compareDocumentPosition(e.querySelector('.earnbox'))&Node.DOCUMENT_POSITION_FOLLOWING"), "What's wrong must come before what earned marks"
     expect(marking).to_contain_text('Further advice (not a mark deduction)')
     expect(marking).to_contain_text('Use a concrete password example when revising.')
     marking.get_by_text('Details', exact=True).click()

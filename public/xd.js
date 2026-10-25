@@ -11,9 +11,9 @@ function loadXD(){
   return XDP;
 }
 function xdFlush(k){
-  var st=XD[k];if(!st||st.ro||!st.api||!CUR.b||BS(CUR.b.id).done)return;
-  var live=st.api.getSceneElements().filter(function(e){return !e.isDeleted}),bs=BS(CUR.b.id),cur=bs.ans[k],prev=cur&&cur.e?JSON.stringify(cur.e):'[]',nxt=JSON.stringify(live);
-  if(prev!==nxt){bs.ans[k]={e:JSON.parse(nxt)};save()}
+  var st=XD[k];if(!st||st.ro||!st.api||!canEdit())return;
+  var live=st.api.getSceneElements().filter(function(e){return !e.isDeleted}),A=ANS(CUR.b),cur=A[k],prev=cur&&cur.e?JSON.stringify(cur.e):'[]',nxt=JSON.stringify(live);
+  if(prev!==nxt){A[k]={e:JSON.parse(nxt)};save()}
 }
 function xdCleanup(){
   if(typeof aceCleanup==='function')aceCleanup();
@@ -24,7 +24,7 @@ function xdMount(b,k,ro){
   var host=document.getElementById('x'+k);if(!host)return;
   loadXD().then(function(){
     if(!document.body.contains(host))return;
-    var bs=BS(b.id),saved=bs.ans[k],els=(saved&&saved.e)||[];
+    var saved=ANS(b)[k],els=(saved&&saved.e)||[];
     host.innerHTML='';
     var st=XD[k]={root:ReactDOM.createRoot(host),api:null,tmr:null,ro:ro};
     var props={

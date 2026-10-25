@@ -120,8 +120,8 @@ function units(it,a){
   return [c,t];
 }
 var AUTO={mc:1,ms:1,dd:1,gd:1,mt:1,tk:1};
-function score(b,n,i){
-  var bs=BS(b.id),it=b.qs[n-1].it[i],k=n+'.'+i,a=bs.ans[k],m=it.m,g=0;
+function score(b,n,i,ans){
+  var bs=BS(b.id),it=b.qs[n-1].it[i],k=n+'.'+i,a=arguments.length>3?ans:bs.ans[k],m=it.m,g=0;
   if(it.t==='mc')g=a===it.a?1:0;
   else if(it.t==='ms'){var s=Array.isArray(a)?a:[],w=0;s.forEach(function(x){if(it.a.indexOf(x)<0)w++});it.a.forEach(function(x){if(s.indexOf(x)<0)w++});g=m===1?(w===0?1:0):Math.max(0,m-w)}
   else if(AUTO[it.t]){var u=units(it,a);g=u[0]===u[1]?m:Math.floor(m*u[0]/u[1]+1e-9)}
@@ -133,6 +133,10 @@ function score(b,n,i){
   }
   return {g:g,m:m,auto:true,set:true};
 }
+/* Colour of a marked part, the same everywhere: green full marks, red anything short of full marks,
+   yellow a mistake whose retry earned full marks (retry.js). '' while unscored or provisional. */
+function partCls(b,n,i){var s=score(b,n,i);if(!s.set||s.src==='provisional')return '';if(s.g>=s.m)return 'ok';return typeof rtFixed==='function'&&rtFixed(b,n,i)?'rtok':'bad'}
+function qCls(b,n){var c=b.qs[n-1].it.map(function(it,i){return partCls(b,n,i)});return c.indexOf('')>=0?'':c.indexOf('bad')>=0?'bad':c.indexOf('rtok')>=0?'rtok':'ok'}
 function isAns(it,a){
   if(a==null)return false;
   if(QT[it.t]&&QT[it.t].isAns)return QT[it.t].isAns(it,a);
@@ -194,7 +198,7 @@ function drawBox(it,k,ro,label,tog){
   return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+(tog||'')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
 }
 function itemHTML(b,n,i,rv){
-  var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],ro=!!rv,h='<div class="part">';
+  var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=ANS(b)[k],ro=!!rv,h='<div class="part">';
   var mk=(q.it.length>1&&!/marks?\)/.test(it.q))?' <span style="font-weight:700">('+(it.m===1?'1 mark':it.m+' marks')+')</span>':'';
   var lab=(it.lb?'<span class="plab">'+it.lb+'</span>':'')+it.q+mk;
   var tog=q.it.length>1?'<button type="button" class="ptog" data-qa="tog" aria-expanded="true"><span>hide</span>'+IC.up+'</button>':'';
@@ -237,7 +241,10 @@ function itemHTML(b,n,i,rv){
 }
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
-  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),h='<div class="guide"><h4>Marking guide <span class="sc">'+(sc.set?(sc.src==='provisional'?'Provisional: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></h4>';
+  var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),pc=partCls(b,n,i);
+  var h='<div class="guide"><h4>Marking guide <span class="ghr">'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,n,i,'rv'):'')+'<span class="sc'+(pc?' '+pc:'')+'">'+(sc.set?(sc.src==='provisional'?'Provisional: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></span></h4>';
+  if(typeof rtStatusHTML==='function')h+=rtStatusHTML(b,n,i);
+  if(AUTO[it.t]&&sc.g<sc.m&&typeof closedCompare==='function')h+='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+(sc.m-sc.g)+' mark'+(sc.m-sc.g===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
   if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
   else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>';
   else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}));

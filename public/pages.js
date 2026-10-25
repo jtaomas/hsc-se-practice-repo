@@ -289,7 +289,7 @@ function navHTML(b,rv){
   var bs=BS(b.id),h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
-    if(rv){var g=0,m=0,pending=false;b.qs[n-1].it.forEach(function(it,i){var s=score(b,n,i);g+=s.g;m+=s.m;if(!s.set||s.src==='provisional')pending=true});c+=pending?'':g===m?' ok':g===0?' bad':' part'}
+    if(rv){var qc=qCls(b,n);if(qc)c+=' '+qc}
     h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">'+IC.tick+'</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">'+IC.flag+'</span>':'')+'</button>';
   }
   return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
@@ -350,7 +350,7 @@ function resultsPage(b){
   CUR={b:b,n:0};var r=totals(b),pend=r.rows.filter(function(x){return x.pend}).length;
   var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature">'+(TIMEUP[b.id]?'<p><b>Working time ended, so your exam was submitted automatically.</b></p>':'')+'<div class="big">'+(r.T+r.provisionalG)+' / '+(r.markedM+r.provisionalM)+'</div><p>'+(r.provisionalParts?'Provisional total. Assessed subtotal: '+r.T+' / '+r.markedM+'. '+provisionalMarksText(r)+'. Provisional marks are excluded from the assessed subtotal.':r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
     '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Assessed marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k],m=t.m-t.pending-t.provisionalM;return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+m+(t.pending?' ('+t.pending+' unscored)':'')+(t.provisionalParts?'<br><span class="note">'+provisionalMarksText(t)+'</span>':'')+'</td><td><div class="tbar"><i style="width:'+(m?Math.round(100*t.g/m):0)+'%"></i></div></td></tr>'}).join('')+'</table>'+
-    '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend||x.provisionalParts?'part':x.g===x.m?'ok':x.g===0?'bad':'part';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:x.provisionalParts?'No confirmed mark':'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+(x.provisionalParts?'<br><span class="note">'+provisionalMarksText(x)+'</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
+    '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend||x.provisionalParts?'pend':qCls(b,x.n)||'pend';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:x.provisionalParts?'No confirmed mark':'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+(x.provisionalParts?'<br><span class="note">'+provisionalMarksText(x)+'</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
     (typeof improvementPanel==='function'?improvementPanel(b):'')+
     '<div class="acts"><a class="nb" href="#/'+b.id+'/review/1" style="text-decoration:none">Review all questions</a><button type="button" class="nb ol" data-act="paperremark" style="cursor:pointer"'+(aiRunCurrent(b,AIRUN[b.id])?' disabled':'')+'>Re-mark entire paper</button><a class="nb ol" href="#/mistakes/'+b.id+'" style="text-decoration:none">Review my mistakes</a><a class="nb ol" href="#/papers" style="text-decoration:none">All papers</a></div></div>';
   return frame(b.name+' Software Engineering',h);
@@ -368,7 +368,7 @@ function render(){
   xdCleanup();
   if(b&&h[1]==='q'&&examSitting()===b)EXAMOK='';
   var lock=examLock();LOCKVIEW=false;
-  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='retry'||h[1]==='results'||h[1]==='q'&&BS(b.id).done)))){html=lockedPage(lock);LOCKVIEW=true}
   else if(h[0]==='papers')html=papersPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]==='all'?'':(h[1]||'');MF.sel=h[2]||'';html=mistakesPage()}
@@ -379,6 +379,7 @@ function render(){
   else if(!h[1])html=landingPage(b);
   else if(h[1]==='q')html=examPage(b,Math.min(b.qs.length,Math.max(1,+h[2]||1)),false);
   else if(h[1]==='review')html=examPage(b,Math.min(b.qs.length,Math.max(1,+h[2]||1)),true);
+  else if(h[1]==='retry'&&typeof retryPage==='function'){var rk=String(h[2]||'').split('.');html=retryPage(b,+rk[0]||0,+rk[1]||0,h[3]==='rv'?'rv':'mk')}
   else if(h[1]==='finish')html=finishPage(b);
   else if(h[1]==='results')html=resultsPage(b);
   else html=landingPage(b);
@@ -388,6 +389,7 @@ function render(){
   if(!lock&&h[0]==='mistakes')mistakesBind();
   if(h[0]==='compare')comparisonBind();
   if(b&&(h[1]==='q'||h[1]==='review')&&CUR.b===b){afterQ();navArrows(true)}
+  if(b&&h[1]==='retry'&&CUR.rt&&typeof rtAfter==='function')rtAfter();
   if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   if(typeof cvAutoStatus==='function')cvAutoStatus();
   tick();
@@ -595,10 +597,10 @@ document.addEventListener('click',function(e){
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen';aceResize()}
   else if(a==='rdb'){var ro2=document.getElementById('o'+d.k);if(ro2){ro2.className='out ph sqres';ro2.textContent='Run the query to see the results.'};if(typeof resetSQLSession==='function')resetSQLSession(d.k)}
-  else if(a==='run'){if(CUR.b&&!BS(CUR.b.id).done)doRun(d.k)}
+  else if(a==='run'){if(canEdit())doRun(d.k)}
   else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
-  else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
+  else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api&&canEdit()){xs.api.resetScene();ANS(CUR.b)[d.k]={e:[]};save();refreshNav()}}
   else if(a==='airetry'&&CUR.b&&!BS(CUR.b.id).done&&!CUR.rv)pqMark();
   else if(a==='airetry'){var rb=CUR.b;if(rb&&aiUnlocked()&&!aiRunCurrent(rb,AIRUN[rb.id])){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
   else if(a==='airemark'){
@@ -710,16 +712,16 @@ document.addEventListener('mouseleave',function(e){
   }
 },true);
 function saveRte(ed){
-  if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
-  var k=ed.dataset.k,it=itemOf(k),bs=BS(CUR.b.id);bs.ans[k]=ed.innerHTML;save();
+  if(!canEdit())return;
+  var k=ed.dataset.k,it=itemOf(k);ANS(CUR.b)[k]=ed.innerHTML;save();
   var w=wcount(ed.innerHTML),c=document.getElementById('wc'+k);if(c){c.textContent=w+' / '+it.w+' words';c.classList.toggle('over',w>it.w)}
   refreshNav();
 }
 document.addEventListener('input',function(e){
-  var t=e.target;if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
+  var t=e.target;if(!canEdit())return;
   if(t.classList&&t.classList.contains('rta'))saveRte(t);
   else if(t.dataset&&t.dataset.code){
-    BS(CUR.b.id).ans[t.dataset.k]=t.value;save();var g=document.getElementById('g'+t.dataset.k);if(g){g.textContent=gutNums(t.value);g.scrollTop=t.scrollTop}refreshNav();
+    ANS(CUR.b)[t.dataset.k]=t.value;save();var g=document.getElementById('g'+t.dataset.k);if(g){g.textContent=gutNums(t.value);g.scrollTop=t.scrollTop}refreshNav();
   }
 });
 document.addEventListener('scroll',function(e){var t=e.target;if(t&&t.dataset&&t.dataset.code){var g=document.getElementById('g'+t.dataset.k);if(g)g.scrollTop=t.scrollTop}},true);
@@ -741,13 +743,13 @@ document.addEventListener('keydown',function(e){
 document.addEventListener('change',function(e){
   var t=e.target;
   if(t.dataset&&t.dataset.mf){if(t.dataset.mf==='bank'){location.hash='#/mistakes/'+(t.value||'all')}else{MF[t.dataset.mf]=t.value;render()}return}
-  var k=t.dataset&&t.dataset.k;if(!k||!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
-  var bs=BS(CUR.b.id),it=itemOf(k),a=bs.ans[k];
-  if(it.t==='mc')bs.ans[k]=+t.dataset.v;
-  else if(it.t==='ms'){a=Array.isArray(a)?a:[];var v=+t.dataset.v,ix=a.indexOf(v);if(t.checked&&ix<0)a.push(v);if(!t.checked&&ix>=0)a.splice(ix,1);bs.ans[k]=a}
-  else if(it.t==='dd'||it.t==='gd'){a=a||{};if(t.value==='')delete a[t.dataset.u];else a[t.dataset.u]=+t.value;bs.ans[k]=a}
-  else if(it.t==='mt'){a=a||{};a[t.dataset.u]=+t.dataset.v;bs.ans[k]=a}
-  else if(it.t==='tk'){a=Array.isArray(a)?a:[];var u=t.dataset.u,j=a.indexOf(u);if(t.checked&&j<0)a.push(u);if(!t.checked&&j>=0)a.splice(j,1);bs.ans[k]=a}
+  var k=t.dataset&&t.dataset.k;if(!k||!canEdit())return;
+  var A=ANS(CUR.b),it=itemOf(k),a=A[k];
+  if(it.t==='mc')A[k]=+t.dataset.v;
+  else if(it.t==='ms'){a=Array.isArray(a)?a:[];var v=+t.dataset.v,ix=a.indexOf(v);if(t.checked&&ix<0)a.push(v);if(!t.checked&&ix>=0)a.splice(ix,1);A[k]=a}
+  else if(it.t==='dd'||it.t==='gd'){a=a||{};if(t.value==='')delete a[t.dataset.u];else a[t.dataset.u]=+t.value;A[k]=a}
+  else if(it.t==='mt'){a=a||{};a[t.dataset.u]=+t.dataset.v;A[k]=a}
+  else if(it.t==='tk'){a=Array.isArray(a)?a:[];var u=t.dataset.u,j=a.indexOf(u);if(t.checked&&j<0)a.push(u);if(!t.checked&&j>=0)a.splice(j,1);A[k]=a}
   else return;
   save();refreshNav();
 });

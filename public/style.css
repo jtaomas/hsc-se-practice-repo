@@ -1023,3 +1023,40 @@ a.nb.dis{opacity:.45;pointer-events:none}
 @media(max-width:600px){.cv-edit,.cv-edit.cv-prog{padding-left:14px;padding-right:14px}}
 .cv-accts{max-width:960px}.nb.bad{background:#b81237;border-color:#b81237;color:#fff}
 .acmsg.ok{color:#1a7f37}
+
+/* ---------- Mark colours, "What's wrong" first, retries ----------
+   Green: full marks first time. Red: any marks lost. Yellow: a mistake that was retried and earned full marks. */
+.nav-elem.rtok{border-color:#c99a00;color:#6b5000;background:#fff6d1}
+.nav-elem.cur.rtok{background:#f2c200;border-color:#c99a00;color:#2b2100}
+.pill.rtok{background:#f2c200;color:#2b2100}.pill.pend{background:#6b7280}
+.mk-item.rtok{border-left:6px solid #f2c200}
+.mk-badge.rtok{background:#f2c200;color:#2b2100}
+.guide h4 .ghr{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.guide h4 .ghr .nb{font-size:.8em;text-decoration:none}
+.guide h4 .sc.ok{background:#1a7f37}.guide h4 .sc.bad{background:#b81237}.guide h4 .sc.rtok{background:#f2c200;color:#2b2100}
+.wrongbox,.guide .aib .wrongbox{border:1px solid #e0a1ae;border-left:6px solid #b81237;background:#fdeef1;border-radius:3px;padding:10px 14px;margin:4px 0 12px;color:#000}
+.wrongbox h5,.guide .aib .wrongbox h5,.guide .aib>.wrongbox h5{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 6px;padding:0;border:0;font-size:1.1em;color:#8a0d29}
+.wrongbox .wl{background:#b81237;color:#fff;font-size:.8em;font-weight:700;padding:2px 10px;border-radius:12px;white-space:nowrap}
+.wrongbox ul,.guide .aib .wrongbox ul{margin:4px 0 2px 20px;padding:0}
+.wrongbox li,.guide .aib .wrongbox li{margin:0 0 8px;line-height:1.5}
+.wrongbox li:last-child{margin-bottom:2px}
+.wrongbox .wfix{display:block;margin-top:3px}
+.wrongbox table.cmp{margin:4px 0 2px;background:#fff}
+.earnbox{border-left:4px solid #1a7f37;padding:2px 0 2px 12px;margin:10px 0 6px}
+.earnbox h5,.guide .aib .earnbox h5{margin:0 0 4px;padding:0;border:0;font-size:1em;color:#1a5e2c}
+.earnbox ul,.guide .aib .earnbox ul{margin:2px 0 2px 18px;padding:0}
+.aisum{color:#333}
+.rt-tag{display:inline-block;vertical-align:middle;margin-left:10px;background:#f2c200;color:#2b2100;font-size:.6em;padding:2px 12px;border-radius:12px}
+h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decoration:none}
+.rtst{margin:6px 0 10px;padding:6px 10px;border-radius:3px;color:#000}
+.rtst.rtok{background:#fff6d1;border:1px solid #e6c34d;border-left:6px solid #f2c200}
+.rtst.bad{background:#fdeef1;border:1px solid #e0a1ae;border-left:6px solid #b81237}
+.rtp{margin-top:18px}
+.rtv{margin:12px 0 0;padding:10px 14px;border-radius:3px;font-size:1.05em;color:#000}
+.rtv.rtok{background:#fff6d1;border:1px solid #e6c34d;border-left:6px solid #f2c200}
+.rtv.bad{background:#fdeef1;border:1px solid #e0a1ae;border-left:6px solid #b81237}
+.rtv.pend{background:#f2f2f2;border:1px solid #ccc}
+.rtg{margin-top:10px}
+.rtk{color:#6b5000;font-weight:700}
+.rtnote{margin-top:10px}
+#qarea a.nb{text-decoration:none}

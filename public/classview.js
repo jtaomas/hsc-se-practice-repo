@@ -263,7 +263,7 @@ function cvProgHTML(id,isSystem){
           if(ans||p.done){
             var qLabel='Q'+qn+(q.it.length>1?String.fromCharCode(97+pi):'');
             var tName=typeof mkTypeName==='function'?mkTypeName(it):it.t.toUpperCase();
-            var pillCls=!s.set||s.src==='provisional'?'part':s.g===s.m?'ok':s.g===0?'bad':'part';
+            var pillCls=!s.set||s.src==='provisional'?'pend':s.g===s.m?'ok':'bad';
             var pillTxt=s.set?(s.src==='provisional'?'Provisional '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
             var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
             partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+

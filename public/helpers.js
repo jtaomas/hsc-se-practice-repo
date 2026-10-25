@@ -26,6 +26,10 @@ function persistWarn(){
 }
 function save(id){S.ts=Date.now();id=id||(typeof CUR!=='undefined'&&CUR.b?CUR.b.id:null);if(id){if(S.u[id])S.u[id].upd=S.ts;S.pending[id]=(S.pending[id]||0)+1}persist();if(typeof syncSoon==='function')syncSoon()}
 function BS(id){var u=S.u[id];if(!u)u=S.u[id]={ans:{},flags:{},self:{},chk:{},ai:{},start:0,done:false};if(!u.ai)u.ai={};if(!u.aiErr)u.aiErr={};return u}
+/* The answers being edited. On a retry page (retry.js) these are the retry answers in paper.rt.a,
+   so the submitted answers, marks and totals are never touched. Everywhere else they are paper.ans. */
+function ANS(b){var bs=BS(b.id);if(typeof CUR!=='undefined'&&CUR.rt&&CUR.b===b){if(!bs.rt)bs.rt={};if(!bs.rt.a)bs.rt.a={};return bs.rt.a}return bs.ans}
+function canEdit(){if(typeof CUR==='undefined'||!CUR.b)return false;if(CUR.rt)return typeof rtAllowed==='function'&&rtAllowed(CUR.b);return !CUR.rv&&!BS(CUR.b.id).done}
 
 /* ---------- question constructors (used by the bank files) ---------- */
 var BANKS=[];

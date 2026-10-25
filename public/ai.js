@@ -6,14 +6,14 @@ function plain(html){
 }
 function dbPlain(db){return Object.keys(db).map(function(n){var t=db[n];return 'Table '+n+'\n'+t.c.join(' | ')+'\n'+t.r.map(function(r){return r.join(' | ')}).join('\n')}).join('\n\n')}
 var KIND={tx:'written response',py:'Python program',ps:'pseudocode algorithm',sq:'SQL query',dr:'diagram'};
-function aiPayload(b,n,i){
-  var it=b.qs[n-1].it[i],a=BS(b.id).ans[n+'.'+i];
+function aiPayload(b,n,i,ans){
+  var it=b.qs[n-1].it[i],a=arguments.length>3?ans:BS(b.id).ans[n+'.'+i];
   return {bankId:b.id,questionNumber:n,partIndex:i,answer:it.t==='tx'?plain(a):it.t==='dr'?xdScene(a&&a.e):it.t==='ft'?JSON.parse(JSON.stringify(a||{})):String(a||'')};
 }
-function aiStamp(b,n,i){
-  var q=b.qs[n-1];
+function aiStamp(b,n,i,ans){
+  var q=b.qs[n-1],payload=arguments.length>3?aiPayload(b,n,i,ans):aiPayload(b,n,i);
   // Keep exact snapshots: a changed answer, question, rubric or local harness invalidates the result.
-  return JSON.stringify({version:typeof AIMARKING_VERSION==='undefined'?'unavailable':AIMARKING_VERSION,stimulus:q.st,db:q.db,item:q.it[i],answer:aiPayload(b,n,i).answer});
+  return JSON.stringify({version:typeof AIMARKING_VERSION==='undefined'?'unavailable':AIMARKING_VERSION,stimulus:q.st,db:q.db,item:q.it[i],answer:payload.answer});
 }
 function aiRecord(b,n,i){
   var ai=BS(b.id).ai[n+'.'+i];
@@ -176,29 +176,45 @@ function runAIQuestion(b,n){
   return run.promise;
 }
 function aiFirst(t){t=String(t||'').trim();var m=t.match(/^.*?[.!?](\s|$)/);t=m?m[0].trim():t;return t.length>170?t.slice(0,167).replace(/\s+\S*$/,'')+'...':t}
+/* "What's wrong" comes first and is the most prominent part of any marking feedback: each lost mark,
+   why it was lost and how to fix it. What earned marks follows it. */
+function aiWrongHTML(f,max,g){
+  var L=f.losses,items=L&&Array.isArray(L.items)?L.items.filter(function(l){return l&&(l.explanation||l.action)}):[],lost=typeof g==='number'&&typeof max==='number'?max-g:(L&&typeof L.totalLost==='number'?L.totalLost:0),rows='';
+  function lab(c){return typeof feedbackLabel==='function'?feedbackLabel(c):String(c||'').replace(/_/g,' ')}
+  if(items.length)rows=items.map(function(l){return '<li>'+(l.category?'<b>'+esc(lab(l.category))+(typeof l.marksLost==='number'&&l.marksLost?' (&minus;'+l.marksLost+')':'')+':</b> ':'')+esc(l.explanation||'')+(l.action?'<span class="wfix"><b>How to fix it:</b> '+esc(l.action)+'</span>':'')+'</li>'}).join('');
+  else if(f.improve&&f.improve.length)rows=f.improve.map(function(x){return '<li>'+esc(x)+'</li>'}).join('');
+  if(!rows)return '';
+  return '<div class="wrongbox"><h5><span>What&rsquo;s wrong</span>'+(lost>0?'<span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span>':'')+'</h5><ul>'+rows+'</ul></div>';
+}
+function aiEarnedHTML(f){return f.strengths&&f.strengths.length?'<div class="earnbox"><h5>What earned marks</h5><ul>'+f.strengths.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></div>':''}
+/* One AI marking result in the review style. opt.remark=false hides the re-mark button (retries). */
+function aiResultHTML(b,n,i,it,k,ai,opt){
+  opt=opt||{};
+  var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp,audit=ai.audit||{};
+  var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(opt.answer!==undefined?aiPayload(b,n,i,opt.answer).answer:aiPayload(b,n,i).answer):null;
+  var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];
+  if(provisional)provenance.push('Decision: provisional lower-mark fallback');
+  else if(audit.resolution==='adjudicated')provenance.push('Decision: confirmed after disagreement resolution and audit');
+  if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
+  if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
+  var running=aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n);
+  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':(opt.title||'AI marking'))+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+
+    (!review&&!provisional?aiWrongHTML(f,it.m,ai.g):'')+
+    (f.summary?'<p class="aisum">'+esc(aiFirst(f.summary))+'</p>':'')+
+    (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
+    (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
+    (!provisional?aiEarnedHTML(f):'')+
+    '<details class="xdd"><summary>Details</summary>'+
+    (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
+    (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
+    (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
+    (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+
+    (opt.remark!==false&&!review&&!provisional?(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+
+    '</details>'+(opt.after||'')+'</div>';
+}
 function aiBlock(b,n,i,it,bs,k,a,sc){
   var ai=aiRecord(b,n,i),live=bs.done||(typeof pqShown==='function'&&pqShown(b,n));
-  if(ai){
-    var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp,audit=ai.audit||{};
-    var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(aiPayload(b,n,i).answer):null;
-    var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];
-    if(provisional)provenance.push('Decision: provisional lower-mark fallback');
-    else if(audit.resolution==='adjudicated')provenance.push('Decision: confirmed after disagreement resolution and audit');
-    if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
-    if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
-    return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':'AI marking')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(aiFirst(f.summary))+'</p>':'')+
-      (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-(provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
-      (!provisional&&f.strengths&&f.strengths.length?'<p class="gh"><b>Earned</b></p><ul>'+f.strengths.slice(0,2).map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (!provisional&&f.improve&&f.improve.length?'<p class="gh"><b>To gain</b></p><ul>'+f.improve.slice(0,2).map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      '<details class="xdd"><summary>Details</summary>'+
-      (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-      (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
-      (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
-      (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+(!review&&!provisional?(legacy?'':'')+(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+
-      '</details>'+
-      (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
-  }
+  if(ai)return aiResultHTML(b,n,i,it,k,ai,{after:bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':''});
   if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
   if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p>'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?'<p>Other answers are still being marked. You can retry this answer when the batch finishes.</p>':'<button class="nb sm" data-act="airetry">Try again</button>')+'</div>';
   if(live&&isAns(it,a)&&(aiQuestionRun(b,n)||aiRunCurrent(b,AIRUN[b.id])))return '<div class="aib"><h5>AI marking</h5>'+aiProgHTML(b,k)+'</div>';
@@ -206,7 +222,8 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
   return '';
 }
 /* ---------- helpers for the mistakes page ---------- */
-function closedCompare(it,a){
+/* Rows the student got wrong. hideCorrect leaves out the correct answers (retry feedback, so the next try is still a real attempt). */
+function closedCompare(it,a,hideCorrect){
   var rows=[];
   function add(l,y,c,ok){rows.push({l:l,y:y,c:c,ok:ok})}
   if(QT[it.t]&&QT[it.t].compare)QT[it.t].compare(it,a).forEach(function(r){add(r[0],r[1],r[2],r[3])});
@@ -217,6 +234,7 @@ function closedCompare(it,a){
   else if(it.t==='mt'){it.r.forEach(function(row,r){var v=a?a[r]:undefined;add(plain(row[0]),v==null?'No answer':it.h[v+1],it.h[row[1]+1],v===row[1])})}
   else if(it.t==='tk'){var sel=Array.isArray(a)?a:[];it.r.forEach(function(row,r){var y=it.h.slice(1).filter(function(c,ci){return sel.indexOf(r+','+ci)>=0}),c=row[1].map(function(ci){return it.h[ci+1]});add(plain(row[0]),y.join(', ')||'None ticked',c.join(', ')||'None',y.join()===c.join())})}
   var wrong=rows.filter(function(x){return !x.ok});
+  if(hideCorrect)return '<table class="cmp"><tr><th></th><th>Still wrong</th></tr>'+wrong.map(function(x){return '<tr><td>'+esc(x.l||'Your answer')+'</td><td class="no">'+esc(x.y)+'</td></tr>'}).join('')+'</table>';
   return '<table class="cmp"><tr><th></th><th>Your answer</th><th>Correct answer</th></tr>'+wrong.map(function(x){return '<tr><td>'+esc(x.l)+'</td><td class="no">'+esc(x.y)+'</td><td class="yes">'+esc(x.c)+'</td></tr>'}).join('')+'</table>';
 }
 function mistakeList(){

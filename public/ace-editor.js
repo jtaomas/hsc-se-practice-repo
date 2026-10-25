@@ -10,7 +10,7 @@ function loadAce(){
 }
 function aceMount(){
   if(!CUR.b)return;
-  var locked=CUR.rv||BS(CUR.b.id).done;
+  var locked=typeof canEdit==='function'?!canEdit():(CUR.rv||BS(CUR.b.id).done);
   $$('.cedit textarea[data-code]').forEach(function(ta){
     var host=ta.parentNode,k=ta.dataset.k;
     if(host.dataset.ace)return;

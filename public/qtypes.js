@@ -21,21 +21,21 @@ function slotHTML(k,s,inner,ro,cls,style){
 function dzUsed(a){var u={};Object.keys(a||{}).forEach(function(s){u[a[s]]=s});return u}
 function dzRedraw(k){
   var el=$('.dz[data-k="'+k+'"]');if(!el||!CUR.b)return;
-  var it=itemOf(k),t=document.createElement('div');t.innerHTML=QT[it.t].render(it,k,BS(CUR.b.id).ans[k],!!CUR.rv||BS(CUR.b.id).done,CUR.rv);
+  var it=itemOf(k),t=document.createElement('div');t.innerHTML=QT[it.t].render(it,k,ANS(CUR.b)[k],!canEdit(),CUR.rv);
   el.parentNode.replaceChild(t.firstChild,el);
 }
 function dzPlace(k,s,ci,from){
-  if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
-  var it=itemOf(k),bs=BS(CUR.b.id),a={},old=bs.ans[k]||{};
+  if(!canEdit())return;
+  var it=itemOf(k),A=ANS(CUR.b),a={},old=A[k]||{};
   Object.keys(old).forEach(function(x){a[x]=old[x]});
   var prev=a[s];
   if(from!=null)delete a[from];
   else if(!it.reuse)Object.keys(a).forEach(function(x){if(a[x]===ci)delete a[x]});
   a[s]=ci;
   if(prev!=null&&prev!==ci&&from!=null)a[from]=prev;
-  bs.ans[k]=a;save();dzRedraw(k);refreshNav();
+  A[k]=a;save();dzRedraw(k);refreshNav();
 }
-function dzRemove(k,s){if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;var bs=BS(CUR.b.id),a=bs.ans[k];if(!a||a[s]==null)return;delete a[s];save();dzRedraw(k);refreshNav()}
+function dzRemove(k,s){if(!canEdit())return;var a=ANS(CUR.b)[k];if(!a||a[s]==null)return;delete a[s];save();dzRedraw(k);refreshNav()}
 function dzClear(){DZ.sel=null;$$('.chip.picked').forEach(function(c){c.classList.remove('picked')});$$('.dz.picking').forEach(function(c){c.classList.remove('picking')})}
 function dzSelect(k,ci,from){
   DZ.sel=(DZ.sel&&DZ.sel.k===k&&DZ.sel.ci===ci&&DZ.sel.from===from)?null:{k:k,ci:ci,from:from};
@@ -154,8 +154,8 @@ regType('ft',{
   preview:function(it,a){a=a||{};return '<div class="yans">'+ftTable(it,function(c,r,ci){return c!=null?c:esc(a[r+','+ci]||'')})+'</div>'}
 });
 document.addEventListener('input',function(e){
-  var t=e.target;if(!t.dataset||!t.dataset.fk||!CUR.b||CUR.rv||t.readOnly||BS(CUR.b.id).done)return;
-  var bs=BS(CUR.b.id),k=t.dataset.fk,a=bs.ans[k]||{};
+  var t=e.target;if(!t.dataset||!t.dataset.fk||t.readOnly||!canEdit())return;
+  var A=ANS(CUR.b),k=t.dataset.fk,a=A[k]||{};
   if(t.value.trim())a[t.dataset.c]=t.value;else delete a[t.dataset.c];
-  bs.ans[k]=a;save();refreshNav();
+  A[k]=a;save();refreshNav();
 });

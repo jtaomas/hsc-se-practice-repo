@@ -268,7 +268,7 @@ function guideHTML(b,n,i){
     h+=aiBlock(b,n,i,it,bs,k,a,sc);
     if(QT[it.t]&&QT[it.t].sample)h+='<p class="gh"><b>Sample answer:</b></p>'+QT[it.t].sample(it);
     else if(it.t==='py'||it.t==='ps'||it.t==='sq')h+='<p class="gh"><b>Sample answer:</b></p><pre>'+esc(it.model)+'</pre>';
-    else h+='<p class="gh"><b>Sample answer:</b></p><div>'+it.model+'</div>';
+    else h+='<p class="gh"><b>Sample answer:</b></p>'+modelHTML(it);
     if(it.t==='dr'&&a&&a.e&&a.e.length)h+='<details class="xdd"><summary>Drawing summary</summary><pre>'+esc(xdText(a.e))+'</pre></details>';
     if(it.crit.length)h+='<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit);
     var c=bs.chk[k],fresh=chkFresh(it,a,c);

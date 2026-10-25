@@ -63,6 +63,8 @@ function ps(q,m,model,crit){return {t:'ps',q:q,m:m,model:model,crit:crit||[]}}
 function sq(q,m,model,ord,crit){return {t:'sq',q:q,m:m,model:model,ord:!!ord,crit:crit||[]}}
 function dr(q,m,model,crit,tools){return {t:'dr',q:q,m:m,model:model,crit:crit||[],tools:tools||'class'}}
 function P(lb,it){it.lb=lb;return it}
+/* the sample answer of a written or drawing part: a drawn sample (it.fig) first, then the description */
+function modelHTML(it){return (it.fig||'')+'<div>'+it.model+'</div>'}
 /* Q(topic, stimulus, items, opts): opts.two for two columns, opts.db for SQL tables */
 function Q(tp,st,items,o){o=o||{};var m=0;items.forEach(function(i){m+=i.m});return {tp:tp,st:st||'',it:items,two:!!o.two,db:o.db||null,m:m,name:o.name||''}}
 function tbl(h,rows,cap){return (cap?'<p class="ttl">'+cap+'</p>':'')+'<div class="tw"><table class="hoa"><tr>'+h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}

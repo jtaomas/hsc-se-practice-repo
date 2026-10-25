@@ -164,3 +164,12 @@ Roger reported that "Mark N unmarked answers" finished instantly without marking
 - `server/marking-input.js`: the marker cannot see pictures, so each `<img>` alt description (40+ characters) is sent as "SOURCE IMAGE DESCRIPTION" and the part is marked normally (DoE 2026 Trial Q27 was stuck on "Needs review").
 - A picture whose alt is only a heading (bank 13 Q25, screenshots of an article) still goes to manual review, as before.
 - Answers already stored as "Needs review" are not re-marked automatically; use "Re-mark entire paper" on the Papers page.
+
+
+## Diagram Practice Paper (bank 19)
+- `public/bank19.js`: 15 original drawing questions, 51 marks, 90 minutes, mini paper. It covers every diagram the course specifications ask students to draw: Level 0 and full data flow diagrams, structure charts (with refinement, data and control couples, selection and repetition), class diagrams (including one from code), storyboards, decision trees (read, create and simplify), flowcharts (sequence, selection, pre-test, post-test, FOR NEXT, subroutines), Gantt charts and a neural network. Wiring diagrams are left out because they are Year 11 mechatronics and not examined.
+- Wording follows the HSC style ("Draw...", "Create...", "Redraw..."); each question has its own scenario and one-mark-per-line criteria that the AI marker reads from the Excalidraw scene plus PNG.
+- Every symbol can be drawn with the exam toolbar (rectangle, diamond, circle, arrow, line, pencil, text, eraser). Flowchart parallelograms may be drawn with the line tool or as a rectangle labelled Get/Display; the criteria say so.
+- Stimulus figures are inline SVG built with the helpers at the top of `bank19.js` (`sv`, `cls`, `screen`, `tnode`, `fT/fP/fIO/fD` and so on). Inline SVG reaches the marker as SOURCE DIAGRAM DATA.
+- Sample answers are drawn too: `drf()` sets `it.fig`, and `modelHTML(it)` in `helpers.js` puts the picture before the written model in the review page (`widgets.js`), retry (`retry.js`) and My mistakes (`pages2.js`).
+- Tested with the local Excalidraw build: all 15 questions mount the drawing tool; review pages show the drawn answers. `tests/check_banks.js` and the eight UI suites pass.

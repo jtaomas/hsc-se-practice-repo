@@ -98,7 +98,7 @@ function rtRestore(){
   rtAfter();window.scrollTo(0,y);
 }
 function rtRefresh(){var p=$('#rtp');if(p&&CUR.b&&CUR.rt)p.innerHTML=rtPanelHTML(CUR.b,CUR.n,CUR.rt.i)}
-function rtSample(it){return QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='py'||it.t==='ps'||it.t==='sq'?'<pre>'+esc(it.model)+'</pre>':'<div>'+it.model+'</div>'}
+function rtSample(it){return QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='py'||it.t==='ps'||it.t==='sq'?'<pre>'+esc(it.model)+'</pre>':modelHTML(it)}
 function rtPanelHTML(b,n,i){
   var it=b.qs[n-1].it[i],k=n+'.'+i,key=rtKey(b,n,i),s=score(b,n,i),r=rtCurrent(b,n,i),last=rtRes(b,n,i),run=RTRUN[key];
   var h='<div class="aib rtp"><p><b>Retry this part.</b> Answer it again without the marking guide, then check your answer. Your exam mark ('+s.g+' / '+s.m+') does not change.</p>'+

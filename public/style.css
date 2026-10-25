@@ -1502,3 +1502,6 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .bklist{display:flex;flex-direction:column;gap:10px;margin:14px 0 16px}
 .bklist .aib{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0;padding:12px 16px}
 .bklist .aib .nb{margin:0}
+/* drawn sample answers for drawing questions (bank 19) */
+.dgmfig{margin:6px 0 10px;overflow-x:auto;background:#fff;border:1px solid #c4c4c4;padding:8px}
+.dgmfig svg,.fig svg.dgm{max-width:100%;height:auto;display:block}

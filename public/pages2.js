@@ -101,7 +101,7 @@ function ansPreview(m){
   }else{
     h+='<p class="gh"><b>Your answer</b></p>'+renderAns(a,false);
   }
-  h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?'<div>'+it.model+'</div>':'<pre>'+esc(it.model)+'</pre>')+'</details>';
+  h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?modelHTML(it):'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
 /* My mistakes: a vertical list of every part that lost marks (left) and the selected one in the exam's own style (right). */

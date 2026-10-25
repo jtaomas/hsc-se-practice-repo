@@ -308,7 +308,8 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
   {
     const c=client(),{b,bs}=paper(c,[written()]),other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
     const app={};c.$=selector=>selector==='#app'?app:null;c.location.hash='#/1/q/1';c.applyTheme=()=>{};c.xdCleanup=()=>{};c.tick=()=>{};c.window.scrollTo=()=>{};
-    c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,b,'route renders with exam banner');
+    c.render();assert(app.innerHTML.includes('You are in an exam'),'the student is warned first');assert(app.innerHTML.includes('Continue anyway'));
+    c.EXAMOK='2';c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,b,'route renders with exam banner after Continue anyway');
     bs.done=false;bs.mode='practice';bs.pq={1:1};assert.equal(c.pqShown(b,1),true);assert(c.pqPanelHTML(b,1).includes('pq'));
   }
   // Re-mark system: individual answers, question batches, and entire papers invalidate caches and redispatch.

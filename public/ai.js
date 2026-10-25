@@ -47,14 +47,14 @@ function aiStore(bs,k,it,stamp,r){
   bs.ai[k]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};
   delete bs.aiErr[k];
 }
-var AIRUN={},AIQ={},AIWORK={active:0,queue:[]};
+var AI_CONCURRENCY=10,AIRUN={},AIQ={},AIWORK={active:0,queue:[]};
 function aiqKey(b,n){return b.id+'/'+n}
 function aiQuestionStamp(b,n){return JSON.stringify(b.qs[n-1].it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,n,i)}))}
 function aiContext(b,n){var bs=BS(b.id);return {state:S,paper:bs,token:S.tok||'',owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,mode:bs.mode||'',start:String(bs.start),attempt:String(bs.start)+'/'+String(bs.doneAt),question:n||0,stamp:n?aiQuestionStamp(b,n):aiPaperStamp(b)}}
 function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&(run.paper.mode||'')===run.mode&&(run.question?String(run.paper.start)===run.start:String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt)&&(run.question?aiQuestionStamp(b,run.question):aiPaperStamp(b))===run.stamp}
 function aiQuestionRun(b,n){var run=AIQ[aiqKey(b,n)];return aiRunCurrent(b,run)?run:null}
 function aiUnlocked(){return typeof examLock!=='function'||!examLock()}
-/* Practice and whole-paper work share the same three-request ceiling. Queued
+/* Practice and whole-paper work share the same ten-request ceiling. Queued
    requests recheck their context before they can send any student work. */
 function aiDispatch(payload,token,current){
   return new Promise(function(resolve,reject){
@@ -62,13 +62,17 @@ function aiDispatch(payload,token,current){
   });
 }
 function aiDrain(){
-  while(AIWORK.active<3&&AIWORK.queue.length){
+  while(AIWORK.active<AI_CONCURRENCY&&AIWORK.queue.length){
     (function(job){
       if(!job.current()||!aiUnlocked()){job.resolve(null);return}
       AIWORK.active++;
       Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
     })(AIWORK.queue.shift());
   }
+}
+function aiWorkers(next,count){
+  var workers=[];for(var i=0;i<Math.min(AI_CONCURRENCY,count);i++)workers.push(next());
+  return Promise.all(workers);
 }
 function runAI(b,onProg){
   var bs=BS(b.id),calls=aiTodo(b).filter(function(t){return !bs.aiErr[t[2]]});
@@ -87,12 +91,16 @@ function runAI(b,onProg){
     return prepared.then(function(){
       if(!current()||aiRecord(b,t[0],t[1])||bs.aiErr[t[2]])return null;
       return t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):payload;
-    }).then(function(p){return p&&current()?aiDispatch(p,run.token,current):null}).then(function(r){
+    }).then(function(p){
+      // Set fatal before dispatch frees its slot, so this batch's queued work
+      // cannot start; current() still permits already-sent successes to save.
+      return p&&!fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()}).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
+    }).then(function(r){
       if(!r||!current()||stamp!==aiStamp(b,t[0],t[1]))return;
       aiStore(bs,t[2],t[3],stamp,r);
     }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(current()){run.done=done;save(b.id);progress()}return next()});
   }
-  run.promise=Promise.all([next(),next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
+  run.promise=aiWorkers(next,calls.length).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
   return run.promise;
 }
 /* Practice marks stay bound to this question, account and attempt. Completing
@@ -111,11 +119,13 @@ function runAIQuestion(b,n){
     if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
     var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
     var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
-    return prepared.then(function(p){return current()?aiDispatch(p,run.token,current):null}).then(function(r){
+    return prepared.then(function(p){
+      return !fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()}).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
+    }).then(function(r){
       if(r&&current()&&stamp===aiStamp(b,t[0],t[1]))aiStore(bs,t[2],t[3],stamp,r);
     }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){run.done++;if(current()){save(b.id);progress()}return next()});
   }
-  run.promise=Promise.all([next(),next(),next()]).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
+  run.promise=aiWorkers(next,calls.length).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
   return run.promise;
 }
 function aiBlock(b,n,i,it,bs,k,a,sc){

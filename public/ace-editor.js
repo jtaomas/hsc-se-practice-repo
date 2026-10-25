@@ -35,6 +35,7 @@ function aceMount(){
         ta.dispatchEvent(new Event('input',{bubbles:true}));
       });
       holder();
+      if(window.ResizeObserver){var ro=new ResizeObserver(function(){ed.resize()});ro.observe(host)}
       host.dataset.ace='1';host.classList.add('ace-on');
       ACE_ED[k]=ed;
     }).catch(function(){host.dataset.ace=''});

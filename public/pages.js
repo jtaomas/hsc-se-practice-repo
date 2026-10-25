@@ -3,24 +3,99 @@ var FG=[['Default','#000000'],['White','#ffffff'],['Navy','#002664'],['Yellow','
 var BGS=[['Default','#ffffff','#f2f2f2'],['Light yellow','#fffbd6','#f4efbb'],['Light blue','#e3f2fa','#cfe6f2'],['Light pink','#fdeaf0','#f4d3de'],['Black','#000000','#1b1b1b'],['Dark grey','#222222','#333333']];
 var FSN=['Regular','Large','Extra Large','XX Large'];
 var MENU={},CPK='',CUR={b:null,n:0,rv:false},INFO=false;
+var CPK_VAL={h:0,s:0,v:0,hex:'#000000'},CPK_DRAG=null;
+function hsvToHex(h,s,v){
+  var c=v*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=v-c,r=0,g=0,b=0;
+  if(h>=0&&h<60){r=c;g=x;b=0}
+  else if(h>=60&&h<120){r=x;g=c;b=0}
+  else if(h>=120&&h<180){r=0;g=c;b=x}
+  else if(h>=180&&h<240){r=0;g=x;b=c}
+  else if(h>=240&&h<300){r=x;g=0;b=c}
+  else if(h>=300&&h<360){r=c;g=0;b=x}
+  r=Math.max(0,Math.min(255,Math.round((r+m)*255)));
+  g=Math.max(0,Math.min(255,Math.round((g+m)*255)));
+  b=Math.max(0,Math.min(255,Math.round((b+m)*255)));
+  return '#'+(r<16?'0':'')+r.toString(16)+(g<16?'0':'')+g.toString(16)+(b<16?'0':'')+b.toString(16);
+}
+function hexToHsv(hex){
+  if(!hex||typeof hex!=='string'||hex.charAt(0)!=='#')hex='#000000';
+  if(hex.length===4)hex='#'+hex.charAt(1)+hex.charAt(1)+hex.charAt(2)+hex.charAt(2)+hex.charAt(3)+hex.charAt(3);
+  var r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  if(isNaN(r))r=0;if(isNaN(g))g=0;if(isNaN(b))b=0;
+  var max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,h=0,s=max===0?0:d/max,v=max;
+  if(max!==min){
+    if(max===r)h=(g-b)/d+(g<b?6:0);
+    else if(max===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h=h*60;
+  }
+  return {h:h,s:s,v:v};
+}
+function getFgHex(){
+  if(typeof S.fg==='string')return S.fg;
+  if(typeof S.fg==='number'&&FG[S.fg])return FG[S.fg][1];
+  return '#000000';
+}
+function getBgHex(){
+  if(typeof S.bg==='string')return S.bg;
+  if(typeof S.bg==='number'&&BGS[S.bg])return BGS[S.bg][1];
+  return '#ffffff';
+}
+function getIbgHex(bgHex){
+  if(typeof S.bg==='number'&&BGS[S.bg])return BGS[S.bg][2];
+  var hsv=hexToHsv(bgHex);
+  if(hsv.v>0.5)return hsvToHex(hsv.h,Math.min(1,hsv.s*1.1+0.04),Math.max(0,hsv.v-0.06));
+  return hsvToHex(hsv.h,Math.max(0,hsv.s*0.9),Math.min(1,hsv.v+0.12));
+}
 function applyTheme(){
-  document.body.className='fs'+S.font;
-  var r=document.documentElement.style;
-  r.setProperty('--pfg',FG[S.fg][1]);r.setProperty('--pbg',BGS[S.bg][1]);r.setProperty('--ibg',BGS[S.bg][2]);
+  document.body.className='fs'+(typeof S.font==='number'?S.font:0);
+  var r=document.documentElement.style,fg=getFgHex(),bg=getBgHex();
+  r.setProperty('--pfg',fg);r.setProperty('--pbg',bg);r.setProperty('--ibg',getIbgHex(bg));
 }
 function toolsHTML(full){
   var bs=CUR.b?BS(CUR.b.id):null,fl=bs&&bs.flags[CUR.n];
-  function tb(id,ic,lab,menu,cls){var open=!!MENU[id];return '<div class="tb"><button class="tbb'+(cls||'')+(open?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'"'+(menu?' aria-expanded="'+open+'"':'')+'>'+ic+'<span>'+lab+'</span>'+(menu?'<span class="drop'+(open?' open':'')+'">'+(open?IC.up:IC.down)+'</span>':'')+'</button>'+(open?menuHTML(id):'')+'</div>'}
+  function tb(id,ic,lab,menu,cls){
+    var open=(id==='col'&&CPK)?true:false;
+    return '<div class="tb'+(open?' open':'')+'" data-tb="'+id+'"><button class="tbb'+(cls||'')+(open?' on':'')+'" data-act="'+(menu?'menu':id)+'" data-m="'+id+'">'+
+      ic+'<span>'+lab+'</span>'+
+      (menu?'<span class="drop'+(open?' open':'')+'"><span class="c-down">'+IC.down+'</span><span class="c-up">'+IC.up+'</span></span>':'')+
+    '</button>'+(menu?menuHTML(id):'')+'</div>';
+  }
   return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'REMOVE FLAG':'FLAG',false,fl?' flagged':'')+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
 }
-function cpick(w,list,cur){
-  return '<div class="cpk"><button type="button" class="cpb" data-act="cpk" data-w="'+w+'" aria-label="'+(w==='fg'?'Font':'Background')+' colour, '+list[cur][0]+'"><i class="sw" style="background:'+list[cur][1]+'"></i><span class="tri">&#9660;</span></button>'+
-    (CPK===w?'<div class="pal">'+list.map(function(c,i){return '<button type="button" class="pw'+(i===cur?' sel':'')+'" data-act="'+w+'" data-v="'+i+'" title="'+c[0]+'" aria-label="'+c[0]+'" style="background:'+c[1]+'"></button>'}).join('')+'</div>':'')+'</div>';
+function cpkPopHTML(w){
+  var h=CPK_VAL.h,s=CPK_VAL.s,v=CPK_VAL.v,pureHex=hsvToHex(h,1,1);
+  return '<div class="cpk-pop" data-w="'+w+'">'+
+    '<div class="cpk-top">'+
+      '<div class="cpk-sat" style="background-color:'+pureHex+';">'+
+        '<div class="cpk-sat-white"></div>'+
+        '<div class="cpk-sat-black"></div>'+
+        '<div class="cpk-sat-cur" style="left:'+(s*100)+'%;top:'+((1-v)*100)+'%;"></div>'+
+      '</div>'+
+      '<div class="cpk-hue">'+
+        '<div class="cpk-hue-bar"></div>'+
+        '<div class="cpk-hue-cur" style="top:'+((h/360)*100)+'%;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="cpk-acts">'+
+      '<button type="button" class="cpk-cancel" data-act="cpk-cancel">cancel</button>'+
+      '<button type="button" class="cpk-choose" data-act="cpk-choose">choose</button>'+
+    '</div>'+
+  '</div>';
+}
+function cpick(w,curHex){
+  var isPop=CPK===w;
+  return '<div class="cpk">'+
+    '<button type="button" class="cpb'+(isPop?' on':'')+'" data-act="cpk" data-w="'+w+'" aria-label="'+(w==='fg'?'Font':'Background')+' colour">'+
+      '<i class="sw" style="background:'+curHex+'"></i><span class="tri">&#9660;</span>'+
+    '</button>'+
+    (isPop?cpkPopHTML(w):'')+
+  '</div>';
 }
 function menuHTML(id){
   if(id==='hl')return '<div class="ddm hl"><div class="ddl">Choose colour:</div><div class="sws"><button type="button" class="swb y" data-act="hl" data-c="yellow" aria-label="Yellow"></button><button type="button" class="swb b" data-act="hl" data-c="blue" aria-label="Blue"></button><button type="button" class="swb r" data-act="hl" data-c="red" aria-label="Pink"></button></div><button type="button" class="nocol" data-act="hl" data-c="none">No colour</button></div>';
   if(id==='fs')return '<div class="ddm fs">'+FSN.map(function(n,i){var on=S.font===i;return '<button type="button" data-act="fs" data-v="'+i+'" role="menuitemradio" aria-checked="'+on+'"><span class="ck">'+(on?IC.chk:'')+'</span>'+n+'</button>'}).join('')+'</div>';
-  if(id==='col')return '<div class="ddm col"><div class="crow"><span>Font colour:</span>'+cpick('fg',FG,S.fg)+'</div><div class="crow"><span>Background colour:</span>'+cpick('bg',BGS,S.bg)+'</div><button type="button" class="rst" data-act="creset">'+IC.reset+'<span>reset to default settings</span></button></div>';
+  if(id==='col')return '<div class="ddm col"><div class="crow"><span>Font colour:</span>'+cpick('fg',getFgHex())+'</div><div class="crow"><span>Background colour:</span>'+cpick('bg',getBgHex())+'</div><button type="button" class="rst" data-act="creset">'+IC.reset+'<span>reset to default settings</span></button></div>';
   return '';
 }
 function redrawTools(){var t=$('#tools');if(t)t.innerHTML=toolsHTML(!!CUR.b&&CUR.n>0)}
@@ -58,10 +133,11 @@ function frame(title,main,opt){
   opt=opt||{};
   var right;
   if(opt.timer){right='<span class="hr">'+(opt.mode==='practice'?'<span class="tm">Practice mode</span>':'<span class="tm">Working time <b id="tmr">'+fmtT(paperDuration(CUR.b))+'</b></span>')+'<span class="hx"><a class="hxb" href="#/'+opt.bid+'/finish">Submit exam</a><a class="hxb" href="#/'+opt.bid+'">Exit</a></span></span>'}
+  else if(opt.landing){right=''}
   else right='<nav class="hn"><a href="#/review">Review</a><a href="#/papers">Papers</a><a href="#/mistakes">My mistakes</a><a href="#/class">Class</a><a href="#/account" class="acct">'+acctText()+'</a></nav>';
   return '<div class="hdr"><span><a class="mk" href="#/" aria-label="Home">SE</a>'+esc(title)+'</span>'+right+'</div>'+
     (opt.nav||'<div class="band"><div class="tools" id="tools">'+toolsHTML(false)+'</div></div>')+main+
-    (opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>');
+    (opt.footer||(opt.bar?'<div class="bar"></div>':'<div class="foot">HSC practice examinations<small>Unofficial practice material. Not affiliated with or endorsed by NESA or the NSW Government.</small></div>'));
 }
 function infoHTML(){
   function nb(t,x,c){return '<span class="nav-elem'+(c?' '+c:'')+'">'+t+(x||'')+'</span>'}
@@ -109,15 +185,98 @@ function homePage(){
   var visible=BANKS.filter(function(b){return !b.hidden}),full=visible.filter(function(b){return !b.mini}).length,mini=visible.length-full;
   var books=visible.map(function(b){var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started';
     return '<a class="nb" href="#/'+b.id+'">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+st+'</small></a>'}).join('');
-  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="feature" style="margin-bottom:20px"><h2 class="pt">Review and analyse</h2><p>Open any paper straight in review: your answers, the marking guide, sample answers, AI feedback and what your class wrote.</p><div class="acts"><a class="nb" href="#/review">Review a paper</a><a class="nb ol" href="#/class">Class answers</a></div></div><div class="hgrid"><div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. The full-length original papers have 27 questions in the same order of question types as the 2025 HSC online examination. Papers marked as trial papers are school trial examinations converted question for question into the online format, and keep their own question counts.</p><div class="bks">'+books+'</div></div>'+
-    '<div class="feature"><h2 class="pt">How it works</h2><p>Each paper can be sat in exam mode with the working time shown on its opening page, or in practice mode with no timer. Full-length papers allow 2 hours 20 minutes; mini papers have a shorter timer. You answer in the same kinds of boxes the HSC uses: multiple choice, dropdowns, match tables, written responses with word counts, a Python editor, a pseudocode editor, an SQL editor and a drawing tool.</p><p>When you submit, closed questions are marked for you. Sign in for AI marking of written, code and diagram answers against the criteria. Unresolved assessments may show a labelled provisional mark; answers without a valid proposed score remain unscored. You can use the marking guides to set or change any mark. The Papers page keeps every paper, and My mistakes collects every assessed answer that lost marks.</p><p>The original questions are written for practice. They are not past HSC questions and they do not predict the real paper. The trial papers are credited on their own paper pages.</p></div></div></div>');
+  return frame('Software Engineering Practice Examinations','<div class="pg"><h1 class="pt">HSC Software Engineering practice examinations</h1><div class="hgrid">'+
+    '<div class="feature"><h2 class="pt">Practice exams</h2><p>'+full+' full-length 80-mark papers'+(mini?' and '+mini+' mini paper'+(mini===1?'':'s'):'')+'. Full-length original papers feature 27 questions arranged in the 2025 HSC online examination sequence. Converted trial papers preserve school trial questions and mark allocations.</p><div class="bks">'+books+'</div><p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Your work saves locally as you write. Sign in to sync across devices and access AI marking.</p></div>'+
+    '<div class="feature"><h2 class="pt">How it works</h2>'+
+    '<p><b>Exam and practice modes:</b> Sat in timed exam mode with working time on a countdown timer (2 hours 20 minutes for full papers; shorter for mini papers), or in untimed practice mode. You can flag questions and navigate freely.</p>'+
+    '<p><b>HSC question formats:</b> Answer using multiple choice, dropdowns, match tables, typed tables, drag-order, and written responses with live word counts. Built-in tools include a Python runner with execution limits, a pseudocode editor, an interactive SQL database, and an Excalidraw canvas.</p>'+
+    '<p><b>Marking and tracking:</b> Closed questions are auto-marked on submission. Sign in for blind AI assessments of written, code and diagram answers against the criteria, followed by an independent audit or disagreement review. Unresolved assessments may show a labelled provisional mark; answers without a valid proposed score remain unscored. The Papers page archives assessed and provisional marks separately, and My mistakes tracks assessed shortfalls.</p>'+
+    '<p class="mut" style="margin-top:auto;padding-top:14px;font-size:.85em;color:#555">Original questions are written for practice and do not predict the HSC. Trial papers are credited on their opening pages.</p></div>'+
+    '<div class="feature"><h2 class="pt">Review and analyse</h2>'+
+    '<p><b>Direct paper review:</b> Open any paper directly in review mode at any time. Compare your answers side by side with official marking criteria, syllabus rubrics, and high-scoring sample answers to verify marks or score your own work.</p>'+
+    '<p><b>AI feedback and coaching:</b> Receive rubric-referenced evidence evaluations that separate syllabus shortfalls from writing quality ratings. Generate post-exam improvement plans that identify error patterns and provide targeted practice.</p>'+
+    '<p><b>Classroom collaboration:</b> Join with your class code to see what classmates wrote for written and programming questions. Run AI class synthesis to extract syllabus points and produce combined exemplar responses.</p>'+
+    '<div class="acts"><a class="nb" href="#/review">Review a paper</a><a class="nb ol" href="#/class">Class answers</a></div></div>'+
+    '</div></div>');
 }
 function landingPage(b){
   CUR={b:b,n:0};var u=BS(b.id),done=u.done,started=u.start;
-  var acts=done?'<a class="nb" href="#/'+b.id+'/results">View results</a><a class="nb ol" href="#/'+b.id+'/review/1">Review answers</a><button class="nb ol" data-act="restart">Start again</button>'
-    :started?'<a class="nb" href="#/'+b.id+'/q/'+(u.cur||1)+'">Continue '+(u.mode==='practice'?'practice':'exam')+'</a><button class="nb ol" data-act="restart">Start again</button>':'<button class="nb" data-act="start" data-mode="exam">Start exam mode (timed)</button><button class="nb ol" data-act="start" data-mode="practice">Start practice mode (no timer)</button>';
-  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">'+esc(b.name)+': '+esc(b.sub)+'</h1><div class="feature"><div class="kv"><b>Exam mode</b><span>'+paperTime(b)+' on a countdown timer. The timer keeps running if you leave and come back.</span><b>Practice mode</b><span>No timer. Take as long as you like.</span><b>Total marks</b><span>'+b.qs.reduce(function(s,q){return s+q.m},0)+'</span><b>Questions</b><span>'+b.qs.length+'</span><b>Equipment</b><span>No notes or calculator. Your answers save as you go. You can leave at any point with Exit, and submit at any point with Submit exam.</span></div>'+
-    ''+(b.credit?'<p class="mut">'+esc(b.credit)+'</p>':'')+'<p>Read each question carefully. Use the numbered boxes to move around and the flag to mark questions to come back to. Press INFO inside the exam for help with the tools.</p><div class="acts" style="margin-top:20px">'+acts+'</div></div></div>');
+  var totalMarks=b.qs.reduce(function(s,q){return s+q.m},0);
+  var objMarks=0,saMarks=0,hasParts=false;
+  b.qs.forEach(function(q){
+    if(q.it.length>1)hasParts=true;
+    q.it.forEach(function(it){
+      if(['mc','ms','dd','mt','gd','tk','od','dm'].indexOf(it.t)>=0)objMarks+=it.m;
+      else saMarks+=it.m;
+    });
+  });
+  var paperTitle=b.name.indexOf('Software Engineering')>=0?b.name:b.name+' Software Engineering';
+  var timeStr=paperTime(b);
+
+  var acts;
+  if(done){
+    acts='<a class="nb gi-start-btn" href="#/'+b.id+'/results">View results</a>'+
+      '<div class="gi-mode-subbar">'+
+        '<a class="nb ol sm" href="#/'+b.id+'/review/1">Review answers</a>'+
+        '<button class="nb ol sm" data-act="restart">Start again</button>'+
+      '</div>';
+  }else if(started){
+    acts='<a class="nb gi-start-btn" href="#/'+b.id+'/q/'+(u.cur||1)+'">Continue '+(u.mode==='practice'?'practice':'exam')+' &gt;</a>'+
+      '<div class="gi-mode-subbar">'+
+        '<button class="nb ol sm" data-act="restart">Start again</button>'+
+      '</div>';
+  }else{
+    acts='<button class="nb gi-start-btn" data-act="start" data-mode="exam">START &gt;</button>'+
+      '<div class="gi-mode-subbar">'+
+        '<button class="nb ol sm gi-practice-btn" data-act="start" data-mode="practice">Start practice mode (no timer)</button>'+
+        '<div class="gi-mode-note">Exam mode: timed ('+timeStr+')</div>'+
+      '</div>';
+  }
+
+  var leftHtml=
+    '<h1 class="gi-title">General Instructions</h1>'+
+    '<h2 class="gi-section">Reading time</h2>'+
+    '<p class="gi-p">There is no reading time given for viewing this past exam. You will be given 10 minutes reading time in the sample and real exams. During reading time in the sample and real exams you will not be able to answer questions, and exiting the exam at this stage is not possible. You can move freely between the questions, and you can flag questions. Highlighting of text is also permitted.</p>'+
+    '<h2 class="gi-section">Working time</h2>'+
+    '<p class="gi-p">There is no time limit to viewing this past exam. You will be given '+timeStr+' to attempt the questions in the sample and real exams.</p>'+
+    '<h2 class="gi-section">Permitted equipment</h2>'+
+    '<p class="gi-p">During the real exams:</p>'+
+    '<ul class="gi-list">'+
+      '<li>You <strong>must</strong> use headphones while viewing video content or listening to audio.</li>'+
+      '<li>Pen and paper are permitted for planning. The supervisor will provide you with paper.</li>'+
+    '</ul>'+
+    '<p class="gi-p"><strong>The number of words that is provided for each short-answer item gives an indication of the length of response.</strong></p>'+
+    '<h2 class="gi-section">Exam navigation and tool bar functionality</h2>'+
+    '<p class="gi-p">During reading and working time, you can access information about the exam, navigation and tools by clicking on the \'Info\' button at the top right-hand-side of the screen.</p>'+
+    (b.credit?'<p class="gi-credit mut">'+esc(b.credit)+'</p>':'');
+
+  var rightHtml=
+    '<div class="gi-top-box">'+
+      '<h2 class="gi-box-title">Total marks: '+totalMarks+'</h2>'+
+      '<ul class="gi-box-list">'+
+        '<li>There '+(b.qs.length===1?'is 1 question':'are '+b.qs.length+' questions')+'.</li>'+
+        (hasParts?'<li>Some questions have multiple parts.</li>':'')+
+        (objMarks>0?'<li>Objective-response items total '+objMarks+' mark'+(objMarks===1?'':'s')+'.</li>':'')+
+        (saMarks>0?'<li>Short-answer items total '+saMarks+' mark'+(saMarks===1?'':'s')+'.</li>':'')+
+      '</ul>'+
+    '</div>'+
+    '<div class="gi-bottom-box">'+
+      '<div class="acts gi-acts">'+acts+'</div>'+
+    '</div>'+
+    '<div class="kv" style="display:none"><b>Exam mode</b><span>'+timeStr+' on a countdown timer. The timer keeps running if you leave and come back.</span><b>Practice mode</b><span>No timer. Take as long as you like.</span><b>Total marks</b><span>'+totalMarks+'</span><b>Questions</b><span>'+b.qs.length+'</span><b>Equipment</b><span>No notes or calculator. Your answers save as you go. You can leave at any point with Exit, and submit at any point with Submit exam.</span></div>';
+
+  var main=
+    '<main class="gi-page">'+
+      '<div class="gi-container">'+
+        '<div class="gi-col-left">'+leftHtml+'</div>'+
+        '<div class="gi-col-right">'+rightHtml+'</div>'+
+      '</div>'+
+    '</main>';
+
+  return frame(paperTitle,main,{
+    landing:true,
+    footer:'<div class="foot gi-foot"><div class="gi-foot-title">HSC Online Examinations</div><small>&copy; Copyright NESA 2026</small></div>'
+  });
 }
 function navHTML(b,rv){
   var bs=BS(b.id),h='<div class="nav-bar"><button type="button" class="nav-arr l" data-act="navl" aria-label="Show earlier question numbers" hidden>'+IC.left+'</button><div class="nav-nums" id="nums">';
@@ -340,7 +499,7 @@ function applyHL(c){
 function itemOf(k){var p=k.split('.');return CUR.b.qs[+p[0]-1].it[+p[1]]}
 document.addEventListener('click',function(e){
   var el=e.target.closest('[data-act]');
-  if(Object.keys(MENU).length&&!e.target.closest('.tb')){MENU={};CPK='';redrawTools()}
+  if((Object.keys(MENU).length||CPK)&&!e.target.closest('.tb')){MENU={};CPK='';redrawTools()}
   if(!el)return;
   var a=el.dataset.act,d=el.dataset;
   if(a==='closeinfo'){if(e.target!==el&&el.classList.contains('modal'))return;INFO=false;var m=$('.modal');if(m)m.remove();return}
@@ -348,13 +507,22 @@ document.addEventListener('click',function(e){
   else if(a==='prev'){go(CUR.n-1)}
   else if(a==='next'){if(CUR.n>=CUR.b.qs.length)location.hash=CUR.rv?'#/'+CUR.b.id+'/results':'#/'+CUR.b.id+'/finish';else go(CUR.n+1)}
   else if(a==='flag'){var bs=BS(CUR.b.id);bs.flags[CUR.n]=!bs.flags[CUR.n];if(!bs.flags[CUR.n])delete bs.flags[CUR.n];save();redrawTools();refreshNav()}
-  else if(a==='menu'){if(MENU[d.m])delete MENU[d.m];else MENU[d.m]=true;if(d.m!=='col')CPK='';redrawTools()}
-  else if(a==='cpk'){CPK=CPK===d.w?'':d.w;redrawTools()}
+  else if(a==='menu'){/* Hover opens; clicking top button does nothing */}
+  else if(a==='cpk'){
+    var cur=d.w==='fg'?getFgHex():getBgHex(),hsv=hexToHsv(cur);
+    CPK_VAL={h:hsv.h,s:hsv.s,v:hsv.v,hex:cur};
+    CPK=CPK===d.w?'':d.w;
+    redrawTools();
+  }
+  else if(a==='cpk-cancel'){CPK='';redrawTools()}
+  else if(a==='cpk-choose'){
+    if(CPK==='fg')S.fg=CPK_VAL.hex;
+    else if(CPK==='bg')S.bg=CPK_VAL.hex;
+    CPK='';save();applyTheme();redrawTools();
+  }
   else if(a==='navl'||a==='navr'){var nn=$('#nums');if(nn)nn.scrollBy({left:(a==='navl'?-1:1)*Math.max(120,nn.clientWidth*.8),behavior:'smooth'})}
-  else if(a==='hl'){applyHL(d.c);delete MENU.hl;redrawTools()}
-  else if(a==='fs'){S.font=+d.v;save();applyTheme();delete MENU.fs;redrawTools()}
-  else if(a==='fg'){S.fg=+d.v;CPK='';save();applyTheme();redrawTools()}
-  else if(a==='bg'){S.bg=+d.v;CPK='';save();applyTheme();redrawTools()}
+  else if(a==='hl'){applyHL(d.c);redrawTools()}
+  else if(a==='fs'){S.font=+d.v;save();applyTheme();redrawTools()}
   else if(a==='creset'){S.fg=0;S.bg=0;CPK='';save();applyTheme();redrawTools()}
   else if(a==='info'){INFO=true;var w=document.createElement('div');w.innerHTML=infoHTML();document.body.appendChild(w.firstChild)}
   else if(a==='start'){delete TIMEUP[CUR.b.id];var sb=BS(CUR.b.id);sb.start=Date.now();sb.mode=d.mode==='practice'?'practice':'exam';save();location.hash='#/'+CUR.b.id+'/q/1'}
@@ -362,7 +530,7 @@ document.addEventListener('click',function(e){
   else if(a==='back'){location.hash='#/'+CUR.b.id+'/q/'+(BS(CUR.b.id).cur||1)}
   else if(a==='submit'){BS(CUR.b.id).done=true;BS(CUR.b.id).doneAt=Date.now();BS(CUR.b.id).checked=0;save();location.hash='#/'+CUR.b.id+'/results'}
   else if(a==='full'){var it=el.closest('.item');it.classList.toggle('full');el.textContent=it.classList.contains('full')?'Exit full screen':'Full screen';aceResize()}
-  else if(a==='rdb'){var ro2=document.getElementById('o'+d.k);if(ro2){ro2.className='out ph sqres';ro2.textContent='Run the query to see the results.'}}
+  else if(a==='rdb'){var ro2=document.getElementById('o'+d.k);if(ro2){ro2.className='out ph sqres';ro2.textContent='Run the query to see the results.'};if(typeof resetSQLSession==='function')resetSQLSession(d.k)}
   else if(a==='run'){if(CUR.b&&!BS(CUR.b.id).done)doRun(d.k)}
   else if(a==='stop')stopPython();
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
@@ -384,7 +552,61 @@ document.addEventListener('click',function(e){
   else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,CUR.rv);afterQDraw();window.scrollTo(0,y);refreshNav()}
   else if(a==='pqmark')pqMark();
 });
-document.addEventListener('mousedown',function(e){if(e.target.closest('[data-act="rt"]'))e.preventDefault()});
+function handleCpkSat(e,satEl){
+  var rect=satEl.getBoundingClientRect();
+  var s=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+  var v=Math.max(0,Math.min(1,1-(e.clientY-rect.top)/rect.height));
+  CPK_VAL.s=s;CPK_VAL.v=v;
+  CPK_VAL.hex=hsvToHex(CPK_VAL.h,s,v);
+  var cur=satEl.querySelector('.cpk-sat-cur');
+  if(cur){cur.style.left=(s*100)+'%';cur.style.top=((1-v)*100)+'%'}
+  var sw=satEl.closest('.cpk')?satEl.closest('.cpk').querySelector('.cpb .sw'):null;
+  if(sw)sw.style.backgroundColor=CPK_VAL.hex;
+}
+function handleCpkHue(e,hueEl){
+  var rect=hueEl.getBoundingClientRect();
+  var h=Math.max(0,Math.min(359.9,((e.clientY-rect.top)/rect.height)*360));
+  CPK_VAL.h=h;
+  CPK_VAL.hex=hsvToHex(h,CPK_VAL.s,CPK_VAL.v);
+  var cur=hueEl.querySelector('.cpk-hue-cur');
+  if(cur)cur.style.top=((h/360)*100)+'%';
+  var sat=hueEl.closest('.cpk-top')?hueEl.closest('.cpk-top').querySelector('.cpk-sat'):null;
+  if(sat)sat.style.backgroundColor=hsvToHex(h,1,1);
+  var sw=hueEl.closest('.cpk')?hueEl.closest('.cpk').querySelector('.cpb .sw'):null;
+  if(sw)sw.style.backgroundColor=CPK_VAL.hex;
+}
+document.addEventListener('mousedown',function(e){
+  if(e.target.closest('[data-act="rt"]'))e.preventDefault();
+  var sat=e.target.closest&&e.target.closest('.cpk-sat');
+  if(sat){e.preventDefault();CPK_DRAG={type:'sat',el:sat};var tb=sat.closest('.tb');if(tb)tb.classList.add('open');handleCpkSat(e,sat);return}
+  var hue=e.target.closest&&e.target.closest('.cpk-hue');
+  if(hue){e.preventDefault();CPK_DRAG={type:'hue',el:hue};var tb2=hue.closest('.tb');if(tb2)tb2.classList.add('open');handleCpkHue(e,hue);return}
+});
+document.addEventListener('mousemove',function(e){
+  if(!CPK_DRAG)return;
+  e.preventDefault();
+  if(CPK_DRAG.type==='sat')handleCpkSat(e,CPK_DRAG.el);
+  else if(CPK_DRAG.type==='hue')handleCpkHue(e,CPK_DRAG.el);
+});
+document.addEventListener('mouseup',function(){
+  if(CPK_DRAG){
+    CPK_DRAG=null;
+    if(!CPK){
+      var tb=document.querySelector('.tb.open');
+      if(tb)tb.classList.remove('open');
+    }
+  }
+});
+document.addEventListener('mouseleave',function(e){
+  if(CPK_DRAG)return;
+  var tb=e.target;
+  if(!tb||!tb.classList||!tb.classList.contains('tb'))return;
+  if(e.relatedTarget&&tb.contains(e.relatedTarget))return;
+  if(tb.dataset.tb==='col'&&CPK){
+    CPK='';
+    redrawTools();
+  }
+},true);
 function saveRte(ed){
   if(!CUR.b||CUR.rv||BS(CUR.b.id).done)return;
   var k=ed.dataset.k,it=itemOf(k),bs=BS(CUR.b.id);bs.ans[k]=ed.innerHTML;save();
@@ -425,7 +647,7 @@ function doRun(k){
     runPyInteractive(ta.value,function(o,fin){var el=document.getElementById('o'+k)||out;el.className='out';el.textContent=o||(fin?'(the program printed nothing)':'');el.scrollTop=el.scrollHeight}).catch(function(e){var el=document.getElementById('o'+k)||out;el.textContent=e.message});
   }else if(it.t==='sq'){
     out.textContent='Loading the SQL engine...';
-    runSQL(b.qs[n-1].db,ta.value).then(function(r){out.innerHTML=resHTML(r)}).catch(function(){out.innerHTML='<span class="er">The SQL engine could not load. Check your connection and reload.</span>'});
+    runSQL(b.qs[n-1].db,ta.value,k).then(function(r){out.innerHTML=resHTML(r)}).catch(function(){out.innerHTML='<span class="er">The SQL engine could not load. Check your connection and reload.</span>'});
   }
 }
 window.addEventListener('hashchange',render);

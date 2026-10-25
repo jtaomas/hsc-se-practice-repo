@@ -1,33 +1,81 @@
 /* ---------- engines (loaded on first use) ---------- */
 var SQLSRC=window.SQLSRC||'https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-asm.js';
-var SQLP=null;
+var SQLP=null,SQL_SESSIONS={};
 function loadScript(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('Could not load '+src))};document.head.appendChild(s)})}
 function loadSQL(){if(!SQLP)SQLP=(typeof initSqlJs==='function'?Promise.resolve():loadScript(SQLSRC)).then(function(){return initSqlJs()}).catch(function(e){SQLP=null;throw e});return SQLP}
-function sqlType(v){return typeof v==='number'?(v%1?'REAL':'INTEGER'):'TEXT'}
+function sqlType(rows,ci){
+  for(var r=0;r<rows.length;r++){
+    var v=rows[r][ci];
+    if(typeof v==='number')return (v%1)?'REAL':'INTEGER';
+  }
+  return 'TEXT';
+}
 function mkDB(SQL,db){
   var d=new SQL.Database();
   Object.keys(db).forEach(function(n){var t=db[n];
-    d.run('CREATE TABLE '+n+'('+t.c.map(function(c,i){return c+' '+sqlType(t.r[0][i])}).join(',')+')');
-    t.r.forEach(function(r){d.run('INSERT INTO '+n+' VALUES('+r.map(function(){return '?'}).join(',')+')',r)});
+    d.run('CREATE TABLE "'+n+'"('+t.c.map(function(c,i){return '"'+c+'" '+sqlType(t.r,i)}).join(',')+')');
+    t.r.forEach(function(r){d.run('INSERT INTO "'+n+'" VALUES('+r.map(function(){return '?'}).join(',')+')',r)});
   });
   return d;
 }
+function resetSQLSession(k){
+  if(k&&SQL_SESSIONS[k]){
+    try{SQL_SESSIONS[k].close()}catch(e){}
+    delete SQL_SESSIONS[k];
+  }
+}
 function translate(raw){
-  var s=raw.replace(/[‘’]/g,"'").trim().replace(/;+\s*$/,'');
+  var s=raw.replace(/[‘’]/g,"'").replace(/[“”]/g,'"').trim().replace(/;+\s*$/,'');
   s=s.replace(/\bDOES\s+NOT\s+CONTAIN\s+('(?:[^']|'')*')/gi,function(m,q){return "NOT LIKE '%"+q.slice(1,-1)+"%'"});
   s=s.replace(/\bCONTAINS?\s+('(?:[^']|'')*')/gi,function(m,q){return "LIKE '%"+q.slice(1,-1)+"%'"});
+  s=s.replace(/\bSTARTS\s+WITH\s+('(?:[^']|'')*')/gi,function(m,q){return "LIKE '"+q.slice(1,-1)+"%'"});
+  s=s.replace(/\bENDS\s+WITH\s+('(?:[^']|'')*')/gi,function(m,q){return "LIKE '%"+q.slice(1,-1)+"'"});
+  s=s.replace(/\bDOES\s+NOT\s+START\s+WITH\s+('(?:[^']|'')*')/gi,function(m,q){return "NOT LIKE '"+q.slice(1,-1)+"%'"});
+  s=s.replace(/\bDOES\s+NOT\s+END\s+WITH\s+('(?:[^']|'')*')/gi,function(m,q){return "NOT LIKE '%"+q.slice(1,-1)+"'"});
   return s.split(/('(?:[^']|'')*')/).map(function(seg,i){
     if(i%2)return seg;
-    return seg.replace(/\bNOT\s+EQUAL\s+TO\b/gi,'<>').replace(/\bGREATER\s+THAN\s+OR\s+EQUAL\s+TO\b/gi,'>=').replace(/\bLESS\s+THAN\s+OR\s+EQUAL\s+TO\b/gi,'<=').replace(/\bGREATER\s+THAN\b/gi,'>').replace(/\bLESS\s+THAN\b/gi,'<').replace(/\bEQUALS\b/gi,'=');
+    return seg.replace(/\bNOT\s+EQUALS?\s*(?:TO)?\b/gi,'<>')
+              .replace(/\bGREATER\s+THAN\s+OR\s+EQUAL\s*(?:TO)?\b/gi,'>=')
+              .replace(/\bLESS\s+THAN\s+OR\s+EQUAL\s*(?:TO)?\b/gi,'<=')
+              .replace(/\bGREATER\s+THAN\b/gi,'>')
+              .replace(/\bLESS\s+THAN\b/gi,'<')
+              .replace(/\bEQUALS?\b/gi,'=');
   }).join('');
 }
-function runSQL(db,raw){
+function runSQL(db,raw,k,isCheck){
   return loadSQL().then(function(SQL){
-    var d=mkDB(SQL,db),s=translate(raw);
-    if(!raw.trim())return {error:'Type a query first.'};
-    if(!/^select\b/i.test(s))return {error:'Only SELECT queries are used in this exam.'};
-    try{var r=d.exec(s);d.close();if(!r.length)return {cols:[],rows:[]};return {cols:r[0].columns,rows:r[0].values}}
-    catch(e){return {error:String(e&&e.message||e)}}
+    if(!raw||!raw.trim())return {error:'Type a query first.'};
+    var d, fresh=false;
+    if(k&&!isCheck){
+      if(!SQL_SESSIONS[k])SQL_SESSIONS[k]=mkDB(SQL,db);
+      d=SQL_SESSIONS[k];
+    }else{
+      d=mkDB(SQL,db);
+      fresh=true;
+    }
+    var s=translate(raw);
+    try{
+      var r=d.exec(s);
+      if(fresh)d.close();
+      if(!r.length){
+        var cols=[];
+        if(!fresh){
+          try{
+            var stmt=d.prepare(s);
+            cols=stmt.getColumnNames()||[];
+            stmt.free();
+          }catch(e){}
+        }
+        var mod=0;
+        try{mod=d.getRowsModified()}catch(e){}
+        return {cols:cols,rows:[],modified:mod};
+      }
+      var last=r[r.length-1];
+      return {cols:last.columns,rows:last.values,all:r};
+    }catch(e){
+      if(fresh){try{d.close()}catch(ex){}}
+      return {error:String(e&&e.message||e)};
+    }
   });
 }
 function nv(v){return typeof v==='number'?Math.round(v*10000)/10000:v}
@@ -42,8 +90,19 @@ function sameSQLResult(a,b,it){
 }
 function resHTML(r){
   if(r.error)return '<div class="er">'+esc(r.error)+'</div>';
-  if(!r.cols.length)return 'The query ran and returned no columns.';
-  return '<table><tr>'+r.cols.map(function(c){return '<th>'+esc(c)+'</th>'}).join('')+'</tr>'+r.rows.map(function(row){return '<tr>'+row.map(function(v){return '<td>'+(v===null?'NULL':esc(nv(v)))+'</td>'}).join('')+'</tr>'}).join('')+'</table><div>'+r.rows.length+(r.rows.length===1?' row':' rows')+'</div>';
+  if(!r.cols.length){
+    if(r.modified!=null&&r.modified>0)return '<div class="sql-msg">Query executed successfully ('+r.modified+(r.modified===1?' row affected':' rows affected')+').</div>';
+    return '<div class="sql-msg">Query executed successfully.</div>';
+  }
+  function tblHTML(cols,rows){
+    return '<table><tr>'+cols.map(function(c){return '<th>'+esc(c)+'</th>'}).join('')+'</tr>'+
+      rows.map(function(row){return '<tr>'+row.map(function(v){return '<td>'+(v===null?'NULL':esc(nv(v)))+'</td>'}).join('')+'</tr>'}).join('')+
+      '</table><div>'+rows.length+(rows.length===1?' row':' rows')+'</div>';
+  }
+  if(r.all&&r.all.length>1){
+    return r.all.map(function(item){return tblHTML(item.columns,item.values)}).join('<div style="height:12px"></div>');
+  }
+  return tblHTML(r.cols,r.rows);
 }
 
 /* ---------- plug-in question types (see qtypes.js and AUTHORING.md) ---------- */

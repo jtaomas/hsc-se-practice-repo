@@ -35,9 +35,9 @@ function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return
   }
   {
     const {c,b,bs}=client();bs.ai['1.0'].status='provisional';bs.ai['1.0'].g=1;
-    assert(c.improvementPanel(b).includes('Provisional AI marks and their criterion feedback are excluded'));
+    assert(c.improvementPanel(b).includes('Unconfirmed AI marks and their criterion feedback are excluded'));
     const payload=c.improvementPayload(b);assert.equal(payload.answers[0].markingReference,'a'.repeat(64));assert(!('mark' in payload.answers[0]));assert(!('feedback' in payload.answers[0]));
-    assert(c.improvementReport(b,report()).includes('provisional AI marks and any marks you set yourself are excluded'));
+    assert(c.improvementReport(b,report()).includes('unconfirmed AI marks and any marks you set yourself are excluded'));
   }
   {
     const {c,b,bs}=client();c.fetch=async()=>response({error:'Unavailable'},503);await c.runImprovement(b);assert.equal(bs.improvementError,'Unavailable');assert.equal(bs.improvement,undefined);

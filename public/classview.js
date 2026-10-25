@@ -376,8 +376,11 @@ function cvRmList(b,mode,only){
   b.qs.forEach(function(q,qi){q.it.forEach(function(it,i){
     var k=(qi+1)+'.'+i,a=bs.ans[k];
     if(AUTO[it.t]||!isAns(it,a)||(only&&k!==only))return;
-    if(mode==='missing'){var rec=aiRecord(b,qi+1,i);if(bs.self[k]!=null||(rec&&rec.status!=='needs_review'&&rec.status!=='provisional'))return}
-    out.push({n:qi+1,i:i,k:k,it:it,ans:a});
+    var rec=aiRecord(b,qi+1,i);
+    if(mode==='missing'&&(bs.self[k]!=null||(rec&&rec.status!=='needs_review'&&rec.status!=='provisional')))return;
+    // A part that already has a result is marked afresh (remark:true): without it the server returns its saved
+    // result, so re-marking a provisional or needs-review answer finished instantly with the same outcome.
+    out.push({n:qi+1,i:i,k:k,it:it,ans:a,fresh:!!rec||mode!=='missing'});
   })});
   return out;
 }
@@ -414,6 +417,7 @@ function cvRemark(id,isSystem,bid,mode,only){
   function next(){
     if(idx>=tasks.length||fatal)return Promise.resolve();
     var t=tasks[idx++],stamp=aiStamp(b,t.n,t.i,t.ans),payload=aiPayload(b,t.n,t.i,t.ans);
+    if(t.fresh)payload.remark=true;
     var prepared=t.it.t==='dr'&&typeof xdPNG==='function'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
     return prepared.then(function(p){
       return fatal?null:aiDispatch(p,S.tok,function(){return !fatal&&CV.rm[key]===run},null).catch(function(e){if(e.fatal)fatal=e;throw e});
@@ -458,7 +462,7 @@ function cvProgHTML(id,isSystem){
             var qLabel='Q'+qn+(q.it.length>1?String.fromCharCode(97+pi):'');
             var tName=typeof mkTypeName==='function'?mkTypeName(it):it.t.toUpperCase();
             var pillCls=!s.set||s.src==='provisional'?'pend':s.g===s.m?'ok':'bad';
-            var pillTxt=s.set?(s.src==='provisional'?'Provisional '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
+            var pillTxt=s.set?(s.src==='provisional'?'Unconfirmed '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
             var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
             var rmOne=p.done&&ans&&!AUTO[it.t]&&S.tok?'<div class="cv-rm">'+cvRmBtn(id,isSystem,b.id,'one',k,'Remark',false,rmNow&&rmNow.running)+'</div>':'';
             partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+

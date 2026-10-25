@@ -254,7 +254,7 @@ function itemHTML(b,n,i,rv){
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
 function guideHTML(b,n,i){
   var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),pc=partCls(b,n,i);
-  var h='<div class="guide"><h4>Marking guide <span class="ghr">'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,n,i,'rv'):'')+'<span class="sc'+(pc?' '+pc:'')+'">'+(sc.set?(sc.src==='provisional'?'Provisional: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></span></h4>';
+  var h='<div class="guide"><h4>Marking guide <span class="ghr">'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,n,i,'rv'):'')+'<span class="sc'+(pc?' '+pc:'')+'">'+(sc.set?(sc.src==='provisional'?'Unconfirmed: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></span></h4>';
   if(typeof rtStatusHTML==='function')h+=rtStatusHTML(b,n,i);
   if(AUTO[it.t]&&sc.g<sc.m&&typeof closedCompare==='function')h+='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+(sc.m-sc.g)+' mark'+(sc.m-sc.g===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
   if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);

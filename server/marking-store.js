@@ -219,6 +219,8 @@ function createStore(options) {
     return change(path, job => {
       checkJob(job, digest);
       if (!job || job.state !== 'pending' || job.leaseId !== leaseId) return { write: null, value: false };
+      // A failed re-mark leaves the earlier decision in place rather than losing it.
+      if (previousValid(job.previous)) return { write: { version: 1, inputDigest: digest, state: job.previous.status, finishedAt: now(), result: job.previous }, value: true };
       const failed = { version: 1, inputDigest: digest, state: 'failed', finishedAt: now() }, safe = failureDiagnostics(diagnostics, kind) || failureDiagnostics(job.diagnostics, kind);
       if (safe) failed.diagnostics = safe;
       return { write: failed, value: true };
@@ -231,11 +233,15 @@ function createStore(options) {
     if (!job.result || job.result.status !== job.state) throw error(503, 'marking_storage_invalid', 'The saved marking result cannot be verified.');
     return job.result;
   }
-  async function getOrReserve(sessionId, digest) {
+  function previousValid(result) { return !!result && typeof result === 'object' && !Array.isArray(result) && completedStates.includes(result.status); }
+  // options.replace (an explicit re-mark) reserves a fresh assessment over a completed one, keeping it as
+  // job.previous so a failed or abandoned attempt never loses the earlier decision.
+  async function getOrReserve(sessionId, digest, options) {
+    const replace = !!(options && options.replace);
     const { owner, path } = identity(sessionId, digest), leaseId = crypto.randomBytes(16).toString('hex');
     const probe = await read(path);
     checkJob(probe && probe.data, digest);
-    if (!probe || probe.data.state === 'failed' || (probe.data.state === 'pending' && probe.data.leaseUntil <= now())) {
+    if (!probe || probe.data.state === 'failed' || (probe.data.state === 'pending' && probe.data.leaseUntil <= now()) || (replace && completedStates.includes(probe.data.state))) {
       // Avoid creating unlimited rejected-job records after a quota is exhausted.
       // The later CAS reservation remains authoritative for concurrent requests.
       const date = new Date(now()).toISOString().slice(0, 10), quota = await read(prefix + 'quota/' + date + '.json');
@@ -243,9 +249,11 @@ function createStore(options) {
     }
     const acquired = await change(path, job => {
       checkJob(job, digest);
+      let previous = null;
       if (job && completedStates.includes(job.state)) {
         if (!job.result || job.result.status !== job.state) throw error(503, 'marking_storage_invalid', 'The saved marking result cannot be verified.');
-        return { write: null, value: { state: 'cached', result: job.result } };
+        if (!replace) return { write: null, value: { state: 'cached', result: job.result } };
+        previous = job.result;
       }
       if (job && job.state === 'pending') {
         if (!LEASE.test(job.leaseId || '') || !Number.isSafeInteger(job.leaseUntil)) throw error(503, 'marking_storage_invalid', 'The marking reservation cannot be verified.');
@@ -253,6 +261,9 @@ function createStore(options) {
       }
       const pending = { version: 1, inputDigest: digest, state: 'pending', leaseId, startedAt: now(), leaseUntil: now() + limits.leaseMs };
       if (job && job.diagnostics) pending.diagnostics = failureDiagnostics(job.diagnostics, kind);
+      // An expired re-mark lease still carries the decision it was replacing.
+      if (!previous && job && job.state === 'pending' && previousValid(job.previous)) previous = job.previous;
+      if (previous) pending.previous = previous;
       return { write: pending, value: { state: 'reserved', leaseId } };
     });
     if (acquired.state !== 'reserved') return acquired;

@@ -290,6 +290,7 @@ function navHTML(b,rv){
   for(var n=1;n<=b.qs.length;n++){
     var c='nav-elem'+(n===CUR.n?' cur':'');
     if(rv){var qc=qCls(b,n);if(qc)c+=' '+qc}
+    var ms=typeof aiNavState==='function'?aiNavState(b.id,n):'';if(ms)c+=' '+ms;
     h+='<button class="'+c+'" data-act="go" data-n="'+n+'" aria-label="Question '+n+'">'+n+(!rv&&qAnswered(b,n)?'<span class="an">'+IC.tick+'</span>':'')+(!rv&&bs.flags[n]?'<span class="fl">'+IC.flag+'</span>':'')+'</button>';
   }
   return h+'</div><button type="button" class="nav-arr r" data-act="navr" aria-label="Show later question numbers" hidden>'+IC.right+'</button><div class="tools" id="tools">'+toolsHTML(true)+'</div></div>';
@@ -345,10 +346,10 @@ function totals(b){
     var t=tp[q.tp]||(tp[q.tp]={g:0,m:0,pending:0,provisionalG:0,provisionalM:0,provisionalParts:0});t.g+=g;t.m+=m;t.pending+=p;t.provisionalG+=pg;t.provisionalM+=pm;t.provisionalParts+=pc});
   return {rows:rows,T:T,M:M,P:P,markedM:M-P-provisionalM,provisionalG:provisionalG,provisionalM:provisionalM,provisionalParts:provisionalParts,tp:tp};
 }
-function provisionalMarksText(t){return t.provisionalParts?'Provisional marks: '+esc(t.provisionalG)+' / '+esc(t.provisionalM)+' across '+esc(t.provisionalParts)+' part'+(t.provisionalParts===1?'':'s'):''}
+function provisionalMarksText(t){return t.provisionalParts?'Unconfirmed marks: '+esc(t.provisionalG)+' / '+esc(t.provisionalM)+' across '+esc(t.provisionalParts)+' part'+(t.provisionalParts===1?'':'s'):''}
 function resultsPage(b){
   CUR={b:b,n:0};var r=totals(b),pend=r.rows.filter(function(x){return x.pend}).length;
-  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature">'+(TIMEUP[b.id]?'<p><b>Working time ended, so your exam was submitted automatically.</b></p>':'')+'<div class="big">'+(r.T+r.provisionalG)+' / '+(r.markedM+r.provisionalM)+'</div><p>'+(r.provisionalParts?'Provisional total. Assessed subtotal: '+r.T+' / '+r.markedM+'. '+provisionalMarksText(r)+'. Provisional marks are excluded from the assessed subtotal.':r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
+  var h='<div class="pg"><h1 class="pt">'+esc(b.name)+' results</h1><div class="feature">'+(TIMEUP[b.id]?'<p><b>Working time ended, so your exam was submitted automatically.</b></p>':'')+'<div class="big">'+(r.T+r.provisionalG)+' / '+(r.markedM+r.provisionalM)+'</div><p>'+(r.provisionalParts?'Includes unconfirmed marks. Assessed subtotal: '+r.T+' / '+r.markedM+'. '+provisionalMarksText(r)+'. Unconfirmed marks are excluded from the assessed subtotal.':r.markedM?Math.round(100*r.T/r.markedM)+'% of assessed marks':'No marks assessed yet')+(pend?'. <b>'+r.P+' of '+r.M+' marks remain unscored</b> across '+pend+' question'+(pend>1?'s':'')+'. This total is provisional.':'')+'</p></div>'+aiStatusHTML(b)+'<p class="note">AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p>'+
     '<h2 class="pt">By syllabus topic</h2><table class="res"><tr><th>Topic</th><th>Assessed marks</th><th></th></tr>'+Object.keys(r.tp).map(function(k){var t=r.tp[k],m=t.m-t.pending-t.provisionalM;return '<tr><td>'+esc(k)+'</td><td>'+t.g+' / '+m+(t.pending?' ('+t.pending+' unscored)':'')+(t.provisionalParts?'<br><span class="note">'+provisionalMarksText(t)+'</span>':'')+'</td><td><div class="tbar"><i style="width:'+(m?Math.round(100*t.g/m):0)+'%"></i></div></td></tr>'}).join('')+'</table>'+
     '<h2 class="pt">By question</h2><table class="res"><tr><th>Q</th><th>Topic</th><th>Assessed marks</th><th></th></tr>'+r.rows.map(function(x){var c=x.pend||x.provisionalParts?'pend':qCls(b,x.n)||'pend';return '<tr><td>'+x.n+'</td><td>'+esc(x.tp)+'</td><td>'+(x.markedM?x.g+' / '+x.markedM:x.provisionalParts?'No confirmed mark':'Unscored')+(x.pend?' <span class="pill part">Needs a mark</span>':'')+(x.provisionalParts?'<br><span class="note">'+provisionalMarksText(x)+'</span>':'')+'</td><td><a href="#/'+b.id+'/review/'+x.n+'"><span class="pill '+c+'">Review</span></a></td></tr>'}).join('')+'</table>'+
     (typeof improvementPanel==='function'?improvementPanel(b):'')+
@@ -441,7 +442,7 @@ function pqShown(b,n){var bs=BS(b.id);return aiUnlocked()&&!bs.done&&bs.mode==='
 function pqPanelHTML(b,n){
   var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||!aiUnlocked())return '';
   var shown=pqShown(b,n),run=aiQuestionRun(b,n),open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
-  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answer'+(run.total===1?'':'s')+' processed.</b>'+aiRunBarHTML(run)+'Feedback appears under each part as it finishes. You can keep working while you wait.'
+  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answer'+(run.total===1?'':'s')+' processed.</b>'+aiRunBarHTML(run)+aiActHTML(b,run,aiqKey(b,n))+'Feedback appears under each part as it finishes. You can keep working while you wait.'
     :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
     :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
   if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
@@ -519,10 +520,10 @@ function ensureMarked(b){
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),provisionals=aiProvisionals(b),todo=aiTodo(b).length;
   if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and set your own marks.</div>';
-  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" data-airun="'+esc(b.id)+'"><b role="status">AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b>'+aiRunBarHTML(rn)+' Each answer is assessed against the criteria and appears here as soon as it is done. Some answers may need review; marking can take several minutes.</div>'}
+  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" data-airun="'+esc(b.id)+'"><b role="status">AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b>'+aiRunBarHTML(rn)+aiActHTML(b,rn,b.id)+'<p class="note">Up to ten answers are marked at once; each takes one to four minutes. Results appear as soon as each one is done.</p></div>'}
   if(errs.length)return '<div class="aib bad" id="aib"><b>AI marking did not finish for '+errs.length+' answer'+(errs.length>1?'s':'')+'.</b> '+esc(bs.aiErr[errs[0]])+'<br><button class="nb sm" data-act="airetry" style="margin-top:8px">Try again</button></div>';
   if(todo)return '<div class="aib" id="aib"><b>'+todo+' answer'+(todo>1?'s':'')+' awaiting AI marking.</b> <button class="nb sm" data-act="airetry">Mark with AI</button></div>';
-  if(reviews||provisionals)return '<div class="aib bad" id="aib">'+(reviews?'<b>'+reviews+' answer'+(reviews>1?'s':'')+' need review.</b> No AI mark was awarded for these answers. ':'')+(provisionals?'<b>'+provisionals+' provisional mark'+(provisionals===1?'':'s')+'.</b> These lower-mark fallbacks remain unresolved and are excluded from verified improvement plans and comparisons. ':'')+'Open the questions to review the criteria and set a mark yourself or with a teacher.</div>';
+  if(reviews||provisionals)return '<div class="aib bad" id="aib">'+(reviews?'<b>'+reviews+' answer'+(reviews>1?'s':'')+' could not be marked.</b> The AI could not reach a reliable mark, so none was given. ':'')+(provisionals?'<b>'+provisionals+' unconfirmed mark'+(provisionals===1?'':'s')+'.</b> The two AI markers disagreed and the checker could not settle it, so the lower mark is shown; it may be too low. ':'')+(S.tok?'<button class="nb sm" data-act="paperremark" data-only="unconfirmed" style="margin-top:8px">Mark '+(reviews+provisionals===1?'it':'these '+(reviews+provisionals))+' again</button> ':'')+'Or open the question, check the marking guide and set the mark yourself.</div>';
   return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback. You can change a mark there.</div>';
 }
 function markAndShow(b){
@@ -613,7 +614,7 @@ document.addEventListener('click',function(e){
     var mb=CUR.b;if(mb&&S.tok){
       var bs=BS(mb.id),qn=+d.k.split('.')[0],running=aiRunCurrent(mb,AIRUN[mb.id])||aiQuestionRun(mb,qn);
       if(running)return;
-      delete bs.ai[d.k];delete bs.aiErr[d.k];delete AIRUN[mb.id];delete AIQ[aiqKey(mb,qn)];save(mb.id);
+      aiForce(mb,d.k);delete bs.ai[d.k];delete bs.aiErr[d.k];delete AIRUN[mb.id];delete AIQ[aiqKey(mb,qn)];save(mb.id);
       if(bs.done){markAndShow(mb)}
       else if(bs.mode==='practice'){
         if(!bs.pq)bs.pq={};
@@ -627,7 +628,7 @@ document.addEventListener('click',function(e){
     var qb=CUR.b,qn=+d.n;if(qb&&qn&&S.tok){
       var bs=BS(qb.id),running=aiRunCurrent(qb,AIRUN[qb.id])||aiQuestionRun(qb,qn);
       if(running)return;
-      qb.qs[qn-1].it.forEach(function(it,i){var k=qn+'.'+i;delete bs.ai[k];delete bs.aiErr[k]});
+      qb.qs[qn-1].it.forEach(function(it,i){var k=qn+'.'+i;if(bs.ai[k])aiForce(qb,k);delete bs.ai[k];delete bs.aiErr[k]});
       delete AIRUN[qb.id];delete AIQ[aiqKey(qb,qn)];save(qb.id);
       if(bs.done){markAndShow(qb)}
       else if(bs.mode==='practice'){
@@ -639,11 +640,12 @@ document.addEventListener('click',function(e){
     }
   }
   else if(a==='paperremark'){
-    // data-id comes from the Papers page; results and review use the open paper. data-only="missing" keeps finished marks and marks only what has none.
+    // data-id comes from the Papers page; results and review use the open paper. data-only="missing" keeps finished marks and marks only what has none;
+    // "unconfirmed" marks afresh only the answers with an unconfirmed (provisional) or no-mark (needs review) result.
     var pb=d.id?BANKS.filter(function(x){return x.id===d.id&&!x.hidden})[0]:CUR.b;if(pb&&S.tok&&BS(pb.id).done&&!aiRunCurrent(pb,AIRUN[pb.id])){
       var bs=BS(pb.id);
       if(d.only==='missing')bs.aiErr={};
-      else pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i;delete bs.ai[k];delete bs.aiErr[k]})});
+      else pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i,rec=aiRecord(pb,qi+1,i);if(d.only==='unconfirmed'&&!(rec&&(rec.status==='provisional'||rec.status==='needs_review')))return;if(rec)aiForce(pb,k);delete bs.ai[k];delete bs.aiErr[k]})});
       delete AIRUN[pb.id];Object.keys(AIQ).forEach(function(k){if(k.indexOf(pb.id+'/')===0)delete AIQ[k]});
       save(pb.id);markAndShow(pb);
     }

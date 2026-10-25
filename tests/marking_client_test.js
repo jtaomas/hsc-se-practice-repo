@@ -23,6 +23,7 @@ function result(mark=2){return {status:'marked',mark,summary:'Evidence supported
 function provisional(mark=1){return {...result(mark),status:'provisional',summary:'The lower valid proposed mark remains unconfirmed.',strengths:[],improve:[],advice:[],losses:{allocation:'unavailable',totalLost:null,items:[]},quality:[]}}
 function reply(body,status=200){return {ok:status>=200&&status<300,status,json:async()=>clone(body)}}
 function defer(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
+async function settle(check){for(let i=0;i<5000&&!check();i++)await new Promise(r=>setImmediate(r));assert(check(),'asynchronous work did not settle')}
 async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolve();assert(check(),'asynchronous operation did not start')}
 
 (async()=>{
@@ -66,26 +67,27 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
   {
     const c=client(),{b,bs}=paper(c,[written(),written(),written()]);
     b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0;
-    c.fetch=async(_,request)=>{calls++;const i=JSON.parse(request.body).partIndex;return reply(i===0?provisional():i===1?result(2):{...result(),status:'needs_review',mark:null})};
-    await c.runAI(b);await c.runAI(b);assert.equal(calls,3);assert.equal(c.aiTodo(b).length,0);
+    const remarks=[];c.fetch=async(_,request)=>{calls++;const body=JSON.parse(request.body),i=body.partIndex;if(body.remark)remarks.push(i);return reply(i===0?provisional():i===1?result(2):{...result(),status:'needs_review',mark:null})};
+    // A provisional result is marked afresh once (remark:true) before it is accepted; nothing else is repeated.
+    await c.runAI(b);await c.runAI(b);assert.equal(calls,4);assert.deepEqual(remarks,[0]);assert.equal(c.aiTodo(b).length,0);
     assert.equal(c.score(b,1,0).g,1);assert.equal(c.score(b,1,0).set,true);assert.equal(c.score(b,1,0).src,'provisional');assert.equal(c.aiProvisionals(b),1);
     const t=c.totals(b);assert.deepEqual([t.T,t.markedM,t.P,t.provisionalG,t.provisionalM,t.provisionalParts],[2,3,3,1,3,1]);
     assert.deepEqual([t.rows[0].g,t.rows[0].markedM,t.rows[0].provisionalG,t.tp.Project.g,t.tp.Project.provisionalM],[2,3,1,2,3]);
     assert.deepEqual(clone(c.mistakeList().map(m=>m.i)),[1]);
     const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
-    assert(html.includes('Provisional mark'));assert(html.includes('lower valid proposed mark'));assert(html.includes('not a confirmed assessment'));
-    assert(html.includes('Provisional criterion evidence'));assert(!html.includes('What earned marks'));assert(!html.includes('How to gain more marks'));assert(!html.includes('data-act="airetry"'));
+    assert(html.includes('Unconfirmed mark'));assert(html.includes('lower of their marks'));assert(html.includes('data-act="airemark"'));assert(html.includes('Mark this answer again'));
+    assert(html.includes('Unconfirmed criterion evidence'));assert(!html.includes('What earned marks'));assert(!html.includes('How to gain more marks'));assert(!html.includes('data-act="airetry"'));
     // Even a malformed local copy must not display unaudited diagnostics as facts.
     bs.ai['1.0'].fb.strengths=['UNCONFIRMED_DIAGNOSIS'];c.feedbackDetails=()=>{throw new Error('Provisional diagnostics rendered')};
     assert(!c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('UNCONFIRMED_DIAGNOSIS'));
-    assert(c.guideHTML(b,1,0).includes('Provisional: 1 / 3'));
-    const page=c.resultsPage(b);assert(page.includes('3 / 6'));assert(page.includes('Provisional total'));assert(page.includes('Assessed subtotal: 2 / 3'));assert(page.includes('3 of 9 marks remain unscored'));
-    assert(c.aiStatusHTML(b).includes('1 provisional mark'));assert(c.aiStatusHTML(b).includes('1 answer need review'));
-    assert(c.papersPage().includes('Provisional marks: 1 / 3'));assert(c.reviewStatus(b).includes('Provisional marks: 1 / 3'));
-    const serialized=clone(bs);c.S.u[b.id]=serialized;await c.runAI(b);assert.equal(calls,3);assert.equal(c.score(b,1,0).src,'provisional','reload must preserve the provisional discriminator');
+    assert(c.guideHTML(b,1,0).includes('Unconfirmed: 1 / 3'));
+    const page=c.resultsPage(b);assert(page.includes('3 / 6'));assert(page.includes('Includes unconfirmed marks'));assert(page.includes('Assessed subtotal: 2 / 3'));assert(page.includes('3 of 9 marks remain unscored'));
+    assert(c.aiStatusHTML(b).includes('1 unconfirmed mark'));assert(c.aiStatusHTML(b).includes('1 answer could not be marked'));assert(c.aiStatusHTML(b).includes('data-only="unconfirmed"'));
+    assert(c.papersPage().includes('Unconfirmed marks: 1 / 3'));assert(c.reviewStatus(b).includes('Unconfirmed marks: 1 / 3'));
+    const serialized=clone(bs);c.S.u[b.id]=serialized;await c.runAI(b);assert.equal(calls,4);assert.equal(c.score(b,1,0).src,'provisional','reload must preserve the provisional discriminator');
     serialized.self['1.0']=2;assert.equal(c.score(b,1,0).src,'self');assert.equal(c.aiProvisionals(b),0);assert.equal(c.totals(b).T,4);assert.equal(c.totals(b).markedM,6);assert.equal(c.mistakeList().length,2);
     delete serialized.self['1.0'];c.S.hist.push({id:b.id,name:'Provisional history',at:1,T:t.T,M:t.markedM,pending:t.P,provisionalG:t.provisionalG,provisionalM:t.provisionalM,provisionalParts:t.provisionalParts});
-    assert(c.papersPage().includes('Provisional history'));assert(c.papersPage().includes('Provisional marks: 1 / 3 across 1 part'));
+    assert(c.papersPage().includes('Provisional history'));assert(c.papersPage().includes('Unconfirmed marks: 1 / 3 across 1 part'));
   }
   // Zero remains a numeric provisional mark, while malformed and out-of-range
   // fallback scores cannot enter the saved client state.
@@ -94,7 +96,7 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     for(const mark of [null,false,'1',1.5]){c.fetch=async()=>reply(provisional(mark));await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
     for(const mark of [-1,4])assert.throws(()=>c.aiStore(bs,'1.0',b.qs[0].it[0],c.aiStamp(b,1,0),provisional(mark)),/outside/);
     c.fetch=async()=>reply(provisional(0));await c.runAI(b);assert.equal(c.score(b,1,0).g,0);assert.equal(c.totals(b).provisionalParts,1);assert.equal(c.totals(b).P,0);assert.equal(c.totals(b).markedM,0);
-    assert(c.aiState(b).includes('Provisional'));assert(!c.aiStatusHTML(b).includes('AI marking is complete'));
+    assert(c.aiState(b).includes('unconfirmed'));assert(!c.aiStatusHTML(b).includes('AI marking is complete'));
   }
   // Existing marks remain visible and explicitly retain their earlier-harness provenance.
   {
@@ -142,13 +144,40 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c.fetch=async()=>reply({error:'Expired'},401);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal&&/Sign in again/.test(e.message));
     for(const mark of [null,false,'2',1.5]){c.fetch=async()=>reply({...result(),mark});await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
   }
-  // A busy answer does not stop unrelated answers or retry automatically on page re-entry.
+  // "Already being marked" (409 marking_busy) waits for the earlier request instead of failing straight away:
+  // unrelated answers carry on, the held answer is shown as waiting, and once the earlier request has finished
+  // the next poll picks up its saved result. A re-mark flag is dropped after waiting so it is not marked twice.
   {
     const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
-    const requests=[];c.fetch=async(_,r)=>{const part=JSON.parse(r.body).partIndex;requests.push(part);return part===0?reply({error:'This answer is already being marked.',code:'marking_busy'},409):reply(result())};
-    await c.runAI(b);assert.deepEqual(requests,[0,1,2,3,4]);assert.equal(Object.keys(bs.ai).length,4);assert.match(bs.aiErr['1.0'],/already being marked/);
-    await c.ensureMarked(b);assert.equal(requests.length,5,'navigation must not retry the busy answer');assert.equal(c.aiTodo(b).length,1);
+    let held=true;const requests=[];c.fetch=async(_,r)=>{const body=JSON.parse(r.body);requests.push([body.partIndex,!!body.remark]);return body.partIndex===0&&held?reply({error:'This answer is already being marked.',code:'marking_busy'},409):reply(result())};
+    c.aiForce(b,'1.0');const run=c.runAI(b);const wait=()=>c.timers.filter(t=>t.ms>=15000&&t.ms<20000);
+    await settle(()=>wait().length===1&&Object.keys(bs.ai).length===4);
+    assert.equal(bs.aiErr['1.0'],undefined);assert(c.AIPROG['1|1.0'].held);assert(c.aiActInner(b,c.AIRUN['1']).includes('Waiting on an earlier request'));
+    assert(c.aiProgHTML(b,'1.0').includes('Waiting for an earlier marking request'));
+    held=false;wait()[0].fn();await run;
+    assert.deepEqual(requests.map(r=>r[0]),[0,1,2,3,4,0]);assert.deepEqual(requests[0],[0,true]);assert.deepEqual(requests[5],[0,false]);
+    assert.equal(Object.keys(bs.ai).length,5);assert.equal(c.aiTodo(b).length,0);assert.equal(c.aiForced(b,'1.0'),false);
     c.fetch=async()=>reply({error:'A different conflict',code:'other_conflict'},409);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal===true);
+  }
+  // Account sync can replace the paper with an identical copy mid-run. The run keeps going and saves into the
+  // current copy (it used to stop silently, so finished results were lost and "Mark unmarked" returned them instantly).
+  {
+    const c=client(),{b,bs}=paper(c,[written(),written()]);bs.ans['1.0']='A';bs.ans['1.1']='B';const pending=[];
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.runAI(b);await settle(()=>pending.length===2);
+    const copy=clone(bs);c.S.u[b.id]=copy;assert(c.aiRunCurrent(b,c.AIRUN[b.id]));
+    pending[0].resolve(reply(result(1)));pending[1].resolve(reply(result(3)));await run;
+    assert.equal(c.BS(b.id),copy);assert.equal(copy.ai['1.0'].g,1);assert.equal(copy.ai['1.1'].g,3);assert.equal(c.aiTodo(b).length,0);
+    // A different attempt in the replacement still invalidates the run.
+    bs.ans={'1.0':'A'};const c2=client(),p2=paper(c2,[written()]);p2.bs.ans['1.0']='A';let sent=false;const d2=defer();c2.fetch=()=>{sent=true;return d2.promise};
+    const run2=c2.runAI(p2.b);await settle(()=>sent);c2.S.u[p2.b.id]={...clone(p2.bs),start:99};d2.resolve(reply(result()));await run2;assert.equal(c2.BS(p2.b.id).ai['1.0'],undefined);
+  }
+  // A request that stays held past the server's reservation time gives up with a clear reason.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';let polls=0;
+    c.fetch=async()=>{polls++;return reply({error:'This answer is already being marked.',code:'marking_busy'},409)};
+    const run=c.runAI(b);
+    for(let i=0;i<c.AI_HELD_MAX;i++){await settle(()=>c.timers.filter(t=>t.ms>=15000&&t.ms<20000).length===i+1);c.timers.filter(t=>t.ms>=15000&&t.ms<20000)[i].fn()}
+    await run;assert.equal(polls,c.AI_HELD_MAX+1);assert.match(bs.aiErr['1.0'],/still being marked by an earlier request/);
   }
   // A busy AI service (429 provider_rate_limit) is temporary: the answer is retried after a wait and no other answer is stopped.
   // The daily allowance (429 quota_exceeded) is still fatal, and the Papers page says why marking did not finish.
@@ -243,16 +272,16 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c.console={...console,warn(){warnings++}};c.fetch=async()=>{calls++;return reply(result())};await c.runAI(b,()=>{throw new Error('DOM changed')});
     assert.equal(calls,4);assert.equal(Object.keys(bs.ai).length,4);assert.equal(warnings,4);assert.equal(c.AIRUN[b.id],undefined);
   }
-  // Practice marks only the requested question, leaves busy responses for explicit retry,
-  // and never starts a timed POST replay that could consume another paid job.
+  // Practice marks only the requested question; a busy answer waits for the earlier request and then
+  // collects its saved result, without touching other questions.
   {
     const c=client(),{b,bs}=practice(c,Array.from({length:5},written));b.qs.push({...b.qs[0],it:[written()]});
-    b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.ans['2.0']='Untouched second question';const requests=[];
-    c.fetch=async(_,r)=>{const p=JSON.parse(r.body);requests.push([p.questionNumber,p.partIndex]);return p.partIndex===0?reply({code:'marking_busy',error:'Already being marked'},409):reply(result())};
-    await c.runAIQuestion(b,1);assert.deepEqual(requests,[[1,0],[1,1],[1,2],[1,3],[1,4]]);assert.equal(Object.keys(bs.ai).length,4);assert(bs.aiErr['1.0']);assert.equal(bs.ai['2.0'],undefined);
-    assert(c.timers.every(t=>t.ms===250000),'practice busy scheduled an automatic replay');await c.runAIQuestion(b,1);assert.equal(requests.length,5);
-    c.fetch=async(_,r)=>{requests.push([JSON.parse(r.body).questionNumber,JSON.parse(r.body).partIndex]);return reply(result())};
-    await c.pqMark();assert.equal(requests.length,6);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.aiErr['1.0'],undefined);assert.equal(bs.done,false);
+    b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.ans['2.0']='Untouched second question';const requests=[];let held=true;
+    c.fetch=async(_,r)=>{const p=JSON.parse(r.body);requests.push([p.questionNumber,p.partIndex]);return p.partIndex===0&&held?reply({code:'marking_busy',error:'Already being marked'},409):reply(result())};
+    const run=c.runAIQuestion(b,1),wait=()=>c.timers.filter(t=>t.ms>=15000&&t.ms<20000);
+    await settle(()=>wait().length===1&&Object.keys(bs.ai).length===4);assert.deepEqual(requests,[[1,0],[1,1],[1,2],[1,3],[1,4]]);assert.equal(bs.aiErr['1.0'],undefined);assert.equal(bs.ai['2.0'],undefined);
+    assert(c.pqPanelHTML(b,1).includes('data-aiact="1/1"'));
+    held=false;wait()[0].fn();await run;assert.equal(requests.length,6);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.ai['2.0'],undefined);assert.equal(bs.done,false);
   }
   // Practice responses use account/epoch/attempt/answer guards, while edits to a
   // different question do not discard this question's valid result.

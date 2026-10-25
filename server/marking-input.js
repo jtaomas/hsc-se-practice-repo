@@ -42,7 +42,9 @@ function parseBody(body) {
   if (!text || Buffer.byteLength(text) > MAX_BODY_BYTES) throw error(413, 'input_too_large', 'This response is too large for automatic marking.');
   let p;
   try { p = JSON.parse(text); } catch (_) { throw error(400, 'invalid_request', 'Invalid marking request.'); }
-  if (!object(p) || Object.keys(p).some(k => !['bankId', 'questionNumber', 'partIndex', 'answer', 'diagramPng'].includes(k))) throw error(400, 'invalid_request', 'Send the question identifiers and saved answer only.');
+  if (!object(p) || Object.keys(p).some(k => !['bankId', 'questionNumber', 'partIndex', 'answer', 'diagramPng', 'remark'].includes(k))) throw error(400, 'invalid_request', 'Send the question identifiers and saved answer only.');
+  // remark:true asks for a fresh assessment instead of the saved result. It never enters the input digest.
+  if (p.remark !== undefined && typeof p.remark !== 'boolean') throw error(400, 'invalid_request', 'Invalid marking request.');
   return p;
 }
 const SCENE_FIELDS = ['id', 'type', 'x', 'y', 'width', 'height', 'angle', 'text', 'originalText', 'containerId', 'boundElements', 'startBinding', 'endBinding', 'startArrowhead', 'endArrowhead', 'points', 'groupIds', 'backgroundColor', 'fillStyle', 'strokeColor', 'strokeWidth', 'strokeStyle', 'roughness', 'roundness', 'fontSize', 'fontFamily', 'textAlign', 'verticalAlign', 'opacity', 'frameId', 'elbowed', 'fixedSegments'];
@@ -136,6 +138,6 @@ function prepare(body) {
     question: (it.lb ? it.lb + ' ' : '') + plain(it.q) + (table ? table.question : ''), criteria: scoredCriteria.map((text, i) => ({ id: 'c' + (i + 1), text })),
     sample: table ? table.sample : it.t === 'tx' ? plain(it.model) : it.model, wordGuide: it.w || null, answer, diagramScene, diagramPng };
   if (rubricGuidance.length) input.rubricGuidance = rubricGuidance;
-  return { input, reviewReason, blank: table ? table.blank : diagramScene ? !diagramScene.elements.length : !answer.trim(), questionVersion: digest(q), rubricVersion: digest(it.crit) };
+  return { input, reviewReason, remark: p.remark === true, blank: table ? table.blank : diagramScene ? !diagramScene.elements.length : !answer.trim(), questionVersion: digest(q), rubricVersion: digest(it.crit) };
 }
 module.exports = { prepare, digest, plain, loadBanks, MAX_BODY_BYTES };

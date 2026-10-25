@@ -50,6 +50,29 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   assert.equal(ledger()[0].total, 2);
   await assert.rejects(a.finish(user(1), digest(1), lease, result()), code('marking_lease_lost'));
 
+  // An explicit re-mark reserves a fresh job over a saved result, spending allowance. A failed or abandoned
+  // re-mark restores the earlier decision; a successful one replaces it.
+  reset();
+  const first = await a.getOrReserve(user(1), digest(3));
+  await a.finish(user(1), digest(3), first.leaseId, result('provisional'));
+  const fresh = await b.getOrReserve(user(1), digest(3), { replace: true });
+  assert.equal(fresh.state, 'reserved');
+  assert.equal(ledger()[0].total, 2, 'a re-mark spends allowance');
+  assert.equal(await a.getCached(user(1), digest(3)), null, 'the saved result is not served while the re-mark is pending');
+  assert.equal((await a.getOrReserve(user(1), digest(3))).state, 'busy');
+  await b.fail(user(1), digest(3), fresh.leaseId, { code: 'provider_error' });
+  assert.deepEqual(await a.getCached(user(1), digest(3)), result('provisional'), 'a failed re-mark keeps the earlier decision');
+  const expired = await b.getOrReserve(user(1), digest(3), { replace: true });
+  clock += DEFAULT_LIMITS.leaseMs + 1;
+  const after = await a.getOrReserve(user(1), digest(3));
+  assert.equal(after.state, 'reserved', 'an abandoned re-mark lease expires');
+  await a.fail(user(1), digest(3), after.leaseId);
+  assert.deepEqual(await a.getCached(user(1), digest(3)), result('provisional'), 'the earlier decision survives an expired re-mark lease');
+  await assert.rejects(b.finish(user(1), digest(3), expired.leaseId, result()), code('marking_lease_lost'));
+  const again = await b.getOrReserve(user(1), digest(3), { replace: true });
+  await b.finish(user(1), digest(3), again.leaseId, result());
+  assert.deepEqual(await a.getOrReserve(user(1), digest(3)), { state: 'cached', result: result() }, 'a successful re-mark replaces the saved decision');
+
   reset();
   const review = await a.getOrReserve(user(1), digest(2));
   await a.finish(user(1), digest(2), review.leaseId, result('needs_review'));

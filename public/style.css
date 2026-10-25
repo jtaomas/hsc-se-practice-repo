@@ -1436,3 +1436,16 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 /* SQL table names: sit close to their table, with clear space between tables */
 .ttl.dbn,.qleft p.ttl.dbn{margin:14px 0 0}
 .ttl.dbn+.tw table.hoa.db{margin-top:4px}
+/* Answers being AI marked: chips in run boxes, and a dot on the question-number strip. */
+.aiact{margin:6px 0 4px}
+.airow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0}
+.ailab{font-size:.88em;color:#444;margin-right:2px}
+.aichip{display:inline-block;padding:1px 8px;border:1px solid #002664;color:#002664;background:#fff;font-size:.85em;text-decoration:none;line-height:1.6}
+.aichip.on{background:#002664;color:#fff}
+.aichip.held{border-style:dashed}
+.aichip.q{border-color:#9aa3ad;color:#555}
+.nav-elem.aimk:before,.nav-elem.aiwait:before{content:"";position:absolute;left:50%;bottom:-5px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:#146cfd;z-index:2}
+.nav-elem.aimk:before{animation:aipulse 1.2s ease-in-out infinite}
+.nav-elem.aiwait:before{background:#9aa3ad}
+@keyframes aipulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.nav-elem.aimk:before{animation:none}}

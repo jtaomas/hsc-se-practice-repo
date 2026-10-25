@@ -27,21 +27,33 @@ function aiRecord(b,n,i){
    That is temporary, unlike the daily allowance (also 429), so it is retried a few times with a growing wait
    and never stops the rest of the paper. */
 var AI_BUSY_WAITS=[12000,30000,60000];
-function aiCall(payload,token,attempt,current){
-  attempt=attempt||0;
+/* "Already being marked" (HTTP 409 marking_busy) means an earlier request for this exact answer, from this or
+   another tab or an interrupted run, is still being marked on the server. Waiting is free: once it finishes the
+   next request returns that saved result. So the answer waits (up to the server's five-minute reservation)
+   instead of failing straight away. */
+var AI_HELD_WAIT=15000,AI_HELD_MAX=24;
+function aiCall(payload,token,attempt,current,prog,held){
+  attempt=attempt||0;held=held||0;
   if(!token){var missing=new Error('Sign in to use AI marking. You can still mark this answer yourself.');missing.fatal=true;return Promise.reject(missing)}
   var control=new AbortController(),timer=setTimeout(function(){control.abort()},250000);
   return fetch('/api/mark',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(payload),signal:control.signal}).then(function(r){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
       j=j||{};
-      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.busy=r.status===429&&j.code==='provider_rate_limit';e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||(r.status===429&&!e.busy)||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
+      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.busy=r.status===429&&j.code==='provider_rate_limit';e.held=r.status===409&&j.code==='marking_busy';e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||(r.status===429&&!e.busy)||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
       if((j.status!=='marked'&&j.status!=='provisional'&&j.status!=='needs_review')||((j.status==='marked'||j.status==='provisional')&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
       return j;
     });
-  }).then(function(r){clearTimeout(timer);return r},function(e){
+  }).then(function(r){clearTimeout(timer);if(prog)prog.held=0;return r},function(e){
     clearTimeout(timer);
+    if(e.held&&held<AI_HELD_MAX){
+      if(prog&&!prog.held)prog.held=Date.now();
+      // The earlier request produces a fresh result, so a re-mark must not replace it again.
+      var again=Object.assign({},payload);delete again.remark;
+      return new Promise(function(go){setTimeout(go,AI_HELD_WAIT+Math.floor(Math.random()*3000))}).then(function(){return current&&!current()?null:aiCall(again,token,attempt,current,prog,held+1)});
+    }
+    if(e.held)throw new Error('This answer is still being marked by an earlier request. Try again in a few minutes.');
     if(e.name==='AbortError')throw new Error('AI marking timed out. Try again when the service is available.');
-    if(e.busy&&attempt<AI_BUSY_WAITS.length)return new Promise(function(go){setTimeout(go,AI_BUSY_WAITS[attempt]+Math.floor(Math.random()*4000))}).then(function(){return current&&!current()?null:aiCall(payload,token,attempt+1,current)});
+    if(e.busy&&attempt<AI_BUSY_WAITS.length)return new Promise(function(go){setTimeout(go,AI_BUSY_WAITS[attempt]+Math.floor(Math.random()*4000))}).then(function(){return current&&!current()?null:aiCall(payload,token,attempt+1,current,prog,held)});
     throw e;
   });
 }
@@ -61,10 +73,30 @@ function aiStore(bs,k,it,stamp,r){
   delete bs.aiErr[k];
 }
 var AI_CONCURRENCY=10,AIRUN={},AIQ={},AIWORK={active:0,queue:[]};
+/* Answers the student asked to re-mark. Their request carries remark:true so the server marks them afresh
+   instead of returning its saved result (which made "Re-mark" finish instantly with the same mark). */
+var AIFORCE={};
+function aiForce(b,k){AIFORCE[b.id+'|'+k]=1}
+function aiForced(b,k){return !!AIFORCE[b.id+'|'+k]}
+/* Sends one answer and, when the result is provisional (the two markers disagreed and the checks could not
+   settle it), marks it afresh once more before accepting it. */
+function aiMarkOne(b,k,p,run,keep,prog,onErr){
+  // onErr runs directly on each dispatch, before its slot is released, so a fatal error stops queued work.
+  function send(q){return aiDispatch(q,run.token,keep,prog).catch(function(e){if(onErr)onErr(e);throw e})}
+  if(aiForced(b,k))p=Object.assign({},p,{remark:true});
+  return send(p).then(function(r){
+    if(!r||r.status!=='provisional'||p.remark||!keep())return r;
+    if(prog)prog.retry=1;
+    return send(Object.assign({},p,{remark:true})).then(function(r2){return r2||r},function(){return r});
+  }).then(function(r){if(r)delete AIFORCE[b.id+'|'+k];return r});
+}
 function aiqKey(b,n){return b.id+'/'+n}
 function aiQuestionStamp(b,n){return JSON.stringify(b.qs[n-1].it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,n,i)}))}
 function aiContext(b,n){var bs=BS(b.id);return {state:S,paper:bs,token:S.tok||'',owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,mode:bs.mode||'',start:String(bs.start),attempt:String(bs.start)+'/'+String(bs.doneAt),question:n||0,stamp:n?aiQuestionStamp(b,n):aiPaperStamp(b)}}
-function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&(run.paper.mode||'')===run.mode&&(run.question?String(run.paper.start)===run.start:String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt)&&(run.question?aiQuestionStamp(b,run.question):aiPaperStamp(b))===run.stamp}
+/* A run stays current while the account, attempt and answers are unchanged. It is not tied to the paper object
+   itself: account sync can swap in an identical copy of the paper, and that used to abandon a run part-way,
+   discarding results the server had already finished (the next click then returned them instantly). */
+function aiRunCurrent(b,run){if(!run||S!==run.state)return false;var p=S.u[b.id];return !!p&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&(p.mode||'')===run.mode&&(run.question?String(p.start)===run.start:String(p.start)+'/'+String(p.doneAt)===run.attempt)&&(run.question?aiQuestionStamp(b,run.question):aiPaperStamp(b))===run.stamp}
 function aiQuestionRun(b,n){var run=AIQ[aiqKey(b,n)];return aiRunCurrent(b,run)?run:null}
 function aiUnlocked(){return true}
 /* Practice and whole-paper work share the same ten-request ceiling. Queued
@@ -80,7 +112,7 @@ function aiDrain(){
       if(!job.current()||!aiUnlocked()){job.resolve(null);return}
       if(job.prog&&!job.prog.sent)job.prog.sent=Date.now();
       AIWORK.active++;
-      Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token,0,function(){return job.current()&&aiUnlocked()}):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
+      Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token,0,function(){return job.current()&&aiUnlocked()},job.prog):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
     })(AIWORK.queue.shift());
   }
 }
@@ -95,7 +127,7 @@ function aiWorkers(next,count){
 var AIPROG={};
 var AI_STEPS=[[0,'Sending your answer, the question and the marking criteria'],[4,'Two markers are assessing your answer independently, criterion by criterion'],[50,'Comparing the two assessments'],[60,'An auditor is checking the evidence behind the mark'],[110,'Checking the feedback and saving the result']];
 function aiProgKey(id,k){return id+'|'+k}
-function aiProgStart(b,k,run){var p={queued:Date.now(),sent:0,run:run};AIPROG[aiProgKey(b.id,k)]=p;return p}
+function aiProgStart(b,k,run,n,i){var p={queued:Date.now(),sent:0,run:run,b:b.id,n:n,i:i,held:0,retry:0};AIPROG[aiProgKey(b.id,k)]=p;return p}
 function aiProgEnd(b,k,p){var key=aiProgKey(b.id,k);if(p&&AIPROG[key]===p)delete AIPROG[key]}
 function aiClock(ms){var s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+':'+('0'+s%60).slice(-2)}
 function aiProgFrac(p,now){if(!p||!p.sent)return 0;return 0.95*(1-Math.exp(-(now-p.sent)/55000))}
@@ -105,18 +137,46 @@ function aiRunFrac(run,now){
   return Math.min(1,f/Math.max(1,run.total||1));
 }
 function aiProgInner(p,now){
+  if(p.held)return '<p class="aipr-hd"><b>Waiting for an earlier marking request</b> <span class="aipr-t">'+aiClock(now-p.held)+'</span></p><div class="aibar"><span style="width:'+Math.round(100*aiProgFrac(p,now))+'%"></span></div><p class="note">This answer was already sent for marking (from another tab or an earlier run that was interrupted). Its result is picked up automatically as soon as it is ready.</p>';
   if(!p.sent)return '<p class="aipr-hd"><b>Queued.</b> Waiting for a free marking slot <span class="aipr-t">'+aiClock(now-p.queued)+'</span></p><div class="aibar"><span style="width:0%"></span></div>';
   var s=(now-p.sent)/1000,cur=0;
   AI_STEPS.forEach(function(st,i){if(s>=st[0])cur=i});
-  return '<p class="aipr-hd"><b>Marking this answer now</b> <span class="aipr-t">'+aiClock(now-p.sent)+'</span></p>'+
+  return '<p class="aipr-hd"><b>'+(p.retry?'Marking this answer again':'Marking this answer now')+'</b> <span class="aipr-t">'+aiClock(now-p.sent)+'</span></p>'+
     '<div class="aibar"><span style="width:'+Math.round(100*aiProgFrac(p,now))+'%"></span></div>'+
     '<ol class="aipr-steps">'+AI_STEPS.map(function(st,i){return '<li class="'+(i<cur?'past':i===cur?'cur':'next')+'">'+st[1]+'</li>'}).join('')+'</ol>'+
+    (p.retry?'<p class="note">The first two markers disagreed and the checks could not settle on a mark, so it is being marked afresh once more.</p>':'')+
     '<p class="note">Steps and progress are estimated from typical marking times. The feedback replaces this box as soon as it is ready; it can take up to about four minutes.</p>';
 }
 function aiProgHTML(b,k){
   var key=aiProgKey(b.id,k),p=AIPROG[key];
   if(!p)return '<p class="aipr-hd"><b>Waiting to be marked.</b> Other answers are ahead of this one. It starts automatically.</p>';
   return '<div class="aipr" data-aiprog="'+esc(key)+'">'+aiProgInner(p,Date.now())+'</div>';
+}
+/* Which answers a run is working on right now, as labelled chips. Run boxes include it in a
+   data-aiact element that the ticker refreshes, so the list never goes stale between results. */
+function aiPartLabel(b,n,i){var q=b.qs[n-1],it=q&&q.it[i],lb=it&&it.lb?String(it.lb).replace(/<[^>]*>/g,'').trim():'';return 'Q'+n+(q&&q.it.length>1?' '+(lb||'('+String.fromCharCode(97+i)+')'):'')}
+function aiRunParts(run){
+  var out={on:[],held:[],queued:[]};
+  Object.keys(AIPROG).forEach(function(k){var p=AIPROG[k];if(p.run!==run||!p.n)return;(p.held?out.held:p.sent?out.on:out.queued).push(p)});
+  function order(a,c){return a.n-c.n||a.i-c.i}
+  out.on.sort(order);out.held.sort(order);out.queued.sort(order);return out;
+}
+function aiActInner(b,run){
+  var parts=aiRunParts(run),waiting=Math.max(0,(run.total||0)-(run.done||0)-parts.on.length-parts.held.length-parts.queued.length);
+  function chips(list,cls){return list.map(function(p){return '<a class="aichip '+cls+'" href="#/'+esc(b.id)+'/'+(run.question?'q':'review')+'/'+p.n+'">'+esc(aiPartLabel(b,p.n,p.i))+'</a>'}).join('')}
+  var h='';
+  if(parts.on.length)h+='<div class="airow"><span class="ailab">Marking now</span>'+chips(parts.on,'on')+'</div>';
+  if(parts.held.length)h+='<div class="airow"><span class="ailab">Waiting on an earlier request</span>'+chips(parts.held,'held')+'</div>';
+  if(parts.queued.length)h+='<div class="airow"><span class="ailab">Next up</span>'+chips(parts.queued,'q')+'</div>';
+  if(waiting)h+='<div class="airow"><span class="ailab">'+waiting+' more answer'+(waiting===1?'':'s')+' to follow</span></div>';
+  return h||'<div class="airow"><span class="ailab">Saving the last results</span></div>';
+}
+function aiActHTML(b,run,key){return '<div class="aiact" data-aiact="'+esc(key)+'">'+aiActInner(b,run)+'</div>'}
+/* Questions with an answer being marked or queued, for the question-number strip. */
+function aiNavState(bid,n){
+  var st='';
+  Object.keys(AIPROG).forEach(function(k){var p=AIPROG[k];if(p.b!==bid||p.n!==n)return;var r=p.run,b=BANKS.filter(function(x){return x.id===bid})[0];if(!b||!(r===AIRUN[bid]||r===AIQ[bid+'/'+n])||!aiRunCurrent(b,r))return;if(p.sent&&!p.held)st='aimk';else if(!st)st='aiwait'});
+  return st;
 }
 /* Run-level boxes (the practice panel and the review banner) carry data-airun="bank" or "bank/question". */
 function aiRunBarHTML(run){return ' <span class="aipr-t">'+aiClock(Date.now()-(run.t0||Date.now()))+'</span><div class="aibar"><span style="width:'+Math.round(100*aiRunFrac(run,Date.now()))+'%"></span></div>'}
@@ -128,6 +188,15 @@ function aiProgTick(){
     var bar=el.querySelector('.aibar span'),t=el.querySelector('.aipr-t');
     if(bar)bar.style.width=Math.round(100*aiRunFrac(run,now))+'%';
     if(t&&run.t0)t.textContent=aiClock(now-run.t0);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-aiact]'),function(el){
+    var k=el.getAttribute('data-aiact'),run=k.indexOf('/')>=0?AIQ[k]:AIRUN[k],b=BANKS.filter(function(x){return x.id===k.split('/')[0]})[0];
+    if(run&&b){var h=aiActInner(b,run);if(el.innerHTML!==h)el.innerHTML=h}
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#nums[data-b] .nav-elem'),function(el){
+    var bid=el.parentNode.getAttribute('data-b'),n=+el.getAttribute('data-n'),st=aiNavState(bid,n);
+    el.classList.toggle('aimk',st==='aimk');el.classList.toggle('aiwait',st==='aiwait');
+    el.title=st==='aimk'?'An answer in this question is being marked':st==='aiwait'?'Waiting to be marked':'';
   });
 }
 if(typeof setInterval==='function'&&typeof document!=='undefined')setInterval(aiProgTick,1000);
@@ -146,18 +215,18 @@ function runAI(b,onProg){
     // Submission can reuse an unchanged practice request already in flight.
     var prepared=practice?practice.promise:Promise.resolve();
     return prepared.then(function(){
-      if(!current()||aiRecord(b,t[0],t[1])||bs.aiErr[t[2]])return null;
+      if(!current()||aiRecord(b,t[0],t[1])||BS(b.id).aiErr[t[2]])return null;
       return t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):payload;
     }).then(function(p){
       // Set fatal before dispatch frees its slot, so this batch's queued work
       // cannot start; current() still permits already-sent successes to save.
       if(!p||fatal||!current())return null;
-      prog=aiProgStart(b,t[2],run);
-      return aiDispatch(p,run.token,function(){return !fatal&&current()},prog).catch(function(e){if(e.fatal)fatal=e;throw e});
+      prog=aiProgStart(b,t[2],run,t[0],t[1]);
+      return aiMarkOne(b,t[2],p,run,function(){return !fatal&&current()},prog,function(e){if(e.fatal)fatal=e});
     }).then(function(r){
       if(!r||!current()||stamp!==aiStamp(b,t[0],t[1]))return;
-      aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);done++;if(current()){run.done=done;save(b.id);progress()}return next()});
+      aiStore(BS(b.id),t[2],t[3],stamp,r);
+    }).catch(function(e){if(current())BS(b.id).aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);done++;if(current()){run.done=done;save(b.id);progress()}return next()});
   }
   run.promise=aiWorkers(next,calls.length).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
   return run.promise;
@@ -176,13 +245,13 @@ function runAIQuestion(b,n){
   function progress(){if(current())try{aiqLive(b,n,run)}catch(e){console.warn('Marking progress display could not refresh.')}}
   function next(){
     if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
-    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),prog=aiProgStart(b,t[2],run);
+    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),prog=aiProgStart(b,t[2],run,t[0],t[1]);
     var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
     return prepared.then(function(p){
-      return !fatal&&current()?aiDispatch(p,run.token,function(){return !fatal&&current()},prog).catch(function(e){if(e.fatal)fatal=e;throw e}):null;
+      return !fatal&&current()?aiMarkOne(b,t[2],p,run,function(){return !fatal&&current()},prog,function(e){if(e.fatal)fatal=e}):null;
     }).then(function(r){
-      if(r&&current()&&stamp===aiStamp(b,t[0],t[1]))aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);run.done++;if(current()){save(b.id);progress()}return next()});
+      if(r&&current()&&stamp===aiStamp(b,t[0],t[1]))aiStore(BS(b.id),t[2],t[3],stamp,r);
+    }).catch(function(e){if(current())BS(b.id).aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){aiProgEnd(b,t[2],prog);run.done++;if(current()){save(b.id);progress()}return next()});
   }
   run.promise=aiWorkers(next,calls.length).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
   return run.promise;
@@ -213,14 +282,15 @@ function aiSqlResultHTML(b,n,i,it,k,ai,opt){
     var ptxt=probs.length?probs.join(' '):(sum||'Query did not meet all requirements.');
     probHTML='<div class="wrongbox sql-prob"><h5><span><span class="pill bad">Problem</span></span>'+(lost>0?'<span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span>':'')+'</h5><p style="margin:4px 0 0">'+esc(ptxt)+'</p></div>';
   }
-  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':(opt.title||'AI marking'))+'</h5>'+
+  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Unconfirmed mark':(opt.title||'AI marking'))+'</h5>'+
     (sum&&(!probHTML||probs.length)?'<p class="aisum">'+esc(sum)+'</p>':'')+
     probHTML+
     (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-    (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment.</p>':'')+
-    (opt.remark!==false&&!review&&!provisional?(S.tok?'<p style="margin-top:8px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':''):'')+
+    (provisional?AI_PROVISIONAL_TEXT:'')+
+    (opt.remark!==false?(S.tok?'<p style="margin-top:8px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(review||provisional?'Mark this answer again':legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':''):'')+
     (opt.after||'')+'</div>';
 }
+var AI_PROVISIONAL_TEXT='<p><b>What this means:</b> two AI markers marked your answer separately and gave different marks, and the checker could not decide which was right. This is the lower of their marks, so it may be too low. Mark it again, check it against the marking guide and set your own mark, or ask a teacher.</p>';
 /* One AI marking result in the review style. opt.remark=false hides the re-mark button (retries). */
 function aiResultHTML(b,n,i,it,k,ai,opt){
   opt=opt||{};
@@ -228,20 +298,21 @@ function aiResultHTML(b,n,i,it,k,ai,opt){
   var f=ai.fb||{},review=ai.status==='needs_review',provisional=ai.status==='provisional',legacy=!ai.stamp,audit=ai.audit||{};
   var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(opt.answer!==undefined?aiPayload(b,n,i,opt.answer).answer:aiPayload(b,n,i).answer):null;
   var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];
-  if(provisional)provenance.push('Decision: provisional lower-mark fallback');
+  if(provisional)provenance.push('Decision: unconfirmed (lower of two disagreeing marks)');
   else if(audit.resolution==='adjudicated')provenance.push('Decision: confirmed after disagreement resolution and audit');
   if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
   if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
   var running=aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n);
-  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Provisional mark':(opt.title||'AI marking'))+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+
+  return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Unconfirmed mark':(opt.title||'AI marking'))+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+
     (!review&&!provisional?aiWrongHTML(f,it.m,ai.g):'')+
     (f.summary?'<p class="aisum">'+esc(aiFirst(f.summary))+'</p>':'')+
     (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
-    (provisional?'<p>The assessments remain unresolved. This is the lower valid proposed mark, not a confirmed assessment. Its criterion evidence is provisional; audited feedback and quality ratings are unavailable. It is excluded from verified improvement plans and comparisons. Review the guide and set a mark yourself or with a teacher.</p>':'')+
+    (provisional?AI_PROVISIONAL_TEXT+'<p class="note">An unconfirmed mark is left out of improvement plans and comparisons.</p>'+(opt.remark!==false&&S.tok?'<p><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>Mark this answer again</button></p>':''):'')+
+    (review&&opt.remark!==false&&S.tok?'<p><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>Mark this answer again</button></p>':'')+
     (!provisional?aiEarnedHTML(f):'')+
     '<details class="xdd"><summary>Details</summary>'+
     (!provisional&&f.advice&&f.advice.length?'<p class="gh"><b>Further advice (not a mark deduction)</b></p><ul>'+f.advice.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+
-    (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Provisional criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
+    (f.criteria&&f.criteria.length?'<details class="xdd"><summary>'+(provisional?'Unconfirmed criterion evidence':'Criterion evidence')+'</summary><ul>'+f.criteria.map(function(c){return '<li><b>'+esc(c.id||'Criterion')+'</b>'+': '+esc(c.assessment||'')+(c.evidence?scene?feedbackEvidence(Array.isArray(c.evidence)?c.evidence:[c.evidence],scene):'<br>'+esc(Array.isArray(c.evidence)?c.evidence.join('; '):c.evidence):'')+(c.basis?'<br>'+esc(c.basis):'')+'</li>'}).join('')+'</ul></details>':'')+
     (typeof feedbackDetails==='function'&&!review&&!provisional?feedbackDetails(f,scene):'')+
     (!legacy?'<details class="xdd"><summary>Marking provenance</summary><p>'+provenance.map(esc).join('<br>')+'</p></details>':'')+
     (opt.remark!==false&&!review&&!provisional?(S.tok?'<p style="margin-top:10px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':'<p style="margin-top:10px"><a href="#/account">Sign in to re-mark</a></p>'):'')+

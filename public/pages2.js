@@ -4,14 +4,16 @@ function fmtD(t){if(!t)return '';var d=new Date(t);return d.toLocaleDateString(u
 function aiState(b){
   var bs=BS(b.id);if(!bs.done)return '';
   var todo=aiTodo(b).length,errKeys=Object.keys(bs.aiErr||{}).filter(function(k){return bs.aiErr[k]}),errs=errKeys.length;
-  return errs?'AI marking incomplete'+(errs>1?' ('+errs+' answers)':'')+'<br><span class="note">Reason: '+esc(String(bs.aiErr[errKeys[0]]).slice(0,240))+'</span>':todo?(S.tok?'Not AI marked yet':'Sign in for AI marking'):aiReviews(b)?'Needs review':aiProvisionals(b)?'Provisional marks need review':'AI marking finished';
+  return errs?'AI marking incomplete'+(errs>1?' ('+errs+' answers)':'')+'<br><span class="note">Reason: '+esc(String(bs.aiErr[errKeys[0]]).slice(0,240))+'</span>':todo?(S.tok?'Not AI marked yet':'Sign in for AI marking'):aiReviews(b)?'Some answers could not be marked':aiProvisionals(b)?'Some marks are unconfirmed':'AI marking finished';
 }
 /* Whole-paper marking from the Papers page: a paper submitted while signed out, or whose marking never finished, can be marked here without opening it. */
-function paperRunBox(b,run){return '<div class="aib" data-airun="'+esc(b.id)+'" role="status"><b>Marking: '+(run.done||0)+' of '+(run.total||0)+' answers</b>'+aiRunBarHTML(run)+'</div>'}
+function paperRunBox(b,run){return '<div class="aib" data-airun="'+esc(b.id)+'" role="status"><b>Marking: '+(run.done||0)+' of '+(run.total||0)+' answers</b>'+aiRunBarHTML(run)+aiActHTML(b,run,b.id)+'</div>'}
 function paperMarkBtns(b,run){
   if(!S.tok)return '<a class="nb sm ol" href="#/account">Sign in to AI mark</a>';
   var todo=aiTodo(b).length,dis=run?' disabled':'',h='';
   if(todo)h+='<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'" data-only="missing"'+dis+'>Mark '+todo+' unmarked answer'+(todo>1?'s':'')+'</button>';
+  var unc=aiReviews(b)+aiProvisionals(b);
+  if(unc&&!run)h+='<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'" data-only="unconfirmed">Mark '+unc+' unconfirmed answer'+(unc>1?'s':'')+' again</button>';
   return h+'<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'"'+dis+'>'+(run?'Marking...':'Re-mark entire paper')+'</button>';
 }
 function papersPage(){
@@ -95,7 +97,7 @@ function mistakesPage(){
   // Marks still lost: a part fixed by a retry no longer counts against the student.
   var lost=list.reduce(function(s,m){return s+(partCls(m.b,m.n,m.i)==='rtok'?0:m.s.m-m.s.g)},0);
   function sel(name,val,opts){return '<select data-mf="'+name+'" aria-label="'+name+'">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
-  if(!all.length)return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1><div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; provisional marks need review and are excluded.</p></div></div>');
+  if(!all.length)return frame('My mistakes','<div class="pg"><h1 class="pt">My mistakes</h1><div class="feature"><p>No assessed mistakes to show yet. Finish a paper and submit it. Parts with confirmed or self-awarded mark shortfalls are listed here; unconfirmed marks are excluded.</p></div></div>');
   var filters='<div class="mk-filter">'+sel('bank',MF.bank,[['','All papers']].concat(BANKS.filter(function(b){return !b.hidden&&!b.archived}).map(function(b){return [b.id,b.name]})))+
     sel('topic',MF.topic,[['','All topics']].concat(mkTopics().map(function(t){return [t,t]})))+
     sel('kind',MF.kind,[['','All question types'],['closed','Multiple choice, dropdown and match'],['written','Written'],['code','Python, pseudocode and SQL'],['diagram','Diagram']])+'</div>';

@@ -61,7 +61,8 @@ def route_request(route):
         payload = request.post_data_json
         assert request.method == 'POST'
         assert request.headers.get('authorization') == 'Bearer ' + TOKEN
-        assert set(payload) == {'bankId', 'questionNumber', 'partIndex', 'answer'}
+        # remark:true is only sent for a fresh re-mark (explicit, or the one automatic retry of a provisional result).
+        assert set(payload) - {'remark'} == {'bankId', 'questionNumber', 'partIndex', 'answer'} and payload.get('remark', True) is True
         assert payload['bankId'] in ('1', '10', 'formats') and payload['partIndex'] == 0
         if payload['bankId'] == 'formats':
             assert payload['questionNumber'] == 3
@@ -160,7 +161,7 @@ with sync_playwright() as playwright:
     page.wait_for_function("BS('1').ai['18.0'] && BS('1').ai['20.0'] && !AIRUN['1']")
     expect(page.locator('.big')).to_have_text('2 / 77')
     expect(page.locator('.feature').first).to_contain_text('3 of 80 marks remain unscored')
-    expect(page.locator('#aib')).to_contain_text('1 answer need review')
+    expect(page.locator('#aib')).to_contain_text('1 answer could not be marked')
     assert len(mark_requests) == 2
     assert {request['questionNumber'] for request in mark_requests} == {18, 20}
     capture(page, 'marking-results.png')
@@ -191,12 +192,14 @@ with sync_playwright() as playwright:
     page.locator('.rta').evaluate("element => { element.innerHTML = 'Attempted edit'; element.dispatchEvent(new Event('input', {bubbles: true})); }")
     assert page.evaluate("BS('1').ans['18.0']") == original_answer
 
-    # Abstentions remain unscored, offer no retry/re-mark button, and are absent from mistakes.
+    # Abstentions remain unscored and are absent from mistakes. They offer an explicit fresh re-mark
+    # ("Mark this answer again") but never retry on their own.
     page.goto(URL + '#/1/review/20')
     marking = page.locator('.guide .aib')
     expect(marking.locator('h5')).to_have_text('Needs review — no AI mark awarded')
     expect(page.locator('.guide > h4 .sc')).to_have_text('Unscored')
-    assert marking.locator('[data-act=airetry], [data-act=airemark]').count() == 0
+    assert marking.locator('[data-act=airetry]').count() == 0
+    expect(marking.locator('[data-act=airemark]')).to_have_text('Mark this answer again')
     assert page.evaluate("aiTodo(BANKS[0]).length") == 0
     capture(page, 'marking-needs-review.png')
     page.goto(URL + '#/mistakes/1')
@@ -210,7 +213,7 @@ with sync_playwright() as playwright:
     page.wait_for_function('Object.keys(S.pending).length === 0')
     page.reload()
     expect(page.locator('.big')).to_have_text('2 / 77')
-    expect(page.locator('#aib')).to_contain_text('need review')
+    expect(page.locator('#aib')).to_contain_text('could not be marked')
     assert len(mark_requests) == 2
 
     # Self-mark redraws destroy the old Ace instance and keep the submitted editor locked.
@@ -292,38 +295,41 @@ with sync_playwright() as playwright:
     assert all('formats' not in heading.lower() for heading in page.locator('.mk-grp').all_text_contents())
     assert len(mark_requests) == 3
 
-    # Numeric fallbacks remain visibly provisional through practice, submission,
-    # reload and history. Re-opening or clicking unchanged practice work spends nothing.
+    # Numeric fallbacks remain visibly unconfirmed through practice, submission, reload and history. Each
+    # provisional result is marked afresh once (remark:true) before it is accepted, so it costs two requests.
+    # Re-opening or clicking unchanged practice work spends nothing more.
     page.goto(URL + '#/10')
     page.click('[data-mode=practice]')
     page.locator('.rta').fill('A provisional example for the first question.')
     page.click('[data-act=pqmark]')
     page.wait_for_function("BS('10').ai['1.0'] && !aiQuestionRun(CUR.b, 1)")
+    assert [r.get('remark', False) for r in mark_requests[3:]] == [False, True]
     marking = page.locator('.guide .aib').first
-    expect(marking.locator('h5')).to_have_text('Provisional mark')
-    expect(page.locator('.guide > h4 .sc')).to_have_text('Provisional: 2 / 5')
-    expect(marking).to_contain_text('not a confirmed assessment')
+    expect(marking.locator('h5')).to_have_text('Unconfirmed mark')
+    expect(page.locator('.guide > h4 .sc')).to_have_text('Unconfirmed: 2 / 5')
+    expect(marking).to_contain_text('lower of their marks')
     capture(page, 'marking-provisional-feedback.png')
     assert marking.get_by_text('What earned marks', exact=True).count() == 0
-    assert marking.locator('[data-act=airetry], [data-act=airemark]').count() == 0
+    assert marking.locator('[data-act=airetry]').count() == 0
+    expect(marking.locator('[data-act=airemark]').first).to_have_text('Mark this answer again')
     page.click('[data-act=pqmark]')
-    assert len(mark_requests) == 4
+    assert len(mark_requests) == 5
     page.goto(URL + '#/10/q/2')
     page.locator('.rta').fill('A provisional example for the second question.')
     page.click('.hxb[href="#/10/finish"]')
     page.click('[data-act=submit]')
     page.wait_for_function("BS('10').ai['2.0'] && !AIRUN['10']")
     expect(page.locator('.big')).to_have_text('3 / 15')
-    expect(page.locator('.feature').first).to_contain_text('Provisional total. Assessed subtotal: 0 / 5.')
-    expect(page.locator('#aib')).to_contain_text('2 provisional marks')
-    expect(page.locator('#improvement')).to_contain_text('Provisional AI marks and their criterion feedback are excluded')
+    expect(page.locator('.feature').first).to_contain_text('Includes unconfirmed marks. Assessed subtotal: 0 / 5.')
+    expect(page.locator('#aib')).to_contain_text('2 unconfirmed marks')
+    expect(page.locator('#improvement')).to_contain_text('Unconfirmed AI marks and their criterion feedback are excluded')
     capture(page, 'marking-provisional-results.png')
     # The hidden formats demo deliberately remains local; wait only for this paper.
     page.wait_for_function("!S.pending['10']")
     page.reload()
     expect(page.locator('.big')).to_have_text('3 / 15')
-    expect(page.locator('#aib')).to_contain_text('2 provisional marks')
-    assert len(mark_requests) == 5
+    expect(page.locator('#aib')).to_contain_text('2 unconfirmed marks')
+    assert len(mark_requests) == 7
     page.goto(URL + '#/mistakes/10')
     # The deliberately blank third answer is a real zero; only provisional
     # shortfalls are excluded from the mistakes list.
@@ -336,7 +342,7 @@ with sync_playwright() as playwright:
     page.goto(URL + '#/10/results')
     expect(page.locator('.big')).to_have_text('5 / 15')
     expect(page.locator('.feature').first).to_contain_text('Assessed subtotal: 4 / 10.')
-    expect(page.locator('#aib')).to_contain_text('1 provisional mark')
+    expect(page.locator('#aib')).to_contain_text('1 unconfirmed mark')
     page.goto(URL + '#/mistakes/10')
     headings = page.locator('.mk-item .mk-q').all_text_contents()
     assert sorted(headings) == ['Q1', 'Q3'], headings
@@ -345,8 +351,8 @@ with sync_playwright() as playwright:
     page.click('[data-act=restart]')
     assert page.evaluate('({T:S.hist[1].T,M:S.hist[1].M,provisionalG:S.hist[1].provisionalG,provisionalM:S.hist[1].provisionalM,provisionalParts:S.hist[1].provisionalParts})') == {'T': 4, 'M': 10, 'provisionalG': 1, 'provisionalM': 5, 'provisionalParts': 1}
     page.goto(URL + '#/papers')
-    expect(page.locator('table.res').last).to_contain_text('Provisional marks: 1 / 5 across 1 part')
-    assert len(mark_requests) == 5
+    expect(page.locator('table.res').last).to_contain_text('Unconfirmed marks: 1 / 5 across 1 part')
+    assert len(mark_requests) == 7
     assert not page_errors, page_errors
     assert not unexpected_requests, unexpected_requests
     context.close()

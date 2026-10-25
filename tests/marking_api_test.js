@@ -14,7 +14,7 @@ function context() {
   const storage = {
     async authorize(headers) { calls.push('authorize'); if (headers.authorization !== 'Bearer mock') throw Object.assign(new Error('Sign in.'), { status: 401, code: 'auth_required' }); return { id: 'a'.repeat(64) }; },
     async getCached(id, digest) { calls.push('cache'); return records.get(digest) || null; },
-    async getOrReserve(id, digest) { calls.push('reserve'); if (failure === 'quota') throw Object.assign(new Error('Allowance reached.'), { status: 429, code: 'quota_exceeded' }); if (failure === 'busy') return { state: 'busy' }; return records.has(digest) ? { state: 'cached', result: records.get(digest) } : { state: 'reserved', leaseId: 'lease' }; },
+    async getOrReserve(id, digest, options) { calls.push('reserve'); storage.lastReserve = { digest, options }; if (options && options.replace) return { state: 'reserved', leaseId: 'lease' }; if (failure === 'quota') throw Object.assign(new Error('Allowance reached.'), { status: 429, code: 'quota_exceeded' }); if (failure === 'busy') return { state: 'busy' }; return records.has(digest) ? { state: 'cached', result: records.get(digest) } : { state: 'reserved', leaseId: 'lease' }; },
     async finish(id, digest, lease, output) { calls.push('finish'); if (failure === 'persist') throw new Error('PRIVATE STORAGE DETAIL'); records.set(digest, output); },
     async fail(id, digest, lease, diagnostic) { calls.push('fail'); storage.lastFailure = diagnostic; }
   };
@@ -50,6 +50,18 @@ async function invoke(handler, input = body, auth = 'Bearer mock') {
   assert.match(input.question, /hashing and salting/); assert.equal(input.maxMarks, 3); assert(!('tests' in input));
   assert.equal(c.calls.at(-1), 'finish');
   await invoke(handler); assert.equal(c.calls.filter(Array.isArray).length, 1, 'cached decisions must not call provider again');
+  // An explicit re-mark asks the store to replace the saved decision and calls the provider again, with the
+  // same input digest; anything but a boolean is rejected before any spend.
+  const cachedDigest = c.storage.lastReserve.digest;
+  assert.equal(c.storage.lastReserve.options, undefined);
+  const remarked = await invoke(handler, { ...body, remark: true });
+  assert.equal(remarked.code, 200); assert.deepEqual(c.storage.lastReserve, { digest: cachedDigest, options: { replace: true } });
+  assert.equal(c.calls.filter(Array.isArray).length, 2, 'a re-mark calls the provider again');
+  assert.equal((await invoke(handler, { ...body, remark: false })).code, 200); assert.equal(c.storage.lastReserve.options, undefined);
+  assert.equal(c.calls.filter(Array.isArray).length, 2);
+  const reservesBefore = c.calls.filter(x => x === 'reserve').length;
+  assert.equal((await invoke(handler, { ...body, remark: 'yes' })).code, 400);
+  assert.equal(c.calls.filter(x => x === 'reserve').length, reservesBefore);
   c.env.DEEPSEEK_API_KEY = '';
   assert.equal((await invoke(handler)).value.mark, 1);
   assert.equal((await invoke(handler, { ...body, answer: 'uncached' })).value.code, 'no_key');

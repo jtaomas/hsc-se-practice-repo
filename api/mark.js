@@ -62,7 +62,8 @@ function createHandler(deps = {}) {
         }
         return res.status(503).json({ code: 'no_key', error: 'AI marking is not configured. Your answer remains saved.' });
       }
-      const reservation = await storage.getOrReserve(session.id, inputDigest);
+      // An explicit re-mark replaces the saved decision; the store restores it if the fresh attempt fails.
+      const reservation = await storage.getOrReserve(session.id, inputDigest, prepared.remark ? { replace: true } : undefined);
       if (reservation.state === 'cached') return res.status(200).json(verifiedCached(reservation.result));
       if (reservation.state === 'busy') { res.setHeader('Retry-After', '15'); return res.status(409).json({ code: 'marking_busy', error: 'This answer is already being marked. Try again shortly to retrieve the result.' }); }
       lease = reservation.leaseId;

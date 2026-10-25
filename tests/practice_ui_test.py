@@ -26,7 +26,7 @@ def route(r):
     r.continue_()
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch()
+    browser = pw.chromium.launch(executable_path=os.environ.get('CHROME'))
     ctx = browser.new_context(viewport={'width': 1200, 'height': 900})
     if os.environ.get('ACE_DIR'): ctx.add_init_script("window.ACEBASE='/__ace__/';")
     ctx.route('**/*', route)

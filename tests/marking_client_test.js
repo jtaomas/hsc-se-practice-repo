@@ -2,15 +2,15 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const clone=x=>JSON.parse(JSON.stringify(x));
 function client(){
-  const storage=new Map(),timers=[];
+  const storage=new Map(),timers=[],listeners={};
   const c={console,AbortController,window:{addEventListener(){}},location:{hash:'#/1/results'},
-    document:{addEventListener(){},querySelector(){return null},querySelectorAll(){return []},createElement(){return {innerHTML:'',get textContent(){return this.innerHTML.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')}}}},
+    document:{addEventListener(name,fn){(listeners[name]||(listeners[name]=[])).push(fn)},querySelector(){return null},querySelectorAll(){return []},createElement(){return {innerHTML:'',get textContent(){return this.innerHTML.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')}}}},
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
     setTimeout(fn,ms){timers.push({fn,ms});return timers.length},clearTimeout(){},setInterval(){},
     fetch(){throw new Error('Unexpected network request')},acctText(){return 'Account'},SYNC:{epoch:0},AIMARKING_VERSION:'test-v2'};
   vm.createContext(c);
   for(const file of ['helpers.js','kit.js','widgets.js','qtypes.js','xd.js','ai.js','pages.js','pages2.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../public',file),'utf8'),c,{filename:file});
-  c.S.tok='test-session';c.S.owner='student@example.test';c.timers=timers;
+  c.S.tok='test-session';c.S.owner='student@example.test';c.timers=timers;c.listeners=listeners;
   return c;
 }
 function paper(c,items){
@@ -18,6 +18,7 @@ function paper(c,items){
   c.BANKS.push(b);const bs=c.BS('1');bs.done=true;bs.start=10;bs.doneAt=20;c.CUR={b,n:1,rv:true};return {b,bs};
 }
 function written(){return {t:'tx',q:'Explain one thing.',m:3,w:50,model:'Sample answer',crit:['3 marks for explanation.']}}
+function practice(c,items){const p=paper(c,items);p.bs.done=false;p.bs.mode='practice';delete p.bs.doneAt;p.bs.pq={1:1};c.CUR.rv=false;c.location.hash='#/1/q/1';return p}
 function result(mark=2){return {status:'marked',mark,summary:'Evidence supported this mark.',strengths:['One point explained.'],improve:['Explain the second point.'],advice:['Use a clearer example.'],criteria:[{id:'C1',assessment:'partial',evidence:['A point'],basis:'A link is missing.'}],audit:{requestedModel:'deepseek-flash',returnedModels:['deepseek-flash'],harnessVersion:'test-v2',questionVersion:'q1',rubricVersion:'r1',inputDigest:'digest'}}}
 function reply(body,status=200){return {ok:status>=200&&status<300,status,json:async()=>clone(body)}}
 function defer(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
@@ -34,6 +35,10 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.equal(c.score(b,1,0).g,2);assert.equal(c.score(b,1,0).src,'ai');
     const html=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));
     assert(html.includes('Further advice (not a mark deduction)'));assert(html.includes('Criterion evidence'));assert(html.includes('partial'));assert(html.includes('A link is missing.'));assert(html.includes('deepseek-flash'));assert(html.includes('r1'));
+    function feedback(){return c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0))}
+    bs.ai['1.0'].audit.durationMs=90123;assert(feedback().includes('Model assessment time: 90.1 seconds (excludes browser queue and transfer time)'));
+    bs.ai['1.0'].audit.durationMs=0;assert(feedback().includes('Model assessment time: 0 seconds'));
+    for(const duration of [undefined,null,'123',-1,Infinity,NaN,300001]){bs.ai['1.0'].audit.durationMs=duration;assert(!feedback().includes('Model assessment time:'))}
     c.AIMARKING_VERSION='new-harness';assert.equal(c.aiRecord(b,1,0),null);c.AIMARKING_VERSION='test-v2';assert(c.aiRecord(b,1,0));
     b.qs[0].it[0].crit=['A corrected rubric.'];assert.equal(c.aiRecord(b,1,0),null);assert.equal(c.aiTodo(b).length,1);assert.equal(c.score(b,1,0).set,false);
   }
@@ -82,31 +87,172 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     const latest=c.AIRUN['1'];first.resolve(reply(result(1)));await one;assert.equal(c.AIRUN['1'],latest);assert.equal(bs.ai['1.0'],undefined);
     second.resolve(reply(result(3)));await two;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIRUN['1'],undefined);
   }
-  // At most two answer requests are active. Concurrent callers share a batch.
+  // At most three answer requests are active. Concurrent callers share a batch.
   {
     const c=client(),{b,bs}=paper(c,[written(),written(),written(),written(),written()]);Object.keys(b.qs[0].it).forEach(i=>bs.ans['1.'+i]='Answer '+i);
     const pending=[];let active=0,peak=0;c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(x=>{active--;return x})};
-    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===2);assert.equal(peak,2);
+    const run=c.runAI(b);assert.equal(c.runAI(b),run);await until(()=>pending.length===3);assert.equal(peak,3);
     for(let i=0;i<5;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}
-    await run;assert.equal(peak,2);assert.equal(c.aiTodo(b).length,0);
+    await run;assert.equal(peak,3);assert.equal(c.aiTodo(b).length,0);
   }
   // Transport failures are retryable. A 401 stops the queue and explains sign-in; null/boolean marks fail validation.
   {
     const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';let calls=0;c.fetch=async()=>{calls++;return calls===1?reply({error:'Unavailable'},503):reply(result())};
-    await c.runAI(b);assert.equal(c.aiTodo(b).length,1);assert(bs.aiErr['1.0']);await c.runAI(b);assert.equal(c.aiTodo(b).length,0);
+    await c.runAI(b);assert.equal(c.aiTodo(b).length,1);assert(bs.aiErr['1.0']);await c.runAI(b);assert.equal(calls,1,'saved failures must wait for an explicit retry');
+    bs.aiErr={};await c.runAI(b);assert.equal(c.aiTodo(b).length,0);
     c.fetch=async()=>reply({error:'Expired'},401);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal&&/Sign in again/.test(e.message));
     for(const mark of [null,false,'2',1.5]){c.fetch=async()=>reply({...result(),mark});await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),/invalid result/)}
   }
-  // "Already being marked" is not a failure: the client waits, asks again, and ends with the mark and no error.
+  // A busy answer does not stop unrelated answers or retry automatically on page re-entry.
   {
-    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';let calls=0;
-    c.fetch=async()=>{calls++;return calls<3?{...reply({code:'marking_busy',error:'This answer is already being marked.'},409),headers:{get:()=>'2'}}:reply(result())};
-    const run=c.runAI(b);
-    for(let i=0;i<2;i++){await until(()=>c.timers.some(t=>t.ms===2000&&!t.used));const t=c.timers.find(t=>t.ms===2000&&!t.used);t.used=true;t.fn()}
-    await run;assert.equal(calls,3);assert.equal(c.aiTodo(b).length,0);assert(!bs.aiErr['1.0']);
-    // A genuine conflict (not busy) still stops the run.
-    const d=client(),{b:b2,bs:bs2}=paper(d,[written()]);bs2.ans['1.0']='Answer';
-    d.fetch=async()=>reply({code:'other',error:'Conflict'},409);await d.runAI(b2);assert.equal(d.aiTodo(b2).length,1);assert(bs2.aiErr['1.0']);
+    const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const requests=[];c.fetch=async(_,r)=>{const part=JSON.parse(r.body).partIndex;requests.push(part);return part===0?reply({error:'This answer is already being marked.',code:'marking_busy'},409):reply(result())};
+    await c.runAI(b);assert.deepEqual(requests,[0,1,2,3,4]);assert.equal(Object.keys(bs.ai).length,4);assert.match(bs.aiErr['1.0'],/already being marked/);
+    await c.ensureMarked(b);assert.equal(requests.length,5,'navigation must not retry the busy answer');assert.equal(c.aiTodo(b).length,1);
+    c.fetch=async()=>reply({error:'A different conflict',code:'other_conflict'},409);await assert.rejects(c.aiCall(c.aiPayload(b,1,0),c.S.tok),e=>e.fatal===true);
+  }
+  // Completed answers render while other requests are pending; final render clears the running status.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.checked=1;
+    const pending=[],frames=[],app={set innerHTML(value){frames.push(value)}};c.$=s=>s==='#app'?app:null;c.window.scrollY=47;c.window.scrollTo=(x,y)=>assert.equal(y,47);c.CUR.rv=false;
+    c.resultsPage=()=>JSON.stringify({marks:Object.keys(bs.ai).length,running:!!c.AIRUN[b.id]});
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===3);
+    pending[0].resolve(reply(result()));await until(()=>frames.length>0);assert.deepEqual(JSON.parse(frames[0]),{marks:1,running:true});assert.equal(c.aiTodo(b).length,3);
+    for(let i=1;i<4;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await run;
+    assert.deepEqual(JSON.parse(frames.at(-1)),{marks:4,running:false});
+  }
+  // Global auth/quota/conflict failures still stop dispatching queued answers; in-flight results are retained.
+  for(const status of [401,429,409]){
+    const c=client(),{b,bs}=paper(c,Array.from({length:5},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);
+    const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.runAI(b);await until(()=>pending.length===3);
+    pending[0].resolve(reply({error:'Global failure',code:'global_failure'},status));await until(()=>!!bs.aiErr['1.0']);
+    const block=c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0));assert(block.includes('when the batch finishes'));assert(!block.includes('data-act="airetry"'));
+    pending[1].resolve(reply(result()));pending[2].resolve(reply(result()));await run;assert.equal(pending.length,3);assert.equal(Object.keys(bs.ai).length,2);
+    assert(c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('data-act="airetry"'));
+  }
+  // Progress can follow navigation between review questions, but never redraw an unrelated route/account/attempt.
+  for(const mutate of [
+    c=>{c.location.hash='#/account'},
+    c=>{c.location.hash='#/2/results'},
+    c=>{c.CUR={b:null,n:0}},
+    c=>{c.S.tok='another-session'},
+    c=>{c.S.owner='another@example.test'},
+    c=>{c.SYNC.epoch++},
+    (c,b,bs)=>{bs.doneAt++},
+    c=>{c.S={...c.S,u:{}}}
+  ]){
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';bs.checked=1;const pending=defer();let started=false,renders=0;
+    c.$=s=>s==='#app'?{set innerHTML(_){renders++}}:null;c.resultsPage=()=>'';c.window.scrollTo=()=>{};c.CUR.rv=false;
+    c.fetch=()=>{started=true;return pending.promise};const run=c.markAndShow(b);await until(()=>started);mutate(c,b,bs);pending.resolve(reply(result()));await run;assert.equal(renders,0);
+  }
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='First';bs.ans['2.0']='Second';bs.checked=1;
+    c.location.hash='#/1/review/1';const pending=[];let visible='',draws=0;c.$=s=>s==='#qarea'?{set innerHTML(value){visible=value}}:null;
+    c.qHTML=(_,n)=>'Review '+n;c.afterQDraw=()=>{draws++};c.refreshNav=()=>{};c.xdCleanup=()=>{};c.window.scrollTo=()=>{};
+    c.fetch=()=>{const d=defer();pending.push(d);return d.promise};const run=c.markAndShow(b);await until(()=>pending.length===2);
+    c.location.hash='#/1/review/2';c.CUR.n=2;pending[0].resolve(reply(result()));await until(()=>draws>0);assert.equal(visible,'Review 2');
+    pending[1].resolve(reply(result()));await run;assert.equal(visible,'Review 2');
+  }
+  // Local runtime work is deduplicated and cannot delay AI dispatch, completion, or released marks.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';const checks=defer();let checkCalls=0,requests=0;
+    c.runChecks=()=>{checkCalls++;return checks.promise};c.fetch=async()=>{requests++;return reply(result())};
+    const first=c.ensureMarked(b),second=c.ensureMarked(b);await until(()=>requests===1&&checkCalls===1);await Promise.all([first,second]);
+    assert.equal(bs.checked,undefined);assert.equal(c.score(b,1,0).g,2);assert(c.CHECKRUN[b.id]);checks.resolve();await until(()=>bs.checked===1);await until(()=>!c.CHECKRUN[b.id]);
+  }
+  // Failure or a stale local-check completion cannot suppress a mark or flag a replacement attempt checked.
+  {
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Answer';c.runChecks=()=>Promise.reject(new Error('Runtime did not load'));c.fetch=async()=>reply(result());
+    await c.ensureMarked(b);await until(()=>!c.CHECKRUN[b.id]);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.checked,undefined);
+    const checks=defer();let started=false;c.runChecks=()=>{started=true;return checks.promise};await c.ensureMarked(b);await until(()=>started);bs.doneAt++;checks.resolve();await until(()=>!c.CHECKRUN[b.id]);assert.equal(bs.checked,undefined);
+  }
+  // A broken progress display must not cancel queued answers or erase confirmed results.
+  {
+    const c=client(),{b,bs}=paper(c,Array.from({length:4},written));b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0,warnings=0;
+    c.console={...console,warn(){warnings++}};c.fetch=async()=>{calls++;return reply(result())};await c.runAI(b,()=>{throw new Error('DOM changed')});
+    assert.equal(calls,4);assert.equal(Object.keys(bs.ai).length,4);assert.equal(warnings,4);assert.equal(c.AIRUN[b.id],undefined);
+  }
+  // Practice marks only the requested question, leaves busy responses for explicit retry,
+  // and never starts a timed POST replay that could consume another paid job.
+  {
+    const c=client(),{b,bs}=practice(c,Array.from({length:5},written));b.qs.push({...b.qs[0],it:[written()]});
+    b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);bs.ans['2.0']='Untouched second question';const requests=[];
+    c.fetch=async(_,r)=>{const p=JSON.parse(r.body);requests.push([p.questionNumber,p.partIndex]);return p.partIndex===0?reply({code:'marking_busy',error:'Already being marked'},409):reply(result())};
+    await c.runAIQuestion(b,1);assert.deepEqual(requests,[[1,0],[1,1],[1,2],[1,3],[1,4]]);assert.equal(Object.keys(bs.ai).length,4);assert(bs.aiErr['1.0']);assert.equal(bs.ai['2.0'],undefined);
+    assert(c.timers.every(t=>t.ms===250000),'practice busy scheduled an automatic replay');await c.runAIQuestion(b,1);assert.equal(requests.length,5);
+    c.fetch=async(_,r)=>{requests.push([JSON.parse(r.body).questionNumber,JSON.parse(r.body).partIndex]);return reply(result())};
+    await c.pqMark();assert.equal(requests.length,6);assert.equal(c.score(b,1,0).g,2);assert.equal(bs.aiErr['1.0'],undefined);assert.equal(bs.done,false);
+  }
+  // Practice responses use account/epoch/attempt/answer guards, while edits to a
+  // different question do not discard this question's valid result.
+  for(const mutate of [
+    (c,b,bs)=>{bs.ans['1.0']='Edited while marking'},
+    (c,b)=>{b.qs[0].it[0].crit.push('New rubric')},
+    c=>{c.S.tok='another-session'},c=>{c.S.owner='another@example.test'},c=>{c.SYNC.epoch++},
+    (c,b,bs)=>{bs.start++},(c,b,bs)=>{bs.mode='exam'},c=>{c.S={...c.S,u:{}}}
+  ]){
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Original';const d=defer();let sent=false;
+    c.fetch=()=>{sent=true;return d.promise};const run=c.runAIQuestion(b,1);await until(()=>sent);mutate(c,b,bs);d.resolve(reply(result()));await run;
+    assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.aiErr['1.0'],undefined);
+  }
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='First';bs.ans['2.0']='Before';const d=defer();let sent=false;
+    c.fetch=()=>{sent=true;return d.promise};const run=c.runAIQuestion(b,1);await until(()=>sent);bs.ans['2.0']='Changed elsewhere';d.resolve(reply(result()));await run;assert.equal(c.score(b,1,0).g,2);
+  }
+  // A replacement practice run is not deleted or overwritten by its stale predecessor.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='First';const pending=[];c.fetch=()=>{const d=defer();pending.push(d);return d.promise};
+    const first=c.runAIQuestion(b,1);await until(()=>pending.length===1);bs.ans['1.0']='Second';const second=c.runAIQuestion(b,1);await until(()=>pending.length===2);const latest=c.AIQ['1/1'];
+    pending[0].resolve(reply(result(1)));await first;assert.equal(c.AIQ['1/1'],latest);assert.equal(bs.ai['1.0'],undefined);
+    pending[1].resolve(reply(result(3)));await second;assert.equal(c.score(b,1,0).g,3);assert.equal(c.AIQ['1/1'],undefined);
+  }
+  // The shared three-request ceiling also covers practice on several questions.
+  {
+    const c=client(),{b,bs}=practice(c,[written(),written(),written()]);b.qs.push({...b.qs[0],it:[written(),written(),written()]});
+    b.qs.forEach((q,qi)=>q.it.forEach((_,i)=>bs.ans[(qi+1)+'.'+i]='Answer'));const pending=[];let active=0,peak=0;
+    c.fetch=()=>{active++;peak=Math.max(peak,active);const d=defer();pending.push(d);return d.promise.then(r=>{active--;return r})};
+    const first=c.runAIQuestion(b,1),second=c.runAIQuestion(b,2);await until(()=>pending.length===3);assert.equal(peak,3);
+    for(let i=0;i<6;i++){await until(()=>pending.length>i);pending[i].resolve(reply(result()))}await Promise.all([first,second]);assert.equal(peak,3);assert.equal(Object.keys(bs.ai).length,6);
+  }
+  // Submitting the same attempt reuses an in-flight practice result instead of
+  // racing it with a duplicate POST; a later submitted batch reuses both marks.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);b.qs.push({...b.qs[0],it:[written()]});bs.ans['1.0']='Practice answer';bs.ans['2.0']='Other answer';const pending=[];
+    c.fetch=(_,r)=>{const d=defer();pending.push({question:JSON.parse(r.body).questionNumber,...d});return d.promise};
+    const one=c.runAIQuestion(b,1);await until(()=>pending.length===1);bs.done=true;bs.doneAt=30;const all=c.runAI(b);await until(()=>pending.length===2);
+    assert.deepEqual(pending.map(r=>r.question),[1,2]);pending[0].resolve(reply(result(3)));pending[1].resolve(reply(result(2)));await Promise.all([one,all]);
+    assert.equal(c.score(b,1,0).g,3);assert.equal(c.score(b,2,0).g,2);await c.runAI(b);assert.equal(pending.length,2);
+  }
+  // An active exam blocks practice requests and stale UI refreshes. Guest
+  // practice still reveals the guide, and asynchronous marking never replaces a focused editor.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';const other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
+    await c.runAIQuestion(b,1);assert.equal(c.pqMark(),undefined);bs.done=true;await c.ensureMarked(b);
+    let renders=0;c.$=()=>({set innerHTML(_){renders++}});c.refreshMarking(b,c.aiContext(b));assert.equal(renders,0);
+    c.$=()=>null;c.BS('2').done=true;bs.done=false;c.S.tok='';await c.pqMark();assert.equal(bs.pq[1],1);assert.equal(bs.ai['1.0'],undefined);
+  }
+  {
+    const c=client(),{b,bs}=paper(c,[written()]),other={...b,id:'2'};c.BANKS.push(other);Object.assign(c.BS('2'),{mode:'exam',start:Date.now(),done:false});
+    const app={};c.$=selector=>selector==='#app'?app:null;c.location.hash='#/1/q/1';c.applyTheme=()=>{};c.xdCleanup=()=>{};c.tick=()=>{};c.window.scrollTo=()=>{};
+    c.render();assert(app.innerHTML.includes('Exam in progress'));assert.equal(c.CUR.b,null,'submitted q route bypassed the exam lock');
+    bs.done=false;bs.mode='practice';bs.pq={1:1};assert.equal(c.pqShown(b,1),false);assert.equal(c.pqPanelHTML(b,1),'');
+  }
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';let replacements=0;const panel={};
+    c.$=selector=>selector==='#qarea'?{set innerHTML(_){replacements++}}:selector==='#pq'?panel:null;c.document.activeElement={tagName:'DIV',isContentEditable:true};
+    c.fetch=async()=>reply(result());await c.runAIQuestion(b,1);assert.equal(c.score(b,1,0).g,2);assert.equal(replacements,0);assert(panel.outerHTML.includes('Mark this question again'));
+    c.qHTML=()=>'<p>Confirmed feedback</p>';c.afterQDraw=()=>{};c.refreshNav=()=>{};c.xdCleanup=()=>{};c.window.scrollTo=()=>{};
+    c.document.activeElement=null;c.listeners.focusout.forEach(fn=>fn());c.timers.filter(t=>t.ms===0).at(-1).fn();assert.equal(replacements,1,'feedback did not appear after leaving the editor');
+    c.document.activeElement={tagName:'TEXTAREA'};c.refreshMarking(b,c.aiContext(b,1));c.listeners.focusout.forEach(fn=>fn());c.S.owner='changed@example.test';c.document.activeElement=null;
+    c.timers.filter(t=>t.ms===0).at(-1).fn();assert.equal(replacements,1,'deferred redraw survived an account change');
+  }
+  // Practice code checks run independently of model work and do not mark the
+  // rest of the paper as checked; class panels still rebind after question redraw.
+  {
+    const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';const check=defer();let requested=0,checked=0,classes=0;
+    c.runChecks=(_,n)=>{assert.equal(n,1);checked++;return check.promise};c.fetch=async()=>{requested++;return reply(result())};await c.pqMark();
+    assert.equal(requested,1);assert.equal(checked,1);assert.equal(bs.checked,undefined);assert.equal(c.score(b,1,0).g,2);check.resolve();await until(()=>!c.CHECKRUN['1/1']);
+    c.classEnsure=()=>{classes++};c.aceMount=()=>{};c.afterQDraw();assert.equal(classes,1);
   }
   // Saved diagram geometry and bindings survive the request, together with its rendering.
   {

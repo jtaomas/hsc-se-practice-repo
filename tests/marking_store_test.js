@@ -102,6 +102,30 @@ function call(body) { return new Promise((resolve, reject) => { const res = { se
   assert.equal((await a.getCached(user(1), digest('diagnostic'))).diagnostics, undefined);
   reset();
 
+  // Transport recovery records physical attempts without preserving arbitrary
+  // provider errors, hostnames, addresses, headers or source content.
+  job = await a.getOrReserve(user(1), digest('transport-diagnostic'));
+  await a.fail(user(1), digest('transport-diagnostic'), job.leaseId, { code: 'provider_unavailable', audit: {
+    networkAttempts: 4, calls: [
+      { stage: 'marker1', status: 'completed', attemptCount: 2, retryCause: 'EAI_AGAIN', responseStatus: 200, cause: { hostname: 'PRIVATE HOST' }, message: 'PRIVATE MESSAGE' },
+      { stage: 'marker2', status: 'failed', attemptCount: 1, transportCode: 'UND_ERR_SOCKET', transportPhase: 'body', responseStatus: 200, errorCode: 'provider_unavailable', headers: { authorization: 'PRIVATE TOKEN' } },
+      { stage: 'auditor', status: 'failed', attemptCount: 3, retryCause: 'ECONNRESET', transportCode: 'PRIVATE CODE', transportPhase: 'PRIVATE PHASE', responseStatus: 999 }
+    ]
+  } });
+  const transportPath = [...globalThis.__M.keys()].find(p => p.includes('/jobs/'));
+  const transportDiagnostic = JSON.parse(globalThis.__M.get(transportPath)).diagnostics;
+  assert.equal(transportDiagnostic.audit.networkAttempts, 4);
+  assert.deepEqual(transportDiagnostic.audit.calls, [
+    { stage: 'marker1', usage: {}, status: 'completed', attemptCount: 2, retryCause: 'EAI_AGAIN', responseStatus: 200 },
+    { stage: 'marker2', usage: {}, status: 'failed', errorCode: 'provider_unavailable', attemptCount: 1, transportCode: 'UND_ERR_SOCKET', transportPhase: 'body', responseStatus: 200 },
+    { stage: 'auditor', usage: {}, status: 'failed' }
+  ]);
+  assert(!JSON.stringify(transportDiagnostic).includes('PRIVATE'));
+  job = await a.getOrReserve(user(1), digest('transport-diagnostic'));
+  await a.fail(user(1), digest('transport-diagnostic'), job.leaseId, { code: 'provider_unavailable', audit: { networkAttempts: 5, calls: [] } });
+  assert.equal(JSON.parse(globalThis.__M.get(transportPath)).diagnostics.audit.networkAttempts, undefined);
+  reset();
+
   // Coaching shares this store. Its completed draft and failed audit retain
   // only the established bounded telemetry, never candidate/provider text.
   job = await a.getOrReserve(user(1), digest('coach-diagnostic'));

@@ -66,20 +66,29 @@ async function invoke(handler, input = body, auth = 'Bearer mock') {
   }
   assert(c.calls.includes('fail'));
   // Full API -> canonical bank -> real engine -> persistence, with ONLY fake provider Responses.
-  const e = context(); let requests = 0;
+  for (const recoverConnection of [false, true]) {
+  const e = context(); let requests = 0, completedRequests = 0;
   e.engine = { ...realEngine, mark: (input, options) => realEngine.mark(input, { ...options, fetch: async (_url, request) => {
-    requests++; const p = JSON.parse(request.body); assert.equal(p.model, 'deepseek-flash'); assert.equal(p.reasoning_effort, 'high');
+    requests++;
+    if (recoverConnection && requests === 1) throw Object.assign(new TypeError('Synthetic connection failure'), { cause: { code: 'EAI_AGAIN' } });
+    completedRequests++; const p = JSON.parse(request.body); assert.equal(p.model, 'deepseek-flash'); assert.equal(p.reasoning_effort, completedRequests <= 2 ? 'high' : 'low');
     let output;
-    if (requests <= 2) output = { status: 'marked', mark: 1, summary: 'You identify one-way hashing.', strengths: ['One-way hashing'], improve: ['Explain how a unique random salt protects passwords.'], advice: [], criteria: input.criteria.map((c, i) => ({ id: c.id, assessment: i === 2 ? 'met' : 'context', evidence: i === 2 ? ['Hashing is one way.'] : [], basis: i === 2 ? 'One idea identified.' : 'A higher band requires more detail.' })), uncertainties: [] };
+    if (completedRequests <= 2) output = { status: 'marked', mark: 1, summary: 'You identify one-way hashing.', strengths: ['One-way hashing'], improve: ['Explain how a unique random salt protects passwords.'], advice: [], criteria: input.criteria.map((c, i) => ({ id: c.id, assessment: i === 2 ? 'met' : 'context', evidence: i === 2 ? ['Hashing is one way.'] : [], basis: i === 2 ? 'One idea identified.' : 'A higher band requires more detail.' })), uncertainties: [] };
     else output = { checks: Object.fromEntries(Object.keys(realEngine.AUDIT_CHECKS).map(id => [id, 'pass'])), issues: [], selectedFeedback: 0 };
-    if(requests<=2){
+    if(completedRequests<=2){
       output.losses={allocation:'holistic',totalLost:2,items:[{category:'insufficient_explanation',marksLost:null,criterionIds:[input.criteria[0].id,input.criteria[1].id],evidence:[],explanation:'The answer identifies hashing but does not explain salt or protection.',action:'Explain the effect of a unique salt on precomputed lookups.'}]};
       output.quality=require('../server/feedback-policy').QUALITY_FACTORS.map(id=>({id,rating:id==='technical_accuracy'?8:null,evidence:id==='technical_accuracy'?['Hashing is one way.']:[],feedback:id==='technical_accuracy'?'The explicit one-way claim is accurate.':'The brief response gives too little evidence, or this factor is inapplicable.',action:'Explain how hashing and salting work together.'}));
     }
     return new Response(JSON.stringify({ model: 'deepseek-flash', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }], usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }), { status: 200 });
   } }) };
   const integrated = await invoke(createHandler({ store: e.storage, engine: e.engine, env: e.env }));
-  assert.equal(integrated.code, 200); assert.equal(integrated.value.status, 'marked'); assert.equal(requests, 3); assert.equal(e.records.size, 1);
+  assert.equal(integrated.code, 200); assert.equal(integrated.value.status, 'marked'); assert.equal(requests, recoverConnection ? 4 : 3); assert.equal(e.records.size, 1);
+  assert.equal(integrated.value.audit.networkAttempts, requests);
+  assert.equal(integrated.value.audit.calls.length, 3);
+  e.env.DEEPSEEK_API_KEY = '';
+  assert.equal((await invoke(createHandler({ store: e.storage, engine: e.engine, env: e.env }))).value.mark, 1, 'a recovered confirmed result remains verifiable from cache without another provider call');
+  assert.equal(requests, recoverConnection ? 4 : 3);
+  }
 
   // Exercise BOTH direct reads without a key and cached reservation responses.
   // Re-sealing selected corruptions proves canonical/schema checks are needed

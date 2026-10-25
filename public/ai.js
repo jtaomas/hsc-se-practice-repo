@@ -27,7 +27,7 @@ function aiCall(payload,token){
   return fetch('/api/mark',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(payload),signal:control.signal}).then(function(r){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
       j=j||{};
-      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.busy=j.code==='marking_busy';e.retryMs=Math.max(1,Math.min(30,+(r.headers&&r.headers.get&&r.headers.get('retry-after'))||15))*1000;e.fatal=r.status===401||(r.status===409&&!e.busy)||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
+      if(!r.ok){var e=new Error(r.status===401?'Sign in again to use AI marking. Your answers are still saved.':j.error||('Marking failed ('+r.status+')'));e.status=r.status;e.code=j.code;e.fatal=r.status===401||(r.status===409&&j.code!=='marking_busy')||r.status===429||j.code==='no_key'||j.code==='bad_key'||r.status===404||r.status===402;throw e}
       if((j.status!=='marked'&&j.status!=='needs_review')||(j.status==='marked'&&(typeof j.mark!=='number'||!isFinite(j.mark)||Math.floor(j.mark)!==j.mark))||(j.status==='needs_review'&&j.mark!==null))throw new Error('The marking service returned an invalid result. Please try again.');
       return j;
     });
@@ -47,87 +47,75 @@ function aiStore(bs,k,it,stamp,r){
   bs.ai[k]={status:r.status,g:r.mark,stamp:stamp,fb:{summary:typeof r.summary==='string'?r.summary:'',strengths:strings(r.strengths),improve:strings(r.improve),advice:strings(r.advice),criteria:Array.isArray(r.criteria)?r.criteria:[],losses:r.losses||null,quality:Array.isArray(r.quality)?r.quality:[]},audit:r.audit||{},ts:Date.now()};
   delete bs.aiErr[k];
 }
-var AIRUN={};
-/* Rolling update: as each answer finishes, refresh the status panel, scores and nav without a full redraw. */
-function aiLive(b,qn){
-  if(typeof CUR==='undefined'||CUR.b!==b||!$('#app'))return;
-  var panel=$('#aib');if(panel)panel.outerHTML=aiStatusHTML(b);
-  if(!CUR.rv&&location.hash.indexOf('/results')>=0){
-    var t=document.createElement('div');t.innerHTML=resultsPage(b);
-    var feat=$('.feature',$('#app')),nf=$('.feature',t);if(feat&&nf)feat.innerHTML=nf.innerHTML;
-    var cur=$$('table.res',$('#app')),nxt=$$('table.res',t);
-    cur.forEach(function(el,i){if(nxt[i])el.innerHTML=nxt[i].innerHTML});
-    var np=$('#aib',t),op=$('#aib');if(np&&op)op.outerHTML=np.outerHTML;
-  }else if(CUR.rv&&$('#qarea')){
-    refreshNav();
-    var ae=document.activeElement;
-    if(qn===CUR.n&&!(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae&&ae.isContentEditable)){var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();window.scrollTo(0,y)}
-  }
-}
-function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt&&aiPaperStamp(b)===run.stamp}
-function runAI(b,onProg){
-  var bs=BS(b.id),calls=aiTodo(b);
-  if(!S.tok||!bs.done)return Promise.resolve();
-  if(aiRunCurrent(b,AIRUN[b.id]))return AIRUN[b.id].promise;
-  if(!calls.length){onProg&&onProg(0,0,null);return Promise.resolve()}
-  var idx=0,done=0,fatal=null,total=calls.length;
-  var run={state:S,paper:bs,token:S.tok,owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,attempt:String(bs.start)+'/'+String(bs.doneAt),stamp:aiPaperStamp(b)};
-  AIRUN[b.id]=run;
-  run.total=total;run.done=0;run.waiting=0;
-  /* An answer that is "already being marked" (an earlier request is still running) is not a failure: wait and ask again. */
-  function attempt(p,tries){
-    return aiCall(p,run.token).catch(function(e){
-      if(!e.busy||tries>=24||!aiRunCurrent(b,run)||AIRUN[b.id]!==run)throw e;
-      run.waiting++;aiLive(b);
-      return new Promise(function(ok){setTimeout(ok,e.retryMs||15000)}).then(function(){run.waiting--;return attempt(p,tries+1)});
-    });
-  }
-  function next(){
-    if(idx>=calls.length||fatal||!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return Promise.resolve();
-    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
-    var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
-    return prepared.then(function(p){if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run)return null;return attempt(p,0)}).then(function(r){
-      if(!r)return;
-      if(!aiRunCurrent(b,run)||AIRUN[b.id]!==run||stamp!==aiStamp(b,t[0],t[1]))return;
-      aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(aiRunCurrent(b,run)&&AIRUN[b.id]===run)bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(aiRunCurrent(b,run)&&AIRUN[b.id]===run){run.done=done;save(b.id);aiLive(b,t[0]);onProg&&onProg(done,total,fatal)}return next()});
-  }
-  run.promise=Promise.all([next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
-  return run.promise;
-}
-/* Practice mode: mark one question on its own. Runs beside, never instead of, the whole-paper run. */
-var AIQ={};
+var AIRUN={},AIQ={},AIWORK={active:0,queue:[]};
 function aiqKey(b,n){return b.id+'/'+n}
-function aiqLive(b,n){
-  if(typeof CUR==='undefined'||CUR.b!==b||CUR.n!==n||CUR.rv||!$('#qarea'))return;
-  var ae=document.activeElement;
-  if(ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable)){var pn=$('#pq');if(pn)pn.outerHTML=pqPanelHTML(b,n);return}
-  var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,false);afterQDraw();window.scrollTo(0,y);refreshNav();
+function aiQuestionStamp(b,n){return JSON.stringify(b.qs[n-1].it.map(function(it,i){return AUTO[it.t]?null:aiStamp(b,n,i)}))}
+function aiContext(b,n){var bs=BS(b.id);return {state:S,paper:bs,token:S.tok||'',owner:S.owner||'',epoch:typeof SYNC==='undefined'?0:SYNC.epoch,mode:bs.mode||'',start:String(bs.start),attempt:String(bs.start)+'/'+String(bs.doneAt),question:n||0,stamp:n?aiQuestionStamp(b,n):aiPaperStamp(b)}}
+function aiRunCurrent(b,run){return !!run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token&&(S.owner||'')===run.owner&&(typeof SYNC==='undefined'?0:SYNC.epoch)===run.epoch&&(run.paper.mode||'')===run.mode&&(run.question?String(run.paper.start)===run.start:String(run.paper.start)+'/'+String(run.paper.doneAt)===run.attempt)&&(run.question?aiQuestionStamp(b,run.question):aiPaperStamp(b))===run.stamp}
+function aiQuestionRun(b,n){var run=AIQ[aiqKey(b,n)];return aiRunCurrent(b,run)?run:null}
+function aiUnlocked(){return typeof examLock!=='function'||!examLock()}
+/* Practice and whole-paper work share the same three-request ceiling. Queued
+   requests recheck their context before they can send any student work. */
+function aiDispatch(payload,token,current){
+  return new Promise(function(resolve,reject){
+    AIWORK.queue.push({payload:payload,token:token,current:current,resolve:resolve,reject:reject});aiDrain();
+  });
 }
-function runAIQuestion(b,n){
-  var bs=BS(b.id),key=aiqKey(b,n);
-  if(!S.tok)return Promise.resolve();
-  if(AIQ[key])return AIQ[key].promise;
-  var calls=aiTodo(b).filter(function(t){return t[0]===n});
-  if(!calls.length)return Promise.resolve();
-  var run={state:S,paper:bs,token:S.tok,total:calls.length,done:0,waiting:0};
-  AIQ[key]=run;
-  function current(){return AIQ[key]===run&&S===run.state&&S.u[b.id]===run.paper&&(S.tok||'')===run.token}
-  function attempt(p,tries){
-    return aiCall(p,run.token).catch(function(e){
-      if(!e.busy||tries>=24||!current())throw e;
-      run.waiting++;aiqLive(b,n);
-      return new Promise(function(ok){setTimeout(ok,e.retryMs||15000)}).then(function(){run.waiting--;return attempt(p,tries+1)});
-    });
+function aiDrain(){
+  while(AIWORK.active<3&&AIWORK.queue.length){
+    (function(job){
+      if(!job.current()||!aiUnlocked()){job.resolve(null);return}
+      AIWORK.active++;
+      Promise.resolve().then(function(){return job.current()&&aiUnlocked()?aiCall(job.payload,job.token):null}).then(job.resolve,job.reject).then(function(){AIWORK.active--;aiDrain()});
+    })(AIWORK.queue.shift());
   }
-  run.promise=Promise.all(calls.map(function(t){
-    var stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
-    var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
-    return prepared.then(function(p){return current()?attempt(p,0):null}).then(function(r){
+}
+function runAI(b,onProg){
+  var bs=BS(b.id),calls=aiTodo(b).filter(function(t){return !bs.aiErr[t[2]]});
+  if(!S.tok||!bs.done||!aiUnlocked())return Promise.resolve();
+  if(aiRunCurrent(b,AIRUN[b.id]))return AIRUN[b.id].promise;
+  if(!calls.length)return Promise.resolve();
+  var idx=0,done=0,fatal=null,total=calls.length,run=aiContext(b);
+  run.total=total;run.done=0;AIRUN[b.id]=run;
+  function current(){return aiRunCurrent(b,run)&&AIRUN[b.id]===run}
+  function progress(){if(onProg)try{onProg(done,total,fatal)}catch(e){console.warn('Marking progress display could not refresh.')}}
+  function next(){
+    if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
+    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]),practice=aiQuestionRun(b,t[0]);
+    // Submission can reuse an unchanged practice request already in flight.
+    var prepared=practice?practice.promise:Promise.resolve();
+    return prepared.then(function(){
+      if(!current()||aiRecord(b,t[0],t[1])||bs.aiErr[t[2]])return null;
+      return t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):payload;
+    }).then(function(p){return p&&current()?aiDispatch(p,run.token,current):null}).then(function(r){
       if(!r||!current()||stamp!==aiStamp(b,t[0],t[1]))return;
       aiStore(bs,t[2],t[3],stamp,r);
-    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message}).then(function(){run.done++;if(current()){save(b.id);aiqLive(b,n)}});
-  })).then(function(){if(AIQ[key]===run)delete AIQ[key];aiqLive(b,n)});
+    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){done++;if(current()){run.done=done;save(b.id);progress()}return next()});
+  }
+  run.promise=Promise.all([next(),next(),next()]).then(function(){if(AIRUN[b.id]===run)delete AIRUN[b.id];return fatal});
+  return run.promise;
+}
+/* Practice marks stay bound to this question, account and attempt. Completing
+   the same attempt does not discard a request; changing its answers does. */
+function aiqLive(b,n,context){if(typeof refreshMarking==='function')refreshMarking(b,context)}
+function runAIQuestion(b,n){
+  var bs=BS(b.id),key=aiqKey(b,n),old=aiQuestionRun(b,n);
+  if(!S.tok||bs.done||bs.mode!=='practice'||!aiUnlocked())return Promise.resolve();
+  if(old)return old.promise;
+  var calls=aiTodo(b).filter(function(t){return t[0]===n&&!bs.aiErr[t[2]]});
+  if(!calls.length)return Promise.resolve();
+  var run=aiContext(b,n),idx=0,fatal=null;run.total=calls.length;run.done=0;AIQ[key]=run;
+  function current(){return AIQ[key]===run&&aiRunCurrent(b,run)}
+  function progress(){if(current())try{aiqLive(b,n,run)}catch(e){console.warn('Marking progress display could not refresh.')}}
+  function next(){
+    if(idx>=calls.length||fatal||!current()||!aiUnlocked())return Promise.resolve();
+    var t=calls[idx++],stamp=aiStamp(b,t[0],t[1]),payload=aiPayload(b,t[0],t[1]);
+    var prepared=t[3].t==='dr'?xdPNG(payload.answer.elements).then(function(png){if(png)payload.diagramPng=png;return payload}):Promise.resolve(payload);
+    return prepared.then(function(p){return current()?aiDispatch(p,run.token,current):null}).then(function(r){
+      if(r&&current()&&stamp===aiStamp(b,t[0],t[1]))aiStore(bs,t[2],t[3],stamp,r);
+    }).catch(function(e){if(current())bs.aiErr[t[2]]=e.message;if(e.fatal)fatal=e}).then(function(){run.done++;if(current()){save(b.id);progress()}return next()});
+  }
+  run.promise=Promise.all([next(),next(),next()]).then(function(){if(AIQ[key]===run){delete AIQ[key];if(aiRunCurrent(b,run))aiqLive(b,n,run)}return fatal});
   return run.promise;
 }
 function aiBlock(b,n,i,it,bs,k,a,sc){
@@ -136,6 +124,7 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
     var f=ai.fb||{},review=ai.status==='needs_review',legacy=!ai.stamp,audit=ai.audit||{};
     var scene=it.t==='dr'&&!legacy&&typeof feedbackDiagramContext==='function'?feedbackDiagramContext(aiPayload(b,n,i).answer):null;
     var provenance=['Requested model: '+(audit.requestedModel||'not recorded'),'Returned model(s): '+(Array.isArray(audit.returnedModels)?audit.returnedModels.join(', '):'not recorded'),'Harness: '+(audit.harnessVersion||'not recorded'),'Question version: '+(audit.questionVersion||'not recorded'),'Rubric version: '+(audit.rubricVersion||'not recorded')];
+    if(typeof audit.durationMs==='number'&&isFinite(audit.durationMs)&&audit.durationMs>=0&&audit.durationMs<=300000)provenance.push('Model assessment time: '+(Math.round(audit.durationMs/100)/10)+' seconds (excludes browser queue and transfer time)');
     if(audit.inputDigest)provenance.push('Answer reference: '+audit.inputDigest);
     return '<div class="aib'+(review?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':'AI marking')+(!review?' <span class="sc">'+ai.g+' / '+it.m+'</span>':'')+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+(f.summary?'<p>'+esc(f.summary)+'</p>':'')+
       (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
@@ -148,8 +137,8 @@ function aiBlock(b,n,i,it,bs,k,a,sc){
       (bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':'')+'</div>';
   }
   if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
-  if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p><button class="nb sm" data-act="airetry">Try again</button></div>';
-  if(live&&isAns(it,a)&&AIQ[aiqKey(b,n)])return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
+  if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p>'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?'<p>Other answers are still being marked. You can retry this answer when the batch finishes.</p>':'<button class="nb sm" data-act="airetry">Try again</button>')+'</div>';
+  if(live&&isAns(it,a)&&aiQuestionRun(b,n))return '<div class="aib"><h5>AI marking</h5><p>Marking this answer now. The feedback appears here when it is done.</p></div>';
   if(live&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   return '';
 }

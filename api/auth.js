@@ -2,45 +2,94 @@
 // Passwords are never stored. Each account keeps a random salt and a scrypt hash.
 // Data lives in a private Cloudflare D1 database (server/d1-blob.js). Sessions are signed tokens that last 30 days.
 const crypto = require('crypto');
+const { performance } = require('node:perf_hooks');
 
 const DAY = 86400000;
 const SESSION_MS = 30 * DAY;
 const MAX_PROGRESS = 3500000;
 const MAX_FAILS = 8;
 const LOCK_MS = 15 * 60000;
+const STORAGE_TIMEOUT_MS = 5000;
+const UPDATE_TIMEOUT_MS = 10000;
+const UPDATE_ATTEMPTS = 16;
 let SECRET = null;
 
 async function blob() { return require('../server/d1-blob'); }
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const b64 = (b) => Buffer.from(b).toString('base64url');
 
-async function readRecord(path) {
-  const { get } = await blob();
-  const r = await get(path, { access: 'private', useCache: false });
-  if (!r || r.statusCode !== 200 || !r.stream) return null;
-  const chunks = [];
-  for await (const c of r.stream) chunks.push(Buffer.from(c));
-  return { data: JSON.parse(Buffer.concat(chunks).toString('utf8')), etag: r.blob.etag };
+function storageError(code, message) {
+  const e = new Error(message); e.status = 503; e.code = code; e.details = { code }; return e;
+}
+function storageBusy() { return storageError('account_storage_busy', 'The account is busy. Try again in a moment.'); }
+async function bounded(operation, deadline = Infinity) {
+  const controller = new AbortController(), end = Math.min(performance.now() + STORAGE_TIMEOUT_MS, deadline);
+  const timeout = () => end === deadline ? storageBusy() : storageError('account_storage_timeout', 'Account storage exceeded its time limit. Your progress is still saved in this browser.');
+  const expired = () => { if (controller.signal.aborted || performance.now() >= end) throw timeout(); };
+  let timer;
+  try {
+    expired();
+    return await Promise.race([
+      Promise.resolve().then(() => operation(controller.signal, expired)),
+      new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(timeout()); }, Math.max(0, end - performance.now())); })
+    ]);
+  } finally { clearTimeout(timer); controller.abort(); }
+}
+async function readRecord(path, deadline, requireVersion) {
+  try {
+    return await bounded(async (signal, expired) => {
+      const { get } = await blob(); expired();
+      const r = await get(path, { access: 'private', useCache: false, headers: { 'Accept-Encoding': 'identity' }, abortSignal: signal }); expired();
+      if (!r || r.statusCode === 404) return null;
+      if (r.statusCode !== 200 || !r.stream) throw new Error('Invalid stored record');
+      const etag = r.blob && r.blob.etag;
+      // A conditional update must use the exact strong version of the bytes read.
+      // Never strip W/ or substitute the version of a later metadata request.
+      if (requireVersion && (typeof etag !== 'string' || !etag || etag.startsWith('W/'))) throw storageError('account_storage_version', 'Account storage could not verify the saved record. Please try again shortly.');
+      const chunks = []; let bytes = 0;
+      for await (const c of r.stream) { expired(); const chunk = Buffer.from(c); bytes += chunk.length; if (bytes > MAX_PROGRESS) throw new Error('Stored record too large'); chunks.push(chunk); }
+      expired();
+      const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid stored record');
+      return { data, etag };
+    }, deadline);
+  } catch (e) {
+    if (typeof e.code === 'string' && e.code.startsWith('account_storage_')) throw e;
+    throw storageError('account_storage_unavailable', 'Account storage is temporarily unavailable. Please try again shortly.');
+  }
 }
 async function readJSON(path) { const r = await readRecord(path); return r && r.data; }
-async function writeJSON(path, data, overwrite, etag) {
-  const { put } = await blob();
-  const options = { access: 'private', addRandomSuffix: false, allowOverwrite: !!overwrite, contentType: 'application/json' };
-  if (etag) options.ifMatch = etag;
-  return put(path, JSON.stringify(data), options);
+async function writeJSON(path, data, overwrite, etag, deadline) {
+  try {
+    return await bounded(async (signal, expired) => {
+      const { put } = await blob(); expired();
+      const options = { access: 'private', addRandomSuffix: false, allowOverwrite: !!overwrite, contentType: 'application/json', abortSignal: signal };
+      if (etag) options.ifMatch = etag;
+      const result = await put(path, JSON.stringify(data), options); expired(); return result;
+    }, deadline);
+  } catch (e) {
+    if (conflict(e) || (typeof e.code === 'string' && e.code.startsWith('account_storage_'))) throw e;
+    throw storageError('account_storage_unavailable', 'Account storage is temporarily unavailable. Please try again shortly.');
+  }
 }
 const exists = (e) => /already exists/i.test(String((e && e.message) || e));
 const conflict = (e) => e && (e.name === 'BlobPreconditionFailedError' || /precondition/i.test(e.message)) || exists(e);
 async function updateRecord(path, change) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const r = await readRecord(path);
-    if (r && !r.etag) throw new Error('Storage did not provide a version.');
+  const deadline = performance.now() + UPDATE_TIMEOUT_MS;
+  for (let attempt = 0; attempt < UPDATE_ATTEMPTS; attempt++) {
+    if (performance.now() >= deadline) throw storageBusy();
+    const r = await readRecord(path, deadline, true);
     const next = change(r && r.data);
     if (next === null) return r && r.data;
-    try { await writeJSON(path, next, !!r, r && r.etag); return next; }
+    try { await writeJSON(path, next, !!r, r && r.etag, deadline); return next; }
     catch (e) { if (!conflict(e)) throw e; }
+    if (attempt + 1 === UPDATE_ATTEMPTS) break;
+    const cap = Math.min(500, 50 * Math.pow(2, attempt));
+    const delay = Math.min(Math.floor(cap / 2 + Math.random() * cap / 2), deadline - performance.now());
+    if (delay <= 0) throw storageBusy();
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
-  const e = new Error('The account is busy. Try again in a moment.'); e.status = 503; throw e;
+  throw storageBusy();
 }
 // Daily backups. The first save of each UTC day first copies the previous state to
 // backup/<id>/<day>.json. This costs one extra write per active account per day, and the
@@ -49,14 +98,14 @@ const BACKUP_DAYS = 7;
 const BACKUP_NAME = /^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/;
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 async function writeBackup(id, name, text) {
-  const { put } = await blob();
-  try { await put('backup/' + id + '/' + name + '.json', text, { access: 'private', addRandomSuffix: false, allowOverwrite: false, contentType: 'application/json' }); }
+  try { await writeJSON('backup/' + id + '/' + name + '.json', JSON.parse(text), false); }
   catch (e) { if (!exists(e)) throw e; }
 }
 async function pruneBackups(id) {
   const old = [];
   for (let n = BACKUP_DAYS + 1; n <= BACKUP_DAYS + 14; n++) old.push('backup/' + id + '/' + dayOf(Date.now() - n * DAY) + '.json');
-  try { const { del } = await blob(); await del(old); } catch (e) { console.error('backup prune error:', e && e.message); }
+  try { await bounded(async (signal, expired) => { const { del } = await blob(); expired(); await del(old, { abortSignal: signal }); expired(); }); }
+  catch (e) { console.error('backup prune error:', e && e.message); }
 }
 function progressView(data) {
   data = data || {};
@@ -238,8 +287,10 @@ module.exports = async (req, res) => {
       return res.status(200).json(Object.assign({ ok: true, at: Date.now() }, progressView(saved)));
     }
     if (p.action === 'backups') {
-      const { list } = await blob();
-      const found = await list({ prefix: 'backup/' + sess.id + '/' });
+      const found = await bounded(async (signal, expired) => {
+        const { list } = await blob(); expired();
+        const result = await list({ prefix: 'backup/' + sess.id + '/', abortSignal: signal }); expired(); return result;
+      });
       const names = (found.blobs || []).map(b => String(b.pathname).slice(('backup/' + sess.id + '/').length).replace(/\.json$/, '')).filter(n => BACKUP_NAME.test(n)).sort().reverse();
       return res.status(200).json({ backups: names });
     }
@@ -256,6 +307,10 @@ module.exports = async (req, res) => {
         data.u = data.u || {};
         data.hist = mergeHistory(data.hist, current && current.hist);
         data.v = 2; data._revisions = revisions; data._backupDay = dayOf(Date.now());
+        // Restoring answers does not reset the current account's save allowance.
+        ['_saveDay', '_saveCount'].forEach(key => {
+          if (current && Object.prototype.hasOwnProperty.call(current, key)) data[key] = current[key];
+        });
         return data;
       });
       return res.status(200).json(Object.assign({ ok: true, restored: p.name }, progressView(restored)));
@@ -266,7 +321,7 @@ module.exports = async (req, res) => {
     console.error('auth error:', e && (e.stack || e));
     if (!(await blob()).configured()) return fail(503, 'Account storage is not connected to this site yet. The site owner needs to add the Cloudflare D1 settings in Vercel and redeploy.');
     const kind = String((e && e.name) || 'Error').slice(0, 60);
-    if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage is set up wrongly (it must be a private Blob store). Error: ' + kind + '.');
+    if (/access|private|public|store/i.test(String((e && e.message) || ''))) return fail(503, 'Account storage could not be accessed. Check the Cloudflare D1 settings. Error: ' + kind + '.');
     return fail(500, 'The account service had a problem. Try again in a moment. (Error: ' + kind + ')');
   }
 };

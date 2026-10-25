@@ -158,7 +158,7 @@ function render(){
   if(b&&b.archived&&!/[?&]archive=1\b/.test(location.search))b=undefined;
   MENU={};CPK='';xdCleanup();
   var lock=examLock();
-  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'))))html=lockedPage(lock);
+  if(lock&&(h[0]==='class'||h[0]==='review'&&!h[1]||h[0]==='compare'||h[0]==='mistakes'||(b&&(h[1]==='review'||h[1]==='results'||h[1]==='q'&&BS(b.id).done))))html=lockedPage(lock);
   else if(h[0]==='papers')html=papersPage();
   else if(h[0]==='review'&&!h[1])html=reviewHubPage();
   else if(h[0]==='mistakes'){MF.bank=h[1]||'';html=mistakesPage()}
@@ -176,8 +176,8 @@ function render(){
   document.title=b?(b.name+' | HSC Software Engineering practice'):'HSC Software Engineering practice';
   if(!lock&&h[0]==='class')classBind();
   if(h[0]==='compare')comparisonBind();
-  if(b&&(h[1]==='q'||h[1]==='review')&&!(lock&&h[1]==='review')){afterQ();navArrows(true)}
-  if(b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
+  if(b&&(h[1]==='q'||h[1]==='review')&&CUR.b===b){afterQ();navArrows(true)}
+  if(!lock&&b&&h[1]==='results'&&BS(b.id).done)markAndShow(b);
   tick();
 }
 /* ---------- exam lock, review hub, practice marking ---------- */
@@ -206,55 +206,91 @@ function reviewHubPage(){
     return '<a class="nb" href="#/'+b.id+'/review/1">'+esc(b.name)+'<small>'+esc(b.sub)+' &middot; '+reviewStatus(b)+'</small></a>'}).join('');
   return frame('Review','<div class="pg"><h1 class="pt">Review and analyse</h1><div class="feature"><p>Choose a paper to open it in review. Each question shows your answer, the marking guide, the sample answer and any AI feedback. Under each written part you can read what your classmates wrote and run the class analysis.</p><div class="bks">'+books+'</div></div></div>');
 }
-function pqShown(b,n){var bs=BS(b.id);return !bs.done&&bs.mode==='practice'&&!!(bs.pq&&bs.pq[n])}
+function pqShown(b,n){var bs=BS(b.id);return aiUnlocked()&&!bs.done&&bs.mode==='practice'&&!!(bs.pq&&bs.pq[n])}
 function pqPanelHTML(b,n){
-  var bs=BS(b.id);if(bs.done||bs.mode!=='practice')return '';
-  var shown=pqShown(b,n),run=AIQ[aiqKey(b,n)],open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
-  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answers done.</b> Feedback appears under each part as it finishes.'+(run.waiting?' <i>'+run.waiting+' waiting for a free marker.</i>':'')
+  var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||!aiUnlocked())return '';
+  var shown=pqShown(b,n),run=aiQuestionRun(b,n),open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
+  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answers processed.</b> Feedback appears under each part as it finishes.'
     :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
     :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
   if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
   return '<div class="aib" id="pq">'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button></div></div>';
 }
 function pqMark(){
-  var b=CUR.b,n=CUR.n,bs=BS(b.id);if(!b||bs.done||bs.mode!=='practice')return;
+  var b=CUR.b,n=CUR.n;if(!b||CUR.rv||!aiUnlocked())return;
+  var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||aiQuestionRun(b,n))return;
   if(!bs.pq)bs.pq={};bs.pq[n]=1;Object.keys(bs.aiErr).forEach(function(k){if(k.indexOf(n+'.')===0)delete bs.aiErr[k]});save(b.id);
-  function redraw(){if(CUR.b!==b||CUR.n!==n||CUR.rv||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,false);afterQDraw();window.scrollTo(0,y);refreshNav()}
-  redraw();
-  runChecks(b,n).then(redraw);
-  runAIQuestion(b,n);
+  var context=aiContext(b,n),task=runAIQuestion(b,n);
+  ensureLocalChecks(b,context);refreshMarking(b,context);
+  return task;
 }
 function afterQ(){
   var b=CUR.b,n=CUR.n,q=b.qs[n-1],rv=CUR.rv;
   q.it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,rv)});
-  aceMount();classEnsure(b);
-  var state=S,bs=BS(b.id);
-  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b).then(function(){if(S!==state||S.u[b.id]!==bs||CUR.b!==b||location.hash.indexOf('review/'+n)<0||CUR.n!==n||!$('#qarea'))return;var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(b,n,true);afterQDraw();window.scrollTo(0,y);refreshNav()});
+  aceMount();if(typeof classEnsure==='function')classEnsure(b);
+  var bs=BS(b.id);
+  if(rv&&bs.done&&(!bs.checked||(S.tok&&aiTodo(b).length)))ensureMarked(b);
 }
-function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount();classEnsure(b)}
+function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});aceMount();if(typeof classEnsure==='function')classEnsure(b)}
+var MARKINGDEFER=null;
+function refreshMarking(b,context){
+  if(!aiRunCurrent(b,context)||CUR.b!==b||!aiUnlocked())return;
+  var h=location.hash.replace(/^#\//,'').split('/'),y=window.scrollY;
+  if(h[0]!==String(b.id))return;
+  var review=(h[1]==='review'||h[1]==='q')&&CUR.rv&&+h[2]===CUR.n;
+  var practice=h[1]==='q'&&!CUR.rv&&context.question===CUR.n&&+h[2]===CUR.n&&pqShown(b,CUR.n);
+  if((review||practice)&&$('#qarea')){
+    var ae=document.activeElement;
+    // Leave the live editor in place while a student is typing in practice mode.
+    if(ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable)){MARKINGDEFER={b:b,context:context,n:CUR.n,route:location.hash};var panel=$('#pq');if(panel)panel.outerHTML=pqPanelHTML(b,CUR.n);return}
+    MARKINGDEFER=null;
+    xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,!!CUR.rv);afterQDraw();refreshNav();
+  }else if(h[1]==='results'&&$('#app'))$('#app').innerHTML=resultsPage(b);
+  else return;
+  window.scrollTo(0,y);
+}
+document.addEventListener('focusout',function(){
+  var deferred=MARKINGDEFER;if(!deferred)return;
+  setTimeout(function(){
+    if(MARKINGDEFER!==deferred)return;
+    MARKINGDEFER=null;
+    if(CUR.b===deferred.b&&CUR.n===deferred.n&&location.hash===deferred.route)refreshMarking(deferred.b,deferred.context);
+  },0);
+});
+var CHECKRUN={};
+function ensureLocalChecks(b,context){
+  var bs=context.paper,n=context.question,key=n?aiqKey(b,n):b.id,old=CHECKRUN[key];
+  if(!n&&bs.checked)return Promise.resolve();
+  if(aiRunCurrent(b,old))return old.promise;
+  var run=context;CHECKRUN[key]=run;
+  run.promise=Promise.resolve().then(function(){if(aiRunCurrent(b,run))return runChecks(b,n)}).then(function(){
+    if(aiRunCurrent(b,run)){if(!n)bs.checked=1;save(b.id);refreshMarking(b,run)}
+  }).then(function(){if(CHECKRUN[key]===run)delete CHECKRUN[key]},function(){
+    // Local execution checks are advisory and must not block AI marking.
+    if(CHECKRUN[key]===run)delete CHECKRUN[key];
+  });
+  return run.promise;
+}
 function ensureMarked(b){
-  var bs=BS(b.id),state=S;
-  var p=bs.checked?Promise.resolve():runChecks(b).then(function(){if(S===state&&S.u[b.id]===bs){bs.checked=1;save(b.id)}});
-  return p.then(function(){if(S===state&&S.u[b.id]===bs&&S.tok){var task=runAI(b),panel=CUR.b===b?$('#aib'):null;if(panel)panel.outerHTML=aiStatusHTML(b);return task}});
+  if(!aiUnlocked())return Promise.resolve();
+  var context=aiContext(b);
+  // Start marking before loading Python/SQL runtimes; neither task depends on the other.
+  var task=S.tok?runAI(b,function(){refreshMarking(b,context)}):null;
+  var checks=ensureLocalChecks(b,context),panel=CUR.b===b?$('#aib'):null;
+  if(panel&&aiRunCurrent(b,context))panel.outerHTML=aiStatusHTML(b);
+  return (task||checks).then(function(){refreshMarking(b,context)});
 }
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),todo=aiTodo(b).length;
   if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and set your own marks.</div>';
-  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" role="status" aria-live="polite"><b>AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers marked.</b><div class="aibar"><span style="width:'+Math.round(100*(rn.done||0)/Math.max(1,rn.total||1))+'%"></span></div> Each answer is assessed against the criteria and appears here as soon as it is done. Some answers may need review; marking can take several minutes.'+(rn.waiting?'<br><i>'+rn.waiting+' answer'+(rn.waiting>1?'s are':' is')+' still being marked from an earlier attempt. This page checks again every few seconds, so you do not need to press anything.</i>':'')+'</div>'}
+  if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" role="status" aria-live="polite"><b>AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b><div class="aibar"><span style="width:'+Math.round(100*(rn.done||0)/Math.max(1,rn.total||1))+'%"></span></div> Each answer is assessed against the criteria and appears here as soon as it is done. Some answers may need review; marking can take several minutes.</div>'}
   if(errs.length)return '<div class="aib bad" id="aib"><b>AI marking did not finish for '+errs.length+' answer'+(errs.length>1?'s':'')+'.</b> '+esc(bs.aiErr[errs[0]])+'<br><button class="nb sm" data-act="airetry" style="margin-top:8px">Try again</button></div>';
   if(todo)return '<div class="aib" id="aib"><b>'+todo+' answer'+(todo>1?'s':'')+' awaiting AI marking.</b> <button class="nb sm" data-act="airetry">Mark with AI</button></div>';
   if(reviews)return '<div class="aib bad" id="aib"><b>'+reviews+' answer'+(reviews>1?'s':'')+' need review.</b> No AI mark was awarded for these answers. Open the questions to review the criteria and set a mark yourself or with a teacher.</div>';
   return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback. You can change a mark there.</div>';
 }
 function markAndShow(b){
-  var state=S,bs=BS(b.id);
-  ensureMarked(b).then(function(){
-    if(S!==state||S.u[b.id]!==bs||CUR.b!==b)return;
-    var y=window.scrollY;
-    if(CUR.rv&&$('#qarea')){xdCleanup();$('#qarea').innerHTML=qHTML(b,CUR.n,true);afterQDraw();refreshNav()}
-    else if(location.hash.indexOf('/results')>=0)$('#app').innerHTML=resultsPage(b);
-    window.scrollTo(0,y);
-  });
+  return ensureMarked(b);
 }
 function go(n){location.hash='#/'+CUR.b.id+'/'+(CUR.rv?'review':'q')+'/'+n}
 function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc;navArrows(false)}
@@ -302,7 +338,7 @@ document.addEventListener('click',function(e){
   else if(a==='rt'){var ed=el.closest('.rte').querySelector('.rta');ed.focus();if(d.c.indexOf('sym:')===0)document.execCommand('insertText',false,d.c.slice(4));else document.execCommand(d.c,false,null);saveRte(ed)}
   else if(a==='xreset'){var xs=XD[d.k];if(xs&&xs.api){xs.api.resetScene();BS(CUR.b.id).ans[d.k]={e:[]};save();refreshNav()}}
   else if(a==='airetry'&&CUR.b&&!BS(CUR.b.id).done&&!CUR.rv)pqMark();
-  else if(a==='airetry'){var rb=CUR.b;if(rb){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
+  else if(a==='airetry'){var rb=CUR.b;if(rb&&aiUnlocked()&&!aiRunCurrent(rb,AIRUN[rb.id])){delete BS(rb.id).aiErr;BS(rb.id).aiErr={};save();markAndShow(rb)}}
   else if(a==='airemark'){var mb=CUR.b,old=mb&&BS(mb.id).ai[d.k];if(mb&&S.tok&&old&&!old.stamp&&!old.status){delete BS(mb.id).ai[d.k];delete BS(mb.id).aiErr[d.k];save(mb.id);markAndShow(mb)}}
   else if(a==='acmode'){ACC.mode=d.v;ACC.msg='';render()}
   else if(a==='acgo')acGo();

@@ -175,6 +175,38 @@ async function main() {
     });
     assert.equal(tokenJobs, 1); assert.equal(outputLimited.stoppedAtBudget, true);
 
+    // Recovery cannot silently increase explicit budgets or consume an active
+    // neighbour's reserved calls. Even an injected engine is capped at four.
+    for (const [maxCalls, maxTokens, requested, sent, failed] of [[3, 131072, 4, 3, true], [4, 131072, 4, 4, false], [5, 163840, 5, 4, true], [4, 98304, 4, 3, true]]) {
+      let physical = 0;
+      const recovery = await run(parseArgs(['--live', '--limit', '1', '--max-calls', String(maxCalls), '--max-output-tokens', String(maxTokens)]), {
+        apiKey: 'TEST_ONLY', fetch: async () => { physical++; return { ok: true }; },
+        mark: async (_input, options) => {
+          for (let call = 0; call < requested; call++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
+          return { status: 'needs_review', mark: null, audit: { calls: [] } };
+        }
+      });
+      assert.equal(physical, sent); assert.equal(recovery.budgetUsage.calls, sent);
+      assert.equal(recovery.trials[0].result.audit.evaluatorProviderCalls, sent);
+      assert.equal(recovery.trials[0].result.errorCode === 'evaluation_budget', failed);
+    }
+    let runningJobs = 0, firstJobExtraRejected = false, releaseOther;
+    const otherWaiting = new Promise(resolve => { releaseOther = resolve; });
+    const neighbours = await run(parseArgs(['--live', '--limit', '2', '--concurrency', '2', '--max-calls', '6', '--max-output-tokens', '196608']), {
+      apiKey: 'TEST_ONLY', fetch: async () => ({ ok: true }),
+      mark: async (_input, options) => {
+        const index = runningJobs++;
+        if (index === 1) await otherWaiting;
+        try {
+          for (let call = 0; call < (index === 0 ? 4 : 3); call++) await options.fetch(endpoint, { body: JSON.stringify({ max_tokens: 32768 }), headers: {} });
+        } catch (error) { if (index === 0 && error.code === 'evaluation_budget') firstJobExtraRejected = true; throw error; }
+        finally { if (index === 0) releaseOther(); }
+        return { status: 'needs_review', mark: null, audit: { calls: [] } };
+      }
+    });
+    assert(firstJobExtraRejected); assert.equal(neighbours.budgetUsage.calls, 6);
+    assert(neighbours.trials.every(trial => trial.result.audit.evaluatorProviderCalls === 3));
+
     const offline = await run(parseArgs(['--validate', '--split', 'all', '--output', output]), { fetch: () => { throw Error('offline must not request provider'); } });
     assert.equal(offline.mode, 'offline_validation'); assert.equal(offline.liveMetrics, null); assert.equal(offline.metrics.providerCalls, 0); assert.equal(offline.trials.length, 11);
     const replay = await run(parseArgs(['--replay', output, '--split', 'all'])); assert.equal(replay.trials.length, 11);

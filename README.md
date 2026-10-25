@@ -104,7 +104,7 @@ The static site works with the simple server. `/api/*` does not, so the account 
 
 To include the real Python worker tests, install `pyodide@0.26.4` into a temporary directory and set `PYODIDE_DIR` to its package directory when running `tests/run_ui_test.py`. It serves the runtime locally and checks infinite-loop cancellation, timeout recovery and every supplied Python model case. Set `ACE_DIR` to a local `ace-builds@1.32.9` package to exercise the real code editor. `CHROME` can specify an existing Chrome executable instead of Playwright's bundled Chromium.
 
-Account storage (`server/d1-blob.js`, Cloudflare D1) uses etag-based conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and an ETag retry for concurrent changes to other papers. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
+Account storage (`server/d1-blob.js`, Cloudflare D1) uses ETag conditional writes. Login attempts reserve their slot atomically before password hashing. Progress writes update only explicitly changed papers, using per-paper revisions and a bounded ETag retry for concurrent changes to other papers. The browser bounds account requests, including response-body reads, and preserves pending local work on timeout or an invalid save acknowledgement. Older browser clients are asked to reload instead of being allowed to overwrite the entire account. No new environment variables are required.
 
 ## Environment variables (set in Vercel, never in git)
 
@@ -118,7 +118,7 @@ Account storage (`server/d1-blob.js`, Cloudflare D1) uses etag-based conditional
 
 Only the project owner needs these. Contributors do not need them: tests use mocks.
 
-The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job uses three calls. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
+The marking harness uses `deepseek-flash` with thinking enabled, high reasoning effort for the two blind markers, low effort for the auditor, and a 32,768-token allowance per call. This is a rolling provider alias, so results record the requested and returned model identities and available provider fingerprint. New paid jobs are limited to 120 per account and 600 across the site per UTC day; each successful job normally uses three calls. One connection-establishment failure may use a fourth network attempt within the original deadline; completed responses are not rerolled. Cached decisions use no new model calls. Failed paid attempts still consume an allowance slot.
 
 See [AI marking design and verification](docs/AI_MARKING.md) for prompts, budgets, review states, privacy, limitations and the teacher-calibration checklist. `vercel.json` requests Fluid compute and a 300-second function limit; the deployment must support that limit. No live API calls are part of the test suite.
 
@@ -130,7 +130,7 @@ Open **Papers → Compare responses**. Each participant signs in, submits and sy
 
 The comparison uses `deepseek-flash`, documented by DeepSeek on 24 October 2026 as DeepSeek-V4.1-Flash-1017. It runs independent participant profiles, a matched comparison, and an audit; an unsupported report is withheld for review. Totals are calculated from common verified parts only. Diagrams, self-awarded marks, legacy feedback and unconfirmed results are excluded. Style and concision coaching is separate from rubric shortfalls. Reports do not award marks, rank lasting ability or predict HSC bands.
 
-Comparison jobs have separate durable limits of 12 per account and 40 site-wide per UTC day (up to 10 calls each). Duplicate requests share one job, cached results do not spend again, and failed paid attempts consume their slot. Exporting does not call the model. No extra environment variable is needed: a dedicated signing key is created atomically in private Blob storage. Report caches are private to the requesting account. Source exports/imports remain in browser memory until downloaded; account changes clear them.
+Comparison jobs have separate durable limits of 12 per account and 40 site-wide per UTC day (up to 10 calls each). Duplicate requests share one job, cached results do not spend again, and failed paid attempts consume their slot. Exporting does not call the model. No extra environment variable is needed: a dedicated signing key is created atomically in private D1 storage. Report caches are private to the requesting account. Source exports/imports remain in browser memory until downloaded; account changes clear them.
 
 See [comparison design, research and teacher calibration](docs/AI_COMPARISON.md). Offline tests verify software safeguards; the supplied synthetic calibration labels are provisional and are not evidence of live-model accuracy. Run the documented opt-in evaluation against teacher-reviewed held-out responses before treating the feature as validated educational advice.
 

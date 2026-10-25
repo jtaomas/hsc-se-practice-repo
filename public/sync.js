@@ -27,14 +27,53 @@ function mergeRemote(r,revisions){
   if(r.classCode!==undefined)S.classCode=r.classCode||'';
   persist();
 }
+function syncObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value)}
+function syncSame(a,b){
+  if(a===b)return true;
+  if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+  var keys=Object.keys(a);
+  return keys.length===Object.keys(b).length&&keys.every(function(k){return Object.prototype.hasOwnProperty.call(b,k)&&syncSame(a[k],b[k])});
+}
+function syncEnvelope(j){
+  if(!syncObject(j)||!syncObject(j.data)||!syncObject(j.revisions))return false;
+  var u=j.data.u,hist=j.data.hist;
+  if(u!==undefined&&!syncObject(u))return false;
+  if(hist!==undefined&&(!Array.isArray(hist)||!hist.every(syncObject)))return false;
+  if(!Object.keys(j.revisions).every(function(id){return /^[1-9]\d*$/.test(id)&&typeof j.revisions[id]==='string'&&j.revisions[id].length>0&&j.revisions[id].length<=128}))return false;
+  return Object.keys(u||{}).every(function(id){return /^[1-9]\d*$/.test(id)&&syncObject(u[id])&&typeof j.revisions[id]==='string'});
+}
+function syncReply(action,j,sent){
+  if(!syncObject(j)||j.error!==undefined)return false;
+  if(action==='signup'||action==='login')return typeof j.token==='string'&&j.token.length>0&&j.token.length<=4096&&typeof j.email==='string'&&j.email.length>0&&j.email.length<=120;
+  if(action==='backups')return Array.isArray(j.backups)&&j.backups.length<=1000&&j.backups.every(function(n){return typeof n==='string'&&/^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/.test(n)});
+  if(!syncEnvelope(j))return false;
+  if(action==='load')return true;
+  if(action==='restore')return j.ok===true&&syncObject(j.data.u)&&j.restored===sent.name&&typeof sent.name==='string'&&/^(?:\d{4}-\d{2}-\d{2}|before-restore-\d{13})$/.test(sent.name);
+  if(action!=='save'||j.ok!==true||!syncObject(j.data.u)||!Array.isArray(sent.changes))return false;
+  return sent.changes.every(function(id){
+    var paper=sent.data&&sent.data.u&&sent.data.u[id],revision=j.revisions[id];
+    return typeof revision==='string'&&revision!==(sent.revisions||{})[id]&&(paper?syncSame(paper,j.data.u[id]):!Object.prototype.hasOwnProperty.call(j.data.u,id));
+  });
+}
 function api(action,body,token){
   var h={'content-type':'application/json'};token=token===undefined?S.tok:token;if(token)h.authorization='Bearer '+token;
-  return fetch('/api/auth',{method:'POST',headers:h,body:JSON.stringify(Object.assign({action:action},body||{}))}).then(function(r){
-    return r.json().catch(function(){return {error:'The account service sent an unreadable reply.'}}).then(function(j){
-      if(!r.ok){var e=new Error(j.error||'Request failed ('+r.status+')');e.status=r.status;e.details=j;throw e}
+  // Compare save acknowledgements with the exact submitted snapshot, including
+  // when the user edits their local draft while the request is in flight.
+  var encoded=JSON.stringify(Object.assign({action:action},body||{})),sent=JSON.parse(encoded);
+  var control=new AbortController(),timer;
+  function timedOut(){return new Error('The account request timed out. Your progress is still saved in this browser. Try saving again.')}
+  var request=Promise.resolve().then(function(){return fetch('/api/auth',{method:'POST',headers:h,body:encoded,signal:control.signal})}).then(function(r){
+    return r.json().catch(function(){var e=new Error('The account service sent an unreadable reply. Your progress is still saved in this browser.');if(!r.ok)e.status=r.status;throw e}).then(function(j){
+      if(!r.ok){var e=new Error(syncObject(j)&&typeof j.error==='string'?j.error:'Request failed ('+r.status+')');e.status=r.status;
+        if(syncObject(j)&&j.code==='progress_conflict'&&syncEnvelope(j)&&Array.isArray(j.conflicts)&&j.conflicts.length&&j.conflicts.every(function(id){return typeof id==='string'&&/^[1-9]\d*$/.test(id)}))e.details=j;
+        throw e}
+      if(!syncReply(action,j,sent))throw new Error('The account service sent an invalid reply. Your progress is still saved in this browser.');
       return j;
     });
   });
+  // Bound both response headers and the body. Racing also stops the queue when
+  // a transport ignores abort; a late response cannot apply saved revisions.
+  return Promise.race([request,new Promise(function(_,reject){timer=setTimeout(function(){control.abort();reject(timedOut())},45000)})]).then(function(r){clearTimeout(timer);control.abort();return r},function(e){clearTimeout(timer);control.abort();if(e.name==='AbortError')throw timedOut();throw e});
 }
 function syncFail(e){
   if(e.stale)return;
@@ -49,6 +88,7 @@ function replaceState(next){
   if(typeof xdCleanup==='function')xdCleanup();
   if(typeof stopPython==='function')stopPython();
   clearTimeout(SYNC.tmr);SYNC.epoch++;SYNC.queue=Promise.resolve();SYNC.conflicts={};
+  if(typeof BK!=='undefined')BK={list:null,msg:'',busy:false};
   if(typeof AIRUN!=='undefined')AIRUN={};
   S=Object.assign({u:{},hist:[],pending:{},revisions:{},tok:'',ae:'',owner:'',ts:0,font:0,fg:0,bg:0},next);
   if(typeof CUR!=='undefined')CUR={b:null,n:0};persist();
@@ -134,8 +174,9 @@ function bkDownload(){
 }
 function bkReadFile(f){
   if(!f)return;
-  var rd=new FileReader();
+  var epoch=SYNC.epoch,rd=new FileReader();
   rd.onload=function(){
+    if(epoch!==SYNC.epoch)return;
     var file;try{file=JSON.parse(rd.result)}catch(e){return bkSet('That file is not a backup file.')}
     if(!file||file.kind!=='sehsc-backup'||!file.data||typeof file.data.u!=='object'||file.data.u===null)return bkSet('That file is not a backup file.');
     var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|10)$/.test(id)});
@@ -149,19 +190,21 @@ function bkReadFile(f){
   rd.readAsText(f);
 }
 function bkLoadList(){
-  if(BK.busy)return;BK.busy=true;bkSet('Loading...');
-  api('backups').then(function(r){BK.list=r.backups||[];BK.busy=false;BK.msg='';render()}).catch(function(e){BK.busy=false;bkSet(e.message)});
+  if(BK.busy)return;var epoch=SYNC.epoch;BK.busy=true;bkSet('Loading...');
+  return api('backups').then(function(r){checkSession(epoch);BK.list=r.backups;BK.busy=false;BK.msg='';render()}).catch(function(e){if(epoch!==SYNC.epoch)return;BK.busy=false;bkSet(e.message)});
 }
 function bkRestore(name){
   if(BK.busy)return;
   if(!confirm('Restore your account to this backup? Your current progress is kept as a "before restore" backup first.'))return;
-  var epoch=SYNC.epoch;BK.busy=true;bkSet('Restoring...');
-  SYNC.queue.catch(function(){}).then(function(){return api('restore',{name:name})}).then(function(r){
+  var epoch=SYNC.epoch,token=S.tok,snapshot;BK.busy=true;bkSet('Restoring...');clearTimeout(SYNC.tmr);
+  var task=SYNC.queue.catch(function(){}).then(function(){checkSession(epoch);snapshot=JSON.parse(JSON.stringify(syncPayload()));return api('restore',{name:name},token)}).then(function(r){
     checkSession(epoch);
+    if(!syncSame(snapshot,syncPayload()))throw new Error('Your local work changed while the backup was being restored. It remains saved in this browser. Review it before syncing again.');
     S.pending={};S.u=(r.data&&r.data.u)||{};S.revisions=r.revisions||{};SYNC.conflicts={};
     (r.data&&r.data.hist||[]).forEach(function(h){if(!S.hist.some(function(x){return x.id===h.id&&x.at===h.at}))S.hist.push(h)});
     persist();BK.busy=false;BK.list=null;BK.msg='Restored. Your papers now match that backup.';render();
-  }).catch(function(e){BK.busy=false;if(!e.stale)bkSet(e.message)});
+  }).catch(function(e){if(epoch!==SYNC.epoch)return;BK.busy=false;if(!e.stale)bkSet(e.message)});
+  SYNC.queue=task.catch(function(){});return task;
 }
 function accountPage(){
   CUR={b:null,n:0};
@@ -194,13 +237,14 @@ function acGo(){
   em=em.trim();
   if(!em||!pw)return acSet('Enter your email and password.');
   if(up&&pw!==(($('#acpw2')||{}).value||''))return acSet('The two passwords do not match.');
-  var epoch=SYNC.epoch;ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
+  var epoch=SYNC.epoch;
   var extra={};
   if(up){
     var nm=(($('#acname')||{}).value||'').trim(),cc=(($('#acclass')||{}).value||'').trim();
     if(nm.length<2)return acSet('Enter your name (2 to 40 characters). Classmates see it next to your answers.');
     extra.name=nm;if(cc)extra.classCode=cc;
   }
+  ACC.busy=true;acSet(up?'Creating your account...':'Signing in...');
   api(up?'signup':'login',Object.assign({email:em,password:pw},extra)).then(function(r){
     checkSession(epoch);acceptAccount(r,up);ACC.busy=false;ACC.msg='';if(r.joinError)ACC.notice=r.joinError;
     return syncNow().then(function(){location.hash='#/'});

@@ -48,6 +48,7 @@ with sync_playwright() as pw:
     page.click('a[href="#/class/8/1"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 1 ')
     assert page.locator('.nav-bar .nav-elem').count() > 5, 'question navigator'
+    assert page.locator('.tools').count() == 1 and page.locator('.band').count() == 0, 'one tools bar, not a second band above the navigator'
     page.click('.nav-elem[data-n="17"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 17 ')
     expect(page.locator('.cvans').first).to_contain_text('Priya')

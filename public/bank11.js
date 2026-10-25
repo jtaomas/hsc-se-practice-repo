@@ -230,7 +230,7 @@ var DB10={
 };
 
 /* ---------- Question 1: Single Table Filtering, Relational Operators & Renaming ---------- */
-qs.push(Q(PW,'A cloud infrastructure service maintains virtual server instances in a table, Servers.',[
+qs.push(Q(PW,'A cloud infrastructure service maintains virtual server instances in a table, <b><i>Servers</i></b>.',[
   sq('Construct a SQL query that displays the Hostname and RAM_GB of all servers in the \'ap-southeast\' region with a Status of \'Active\' and at least 16 RAM_GB.<br>Use the column headings Hostname and MemoryGB. List the results in ascending alphabetical order of Hostname.',4,
 `SELECT Hostname, RAM_GB AS MemoryGB
 FROM Servers
@@ -244,7 +244,7 @@ ORDER BY Hostname ASC`,true,[
 ],{two:true,db:DB1}));
 
 /* ---------- Question 2: Pattern Matching (CONTAINS / DOES NOT CONTAIN) & Negation ---------- */
-qs.push(Q(PW,'A software team tracks security audit and bug reports in a table, Tickets.',[
+qs.push(Q(PW,'A software team tracks security audit and bug reports in a table, <b><i>Tickets</i></b>.',[
   sq('Construct a SQL query that displays the TicketID, Module, and Title of all tickets where the Title contains \'Token\', the Module does not contain \'Legacy\', the Severity is either \'Critical\' or \'High\', and the Status is not equal to \'Closed\'.<br>Use the column headings TicketID, Module, and IssueTitle. List the results in descending numerical order of TicketID.',4,
 `SELECT TicketID, Module, Title AS IssueTitle
 FROM Tickets
@@ -261,7 +261,7 @@ ORDER BY TicketID DESC`,true,[
 ],{two:true,db:DB2}));
 
 /* ---------- Question 3: Group Aggregation (COUNT, AVG) & Sorting by Aggregate ---------- */
-qs.push(Q(PW,'An online training academy records completed module outcomes in a table, ModuleCompletions.',[
+qs.push(Q(PW,'An online training academy records completed module outcomes in a table, <b><i>ModuleCompletions</i></b>.',[
   sq('Construct a SQL query that displays, for each CourseTrack, the number of passed completions and their average score, using only records where PassStatus is \'Passed\'.<br>Use the column headings CourseTrack, PassedCount, and AvgScore. List the results from the highest to the lowest average score.',4,
 `SELECT CourseTrack, COUNT(RecordID) AS PassedCount, AVG(Score) AS AvgScore
 FROM ModuleCompletions
@@ -276,7 +276,7 @@ ORDER BY AvgScore DESC`,true,[
 ],{two:true,db:DB3}));
 
 /* ---------- Question 4: Calculated Arithmetic Field (SUM) & Comparison Operators ---------- */
-qs.push(Q(PW,'A hardware components distributor records customer orders in a table, PartOrders.',[
+qs.push(Q(PW,'A hardware components distributor records customer orders in a table, <b><i>PartOrders</i></b>.',[
   sq('Construct a SQL query that displays the Category and the total cost of all fulfilled orders for that category, where the UnitPrice of the part is less than 20.00 and Fulfilled is not equal to \'No\'. The total cost is calculated by multiplying Quantity by UnitPrice.<br>Use the column headings Category and TotalCost. List the results in ascending alphabetical order of Category.',4,
 `SELECT Category, SUM(Quantity * UnitPrice) AS TotalCost
 FROM PartOrders
@@ -291,7 +291,7 @@ ORDER BY Category ASC`,true,[
 ],{two:true,db:DB4}));
 
 /* ---------- Question 5: Compound Logic with Parentheses & Multi-Column Grouping (2025 HSC Q21 Style) ---------- */
-qs.push(Q(PW,'An enterprise software helpdesk tracks support incidents in a table, IncidentReports.',[
+qs.push(Q(PW,'An enterprise software helpdesk tracks support incidents in a table, <b><i>IncidentReports</i></b>.',[
   sq('Construct a SQL query that extracts incidents for the \'Billing\' and \'Portal\' systems where the Status is either \'Pending\' or \'Escalated\'. The query must count the number of incidents for each status within each system.<br>Use the column headings System, Status, and IncidentCount. Group the results by System and Status, and list the results from the highest to the lowest incident count.',4,
 `SELECT System, Status, COUNT(IncidentID) AS IncidentCount
 FROM IncidentReports
@@ -306,7 +306,7 @@ ORDER BY IncidentCount DESC`,true,[
 ],{two:true,db:DB5}));
 
 /* ---------- Question 6: Two-Table Relational Join with Numerical Comparisons ---------- */
-qs.push(Q(PW,'A regional medical clinic stores patient information and consultation records in two tables, Patients and Consultations.',[
+qs.push(Q(PW,'A regional medical clinic stores patient information and consultation records in two tables, <b><i>Patients</i></b> and <b><i>Consultations</i></b>.',[
   sq('Construct a SQL query that joins the Patients and Consultations tables to display the PatientName, Suburb, ConsultDate, and Fee for adult patients (Age greater than or equal to 18) where the Fee is greater than 80.00 and less than or equal to 150.00.<br>Use the column headings PatientName, Suburb, ConsultDate, and Fee. List the results in ascending chronological order of ConsultDate.',4,
 `SELECT Patients.PatientName, Patients.Suburb, Consultations.ConsultDate, Consultations.Fee
 FROM Patients
@@ -321,7 +321,7 @@ ORDER BY Consultations.ConsultDate ASC`,true,[
 ],{two:true,db:DB6}));
 
 /* ---------- Question 7: Two-Table Join with MIN, MAX, AVG Statistical Aggregations ---------- */
-qs.push(Q(PW,'An environmental research organisation monitors microclimates using two tables, MonitoringSites and Readings.',[
+qs.push(Q(PW,'An environmental research organisation monitors microclimates using two tables, <b><i>MonitoringSites</i></b> and <b><i>Readings</i></b>.',[
   sq('Construct a SQL query that displays, for each site in either the \'Forest\' or \'Wetland\' habitat, the SiteName along with the minimum temperature, maximum temperature, and average temperature recorded.<br>Use the column headings SiteName, LowestTemp, HighestTemp, and AverageTemp. List the results in alphabetical order of SiteName.',4,
 `SELECT MonitoringSites.SiteName, MIN(Readings.Temperature) AS LowestTemp, MAX(Readings.Temperature) AS HighestTemp, AVG(Readings.Temperature) AS AverageTemp
 FROM MonitoringSites
@@ -337,7 +337,7 @@ ORDER BY MonitoringSites.SiteName ASC`,true,[
 ],{two:true,db:DB7}));
 
 /* ---------- Question 8: Three-Table Relational Join with Arithmetic and Aggregation ---------- */
-qs.push(Q(PW,'A state robotics league tracks schools, teams, and tournament match scores in three tables, Schools, Teams, and Scores.',[
+qs.push(Q(PW,'A state robotics league tracks schools, teams, and tournament match scores in three tables, <b><i>Schools</i></b>, <b><i>Teams</i></b>, and <b><i>Scores</i></b>.',[
   sq('Construct a SQL query that joins the Schools, Teams, and Scores tables to display the SchoolName, TeamName, and the total net points scored by each team in the \'Metro North\' region. The net points for a match is Points minus Penalties.<br>Use the column headings SchoolName, TeamName, and NetPoints. List the results from the highest to the lowest net points.',4,
 `SELECT Schools.SchoolName, Teams.TeamName, SUM(Scores.Points - Scores.Penalties) AS NetPoints
 FROM Schools
@@ -354,7 +354,7 @@ ORDER BY NetPoints DESC`,true,[
 ],{two:true,db:DB8}));
 
 /* ---------- Question 9: Date Range Filtering, Negation with NOT & Multi-Column Sorting ---------- */
-qs.push(Q(PW,'A logistics company maintains vehicle service and inspection records in a table, FleetServices.',[
+qs.push(Q(PW,'A logistics company maintains vehicle service and inspection records in a table, <b><i>FleetServices</i></b>.',[
   sq('Construct a SQL query that displays the VehicleRego, VehicleType, ServiceDate, and Cost for all services conducted between \'2026-01-01\' and \'2026-06-30\' inclusive, where the service was NOT covered under warranty (IsWarranty = \'N\').<br>Use the column headings VehicleRego, VehicleType, ServiceDate, and ServiceCost. List the results primarily in ascending alphabetical order of VehicleType, and secondarily from highest to lowest ServiceCost.',4,
 `SELECT VehicleRego, VehicleType, ServiceDate, Cost AS ServiceCost
 FROM FleetServices
@@ -368,7 +368,7 @@ ORDER BY VehicleType ASC, ServiceCost DESC`,true,[
 ],{two:true,db:DB9}));
 
 /* ---------- Question 10: Capstone Multi-Table Join, Pattern Matching & Multi-Grouping ---------- */
-qs.push(Q(PW,'A software development consultancy stores clients, projects, and recorded developer timesheets in three tables, Clients, Projects, and Timesheets.',[
+qs.push(Q(PW,'A software development consultancy stores clients, projects, and recorded developer timesheets in three tables, <b><i>Clients</i></b>, <b><i>Projects</i></b>, and <b><i>Timesheets</i></b>.',[
   sq('Construct a SQL query that joins the Clients, Projects, and Timesheets tables to calculate the total billable hours and total billable amount for Australian clients (Country is \'Australia\') whose Industry is not equal to \'Retail\'.<br>Only include timesheets where Approved is \'Yes\', and where the ProjectTitle contains \'Web\' or \'App\' but does not contain \'Legacy\'. The billable amount is calculated by multiplying Hours by Rate.<br>Use the column headings ClientName, ProjectTitle, TotalHours, and TotalBilled. Group by ClientName and ProjectTitle, and list the results from the highest to the lowest total billed amount.',4,
 `SELECT Clients.ClientName, Projects.ProjectTitle, SUM(Timesheets.Hours) AS TotalHours, SUM(Timesheets.Hours * Timesheets.Rate) AS TotalBilled
 FROM Clients

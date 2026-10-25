@@ -34,7 +34,7 @@ function cvAnswerPoints(res,studentName,text){
   return points;
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,roster:null,users:null,aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
+var CV={n:1,st:null,msg:'',bank:'',over:null,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',run:{},res:{},auto:{},open:{},joining:false};
 function cvApi(body){
   return fetch('/api/class',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+S.tok},body:JSON.stringify(body)}).then(function(r){
     return r.json().catch(function(){return {error:'The class service sent an unreadable reply.'}}).then(function(j){
@@ -182,16 +182,10 @@ function cvNavHTML(b){
 /* Everyone in the class, one row each, like a Google Classroom people list. Admins edit any name or photo. */
 function cvRosterHTML(){
   var r=CV.roster;if(!r)return '';
-  return '<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+(r.admin?'<p class="mut">You are a class admin. Press Edit to change anyone\'s name or photo.</p>':'')+
+  return '<h2 class="pt" style="margin-top:18px">People ('+r.members.length+')</h2>'+
     '<ul class="cv-people">'+r.members.map(function(m){
-      var open=r.admin&&CV.editing===m.id;
-      var row='<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span>'+
-        (r.admin?'<button class="nb sm ol" data-cv="edit" data-id="'+esc(m.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Edit')+'</button>':'')+'</div>';
-      if(open)row+='<div class="cv-edit"><label for="cvnm">Name</label><div class="cv-erow"><input id="cvnm" maxlength="40" value="'+esc(m.name)+'" autocomplete="off"><button class="nb sm" data-cv="savename" data-id="'+esc(m.id)+'" type="button">Save name</button></div>'+
-        '<label>Photo</label><div class="cv-erow"><span class="cv-pav">'+profileAvatarHTML(m.photo,m.id,56,m.name)+'</span><button class="nb sm ol" data-cv="photo" data-id="'+esc(m.id)+'" type="button">Upload new photo</button>'+(m.photo?'<button class="nb sm ol" data-cv="photoclear" data-id="'+esc(m.id)+'" type="button">Remove photo</button>':'')+'</div>'+
-        (CV.photoMsg?'<p class="acmsg" role="status">'+esc(CV.photoMsg)+'</p>':'')+'</div>';
-      return row+'</li>';
-    }).join('')+'</ul>'+(r.admin?'<input id="cvphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>':'');
+      return '<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(m.mine?S.photo||m.photo:m.photo,m.id,40,m.name)+'</span><span class="cv-pname2">'+esc(m.name)+(m.mine?' <span class="mut">(you)</span>':'')+'</span></div></li>';
+    }).join('')+'</ul>';
 }
 function cvSetName(id,name){
   CV.photoMsg='Saving name...';cvDraw();
@@ -209,20 +203,21 @@ function cvAdminHTML(){
     var open=CV.aedit===a.id,del=CV.adel===a.id;
     var row='<li class="cv-person"><div class="cv-prow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,40,a.name||a.email)+'</span><span class="cv-pname2">'+esc(a.name||'(no name)')+'<br><small class="mut">'+esc(a.email)+(a.inClass?' &middot; in class':' &middot; not in class')+'</small></span>'+
       '<button class="nb sm ol" data-cv="aedit" data-id="'+esc(a.id)+'" type="button" aria-expanded="'+open+'">'+(open?'Close':'Edit')+'</button></div>';
-    if(open)row+='<div class="cv-edit"><label for="cvanm">Name</label><div class="cv-erow"><input id="cvanm" maxlength="40" value="'+esc(a.name)+'" autocomplete="off"><button class="nb sm" data-cv="aname" data-id="'+esc(a.id)+'" type="button">Save name</button></div>'+
+    if(open)row+='<div class="cv-edit"><label for="cvanm">Name</label><div class="cv-erow"><input id="cvanm" data-id="'+esc(a.id)+'" maxlength="40" value="'+esc(CV.draft[a.id]!=null?CV.draft[a.id]:a.name)+'" autocomplete="off"><button class="nb sm" data-cv="aname" data-id="'+esc(a.id)+'" type="button">Save name</button></div>'+
       '<label>Photo</label><div class="cv-erow"><span class="cv-pav">'+profileAvatarHTML(a.photo,a.id,56,a.name||a.email)+'</span><button class="nb sm ol" data-cv="aphoto" data-id="'+esc(a.id)+'" type="button">Upload new photo</button>'+(a.photo?'<button class="nb sm ol" data-cv="aphotoclear" data-id="'+esc(a.id)+'" type="button">Remove photo</button>':'')+'</div>'+
       '<label>Class</label><div class="cv-erow"><button class="nb sm ol" data-cv="aclass" data-id="'+esc(a.id)+'" data-on="'+(a.inClass?'0':'1')+'" type="button">'+(a.inClass?'Remove from class':'Add to class')+'</button></div>'+
       '<label>Account</label>'+(del?'<div class="cv-erow"><input id="cvadc" placeholder="Type '+esc(a.email)+' to confirm" autocomplete="off"><button class="nb sm bad" data-cv="adelgo" data-id="'+esc(a.id)+'" data-email="'+esc(a.email)+'" type="button">Delete forever</button><button class="nb sm ol" data-cv="adel" data-id="" type="button">Cancel</button></div><p class="mut">This removes the account, its saved papers, backups, photo and class membership. It cannot be undone.</p>':'<div class="cv-erow"><button class="nb sm ol" data-cv="adel" data-id="'+esc(a.id)+'" type="button">Delete account...</button></div>')+
       '</div>';
     return row+'</li>';
-  }).join('')+'</ul>'+(CV.amsg?'<p class="acmsg" role="status">'+esc(CV.amsg)+'</p>':'')+'<input id="cvaphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>';
+  }).join('')+'</ul>'+(CV.amsg?'<p class="acmsg'+(CV.aok?' ok':'')+'" role="status">'+esc(CV.amsg)+'</p>':'')+'<input id="cvaphoto" type="file" accept="image/jpeg,image/png,image/webp" hidden>';
   return h;
 }
 function cvAdm(body,after){
-  CV.amsg='Saving...';cvDraw();
-  cvApi(body).then(function(r){CV.amsg='Done.';after&&after(r);cvDraw();cvAdminRefresh()}).catch(function(e){CV.amsg=e.message;cvDraw()});
+  CV.amsg='Saving...';CV.aok=true;cvDraw();
+  cvApi(body).then(function(r){if(body.action==='admin_name')delete CV.draft[body.memberId];CV.amsg=body.action==='admin_name'?'Name saved as '+r.name+'.':'Saved.';CV.aok=true;after&&after(r);cvDraw();cvAdminRefresh()}).catch(function(e){CV.amsg=e.message;CV.aok=false;cvDraw()});
 }
 function cvAdminRefresh(){cvApi({action:'admin_users'}).then(function(o){CV.users=o.users;cvDraw()}).catch(function(){});cvApi({action:'roster'}).then(function(o){CV.roster=o;cvDraw()}).catch(function(){})}
+document.addEventListener('input',function(ev){var el=ev.target;if(el&&el.id==='cvanm')CV.draft[el.getAttribute('data-id')]=el.value});
 document.addEventListener('change',function(ev){
   var el=ev.target;if(!el||el.id!=='cvaphoto')return;
   var f=el.files&&el.files[0];el.value='';

@@ -965,3 +965,4 @@ a.nb.dis{opacity:.45;pointer-events:none}
 .cv-erow input{font:inherit;border:1px solid #002664;padding:7px 10px;min-width:0;flex:1 1 200px;max-width:320px}
 @media(max-width:600px){.cv-edit{padding-left:14px}}
 .cv-accts{max-width:900px}.cv-accts .cv-pname2 small{font-weight:400}.cv-accts .cv-pname2{white-space:normal}.nb.bad{background:#b81237;border-color:#b81237;color:#fff}
+.acmsg.ok{color:#1a7f37}

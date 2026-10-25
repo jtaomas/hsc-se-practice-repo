@@ -53,7 +53,7 @@ function cvApi(body){
 }
 function cvBanks(){return BANKS.filter(function(b){return !b.hidden&&!b.archived})}
 function cvOpenItem(it){return it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'}
-function cvChoiceItem(it){return !!it&&(it.t==='mc'||it.t==='ms')}
+function cvChoiceItem(it){return closedItem(it)}
 function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||'');return (d.textContent||'').replace(/\s+/g,' ').trim()}
 var CV_CACHE_KEY = 'sehsc-cv-cache';
 function loadCVCache(){
@@ -193,13 +193,31 @@ function cvSlotInner(b,n,i){
   if(!CV.st.configured)return '';
   if(!CV.st.member)return '<div class="aib"><b>Class answers.</b> <a href="#/class">Join your class</a> with the class code to see what classmates wrote for this part.</div>';
   if(CV.msg&&CV.ansBank!==b.id)return '<div class="aib bad"><b>Class answers.</b> '+esc(CV.msg)+'</div>';
+  if((CV.ansBank!==b.id||!CV.ans)&&!CV.loadAns&&!CV.msg)setTimeout(function(){if(CV.st&&CV.st.member&&!CV.loadAns&&CV.ansBank!==b.id)cvLoadAnswers(b.id,false)},0);
   if(CV.ansBank!==b.id||!CV.ans)return '<div class="cv-skel-slot cv-shimmer"><div class="cv-skel-line w40" style="height:14px"></div><div class="cv-skel-line w80" style="height:12px;margin-top:8px"></div></div>';
   var key=n+'.'+i,it0=b.qs[n-1].it[i];
   if(cvChoiceItem(it0))return '<div class="aib cvbox">'+cvChoiceBody(it0,CV.ans.parts[key]||[])+'</div>';
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
 }
 /* Single and multiple choice parts: how many classmates picked each option, and who. */
+/* Parts with several slots (dropdowns, grids, matching, ticks, ordering, labels): for each slot, what classmates chose and who. */
+function cvClosedBody(it,list){
+  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
+  if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
+  return h+'<ul class="cvch">'+closedRows(it).map(function(row,ri){
+    var groups={},order=[];
+    list.forEach(function(a){
+      var v=a.choice&&a.choice[ri],t=closedText(row,v);
+      if(!groups[t]){groups[t]={t:t,ok:closedRight(row,v),who:[]};order.push(t)}
+      groups[t].who.push(a.mine?'You':a.name);
+    });
+    order.sort(function(x,y){return groups[y].who.length-groups[x].who.length});
+    return '<li class="cvch-row"><div class="cvch-top"><span class="cvch-o"><b>'+esc(row.label)+'</b></span></div>'+order.map(function(t){var g=groups[t];
+      return '<div class="cvch-who"><b class="cvcl-'+(g.ok?'ok':'bad')+'">'+esc(g.t)+'</b> <span class="cvch-n">'+g.who.length+'</span>: '+g.who.map(esc).join(', ')+'</div>'}).join('')+'</li>';
+  }).join('')+'</ul>';
+}
 function cvChoiceBody(it,list){
+  if(it.t!=='mc'&&it.t!=='ms')return cvClosedBody(it,list);
   var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
   if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
   return h+'<ul class="cvch">'+it.o.map(function(o,j){
@@ -699,7 +717,7 @@ function cvHTML(){
   if(!CV.st.member)return cvPg(cvJoinHTML()+cvAdminHTML());
   var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
   if(!b){
-    var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and diagrams are not shared.</p>'+
+    var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and the other closed questions (dropdowns, grids, matching, ticks, ordering, labels) show what each classmate picked. Drawn diagrams are not shared.</p>'+
       '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
     h+=cvRosterHTML()+cvAdminHTML();
     h+='<h2 class="pt" style="margin-top:18px">Papers</h2><p class="mut">Open a paper to read every question as it appears in the exam, with what your class wrote under each written part.</p><div class="acts">'+cvBanks().map(function(x){

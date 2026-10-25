@@ -252,18 +252,60 @@ function itemHTML(b,n,i,rv){
   return h+(rv||(typeof pqShown==='function'&&pqShown(b,n))?guideHTML(b,n,i):'')+'</div>';
 }
 function critList(c){return c&&c.length?'<ul>'+c.map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul>':''}
+/* Closed parts that fill several slots (dropdowns, grids, matching, ticks, ordering, labels): one row per slot, with the option
+   texts and what is right. closedPicks() reads a stored answer into the same row order; api/class.js shares the same shape. */
+function closedItem(it){return !!it&&(it.t==='mc'||it.t==='ms'||it.t==='dd'||it.t==='gd'||it.t==='mt'||it.t==='tk'||it.t==='od'||it.t==='dm')}
+function closedRows(it){
+  var rows=[],pl=function(h){return typeof plain==='function'?plain(String(h)):String(h).replace(/<[^>]+>/g,'')};
+  function add(label,opts,ok,multi){rows.push({label:label,opts:opts.map(pl),ok:ok,multi:!!multi})}
+  if(it.t==='dd')it.b.forEach(function(bl,u){add('Blank '+(u+1),bl[0],bl[1])});
+  else if(it.t==='gd')it.r.forEach(function(row,r){row.forEach(function(c,ci){if(typeof c!=='string')add(pl(row[0])+' ('+pl(it.h[ci])+')',c[0],c[1])})});
+  else if(it.t==='mt')it.r.forEach(function(row,r){add(pl(row[0]),it.h.slice(1),row[1])});
+  else if(it.t==='tk')it.r.forEach(function(row,r){add(pl(row[0]),it.h.slice(1),row[1],true)});
+  else if(it.t==='od'){var si=0;it.lines.forEach(function(l){if(l.k==='slot'){si++;add('Step '+si,it.pool,it.pool.indexOf(l.t))}})}
+  else if(it.t==='dm')it.r.forEach(function(r,s){add(pl(r[0]),it.tok,r[1])});
+  if(it.t==='od'){var w=[];it.lines.forEach(function(l){if(l.k==='slot')w.push(l.t)});rows.forEach(function(r,i){r.want=w[i]})}
+  return rows;
+}
+function closedRight(row,v){
+  if(row.multi){var a=Array.isArray(v)?v.slice().sort():[],b=row.ok.slice().sort();return a.length===b.length&&a.every(function(x,i){return x===b[i]})}
+  if(row.want!=null)return v>=0&&row.opts[v]===String(typeof plain==='function'?plain(row.want):row.want);
+  return v===row.ok;
+}
+function closedText(row,v){
+  if(row.multi)return Array.isArray(v)&&v.length?v.map(function(c){return row.opts[c]}).join(', '):'none ticked';
+  return v>=0&&row.opts[v]!=null?row.opts[v]:'(blank)';
+}
+function closedPicks(it,a){
+  a=a||{};var out=[];
+  if(it.t==='dd')it.b.forEach(function(bl,u){out.push(typeof a[u]==='number'?a[u]:-1)});
+  else if(it.t==='gd')it.r.forEach(function(row,r){row.forEach(function(c,ci){if(typeof c!=='string')out.push(typeof a[r+','+ci]==='number'?a[r+','+ci]:-1)})});
+  else if(it.t==='mt')it.r.forEach(function(row,r){out.push(typeof a[r]==='number'?a[r]:-1)});
+  else if(it.t==='tk'){var sel=Array.isArray(a)?a:[];it.r.forEach(function(row,r){out.push(it.h.slice(1).map(function(_,ci){return ci}).filter(function(ci){return sel.indexOf(r+','+ci)>=0}))})}
+  else if(it.t==='od'){var si=0;it.lines.forEach(function(l){if(l.k==='slot'){out.push(typeof a[si]==='number'?a[si]:-1);si++}})}
+  else if(it.t==='dm')it.r.forEach(function(r,s){out.push(typeof a[s]==='number'?a[s]:-1)});
+  return out;
+}
+/* Your answer / sample answer for these parts on the My mistakes page, one line per slot. */
+function closedAnsHTML(it,a){
+  var rows=closedRows(it),picks=closedPicks(it,a);
+  return '<ul class="cvcl">'+rows.map(function(r,i){var ok=closedRight(r,picks[i]);return '<li><span class="cvcl-l">'+esc(r.label)+'</span> <b class="cvcl-'+(ok?'ok':'bad')+'">'+esc(closedText(r,picks[i]))+'</b></li>'}).join('')+'</ul>';
+}
+function closedSampleHTML(it){
+  return '<ul class="cvcl">'+closedRows(it).map(function(r){var t=r.multi?r.ok.map(function(c){return r.opts[c]}).join(', ')||'none':(r.want!=null?r.want:r.opts[r.ok]);return '<li><span class="cvcl-l">'+esc(r.label)+'</span> <b>'+esc(typeof plain==='function'?plain(String(t)):t)+'</b></li>'}).join('')+'</ul>';
+}
 function guideHTML(b,n,i){
   var it=b.qs[n-1].it[i],bs=BS(b.id),k=n+'.'+i,a=bs.ans[k],sc=score(b,n,i),pc=partCls(b,n,i);
   var h='<div class="guide"><h4>Marking guide <span class="ghr">'+(typeof rtButtonHTML==='function'?rtButtonHTML(b,n,i,'rv'):'')+'<span class="sc'+(pc?' '+pc:'')+'">'+(sc.set?(sc.src==='provisional'?'Unconfirmed: ':'')+sc.g+' / '+sc.m:'Unscored')+'</span></span></h4>';
   if(typeof rtStatusHTML==='function')h+=rtStatusHTML(b,n,i);
   if(AUTO[it.t]&&sc.g<sc.m&&typeof closedCompare==='function')h+='<div class="wrongbox"><h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+(sc.m-sc.g)+' mark'+(sc.m-sc.g===1?'':'s')+'</span></h5>'+closedCompare(it,a)+'</div>';
-  if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a);
+  if(QT[it.t]&&QT[it.t].auto)h+=QT[it.t].guide(it,a)+(typeof classSlot==='function'?classSlot(b,n,i):'');
   else if(it.t==='mc')h+='<p><b>Correct answer:</b> '+it.o[it.a]+'</p>'+(typeof classSlot==='function'?classSlot(b,n,i):'');
   else if(it.t==='ms')h+='<p><b>Correct answers:</b></p>'+critList(it.a.map(function(j){return it.o[j]}))+(typeof classSlot==='function'?classSlot(b,n,i):'');
-  else if(it.t==='dd'){h+='<p><b>Correct answer:</b></p><div class="tpl">'+it.tpl.replace(/\{(\d+)\}/g,function(m,u){var bl=it.b[+u];return '<b>['+bl[0][bl[1]]+']</b>'})+'</div>'}
-  else if(it.t==='gd'){h+='<p><b>Correct answers:</b></p><div class="tw"><table class="hoa"><tr>'+it.h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+it.r.map(function(row){return '<tr>'+row.map(function(c){return '<td>'+(typeof c==='string'?c:'<b>'+c[0][c[1]]+'</b>')+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'}
-  else if(it.t==='mt'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+it.h[r[1]+1]+'</b>'}))}
-  else if(it.t==='tk'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+(r[1].map(function(c){return it.h[c+1]}).join(', ')||'none')+'</b>'}))}
+  else if(it.t==='dd'){h+='<p><b>Correct answer:</b></p><div class="tpl">'+it.tpl.replace(/\{(\d+)\}/g,function(m,u){var bl=it.b[+u];return '<b>['+bl[0][bl[1]]+']</b>'})+'</div>'+(typeof classSlot==='function'?classSlot(b,n,i):'')}
+  else if(it.t==='gd'){h+='<p><b>Correct answers:</b></p><div class="tw"><table class="hoa"><tr>'+it.h.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>'+it.r.map(function(row){return '<tr>'+row.map(function(c){return '<td>'+(typeof c==='string'?c:'<b>'+c[0][c[1]]+'</b>')+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>'+(typeof classSlot==='function'?classSlot(b,n,i):'')}
+  else if(it.t==='mt'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+it.h[r[1]+1]+'</b>'}))+(typeof classSlot==='function'?classSlot(b,n,i):'')}
+  else if(it.t==='tk'){h+='<p><b>Correct answers:</b></p>'+critList(it.r.map(function(r){return r[0]+' → <b>'+(r[1].map(function(c){return it.h[c+1]}).join(', ')||'none')+'</b>'}))+(typeof classSlot==='function'?classSlot(b,n,i):'')}
   else{
     h+=aiBlock(b,n,i,it,bs,k,a,sc);
     if(QT[it.t]&&QT[it.t].sample)h+='<p class="gh"><b>Sample answer:</b></p>'+QT[it.t].sample(it);

@@ -341,5 +341,33 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert.equal(listed.filter(x => !x.noLogin).length > 0, true);
   assert.equal((await store.adminUser(ghost)).noLogin, true);
   await assert.rejects(store.adminUser(id(99)), /does not exist/);
+  // Closed parts with several slots are shared too: only option numbers, checked against the real options.
+  {
+    const { loadBanks } = require('../server/marking-input');
+    const found = {};
+    loadBanks().filter(b => !b.hidden && !b.archived).forEach(b => b.qs.forEach((q, qi) => q.it.forEach((it, pi) => {
+      if (['dd', 'gd', 'mt', 'tk', 'od', 'dm'].includes(it.t) && !found[it.t]) found[it.t] = { bank: b.id, key: (qi + 1) + '.' + pi, it };
+    })));
+    assert.deepEqual(Object.keys(found).sort(), ['dd', 'dm', 'gd', 'mt', 'od', 'tk'], 'every closed type exists in a bank');
+    for (const t of Object.keys(found)) {
+      const f = found[t], it = f.it;
+      let ans, expectLen;
+      if (t === 'dd') { ans = { 0: 0, 1: 99 }; }
+      else if (t === 'gd') { ans = { [it.r.findIndex(r => r.some(c => typeof c !== 'string')) + ',' + it.r[it.r.findIndex(r => r.some(c => typeof c !== 'string'))].findIndex(c => typeof c !== 'string')]: 0 }; }
+      else if (t === 'mt') { ans = { 0: 0, 1: 99 }; }
+      else if (t === 'tk') { ans = ['0,0', '9,9']; }
+      else if (t === 'od' || t === 'dm') { ans = { 0: 0, 1: 999 }; }
+      await m.put('progress/' + id(1) + '.json', { u: { [f.bank]: { done: true, ans: { [f.key]: ans } } } });
+      const out = (await rest(h, { action: 'answers', bankId: f.bank })).body.parts[f.key];
+      assert.equal(out.length, 1, t + ': one classmate shared');
+      assert.equal(out[0].mine, true);
+      assert(Array.isArray(out[0].choice), t + ': choice is a list');
+      assert(out[0].choice.every(v => Array.isArray(v) ? v.every(Number.isInteger) : Number.isInteger(v)), t + ': only integers are shared');
+      assert(!out[0].choice.some(v => v === 99 || v === 999), t + ': an option that does not exist is dropped');
+      if (t === 'tk') assert.deepEqual(out[0].choice[0], [0]);
+      assert.deepEqual(Object.keys(out[0]).sort(), ['choice', 'id', 'mine', 'name', 'photo']);
+    }
+    await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>x</p>') } });
+  }
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

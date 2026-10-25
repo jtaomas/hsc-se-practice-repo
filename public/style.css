@@ -1505,3 +1505,10 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 /* drawn sample answers for drawing questions (bank 19) */
 .dgmfig{margin:6px 0 10px;overflow-x:auto;background:#fff;border:1px solid #c4c4c4;padding:8px}
 .dgmfig svg,.fig svg.dgm{max-width:100%;height:auto;display:block}
+/* Closed parts with several slots: your answer, the sample answer and the class view */
+.cvcl{list-style:none;margin:6px 0 0;padding:0}
+.cvcl li{padding:4px 0;border-bottom:1px solid #e3e7ee}
+.cvcl-l{color:#4a5568;margin-right:6px}
+.cvcl-ok{color:#1b6b2f}
+.cvcl-bad{color:#b81237}
+.cvch .cvch-who .cvch-n{background:#e3e7ee;border-radius:9px;padding:0 6px;font-size:.85em}

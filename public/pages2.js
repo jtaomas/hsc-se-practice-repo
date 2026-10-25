@@ -89,6 +89,8 @@ function ansPreview(m){
   function renderAns(ansVal,isRetry){
     if(!isAns(it,ansVal))return '<p class="mut">You did not answer this part'+(isRetry?' on retry':' in the exam')+'.</p>';
     if(QT[it.t]&&QT[it.t].preview)return QT[it.t].preview(it,ansVal);
+    if(it.t==='dd'||it.t==='gd'||it.t==='mt'||it.t==='tk'||it.t==='od'||it.t==='dm')return '<div class="yans">'+closedAnsHTML(it,ansVal)+'</div>';
+    if(it.t==='ms')return '<div class="yans">Selected: <b>'+(Array.isArray(ansVal)?ansVal.map(function(j){return esc(it.o[j])}).join('</b>, <b>'):'')+'</b></div>';
     if(it.t==='tx')return '<div class="yans">'+ansVal+'</div>';
     if(it.t==='dr')return '<pre class="yans">'+esc(xdText(ansVal&&ansVal.e))+'</pre>';
     if(it.t==='mc')return '<div class="yans">Selected: <b>'+esc(it.o[ansVal]||ansVal)+'</b></div>';
@@ -101,7 +103,7 @@ function ansPreview(m){
   }else{
     h+='<p class="gh"><b>Your answer</b></p>'+renderAns(a,false);
   }
-  h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='tx'||it.t==='dr'?modelHTML(it):'<pre>'+esc(it.model)+'</pre>')+'</details>';
+  h+='<details class="xdd" open><summary>Sample answer</summary>'+(QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='dd'||it.t==='gd'||it.t==='mt'||it.t==='tk'||it.t==='od'||it.t==='dm'?closedSampleHTML(it):it.t==='mc'?'<p>'+it.o[it.a]+'</p>':it.t==='ms'?'<ul>'+it.a.map(function(j){return '<li>'+it.o[j]+'</li>'}).join('')+'</ul>':it.t==='tx'||it.t==='dr'?modelHTML(it):'<pre>'+esc(it.model)+'</pre>')+'</details>';
   return h;
 }
 /* My mistakes: a vertical list of every part that lost marks (left) and the selected one in the exam's own style (right). */

@@ -52,14 +52,38 @@ function createHandler(deps) {
     return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
   }
 
-  // What a classmate picked in a single or multiple choice part: option numbers only, checked against the real option list.
+  // What a classmate picked in a closed part, checked against the real options so nothing but option numbers is ever shared.
+  // mc and ms: the list of option numbers. Dropdown, grid, match, tick, order and label parts: one entry per answer slot, in the
+  // same order as closedRows() in public/widgets.js (an option number, -1 for blank, or a list of columns for tick grids).
+  const CLOSED = { mc: 1, ms: 1, dd: 1, gd: 1, mt: 1, tk: 1, od: 1, dm: 1 };
+  const optIdx = (v, n) => Number.isInteger(v) && v >= 0 && v < n ? v : -1;
   function choiceOf(item, stored) {
     const n = Array.isArray(item.o) ? item.o.length : 0;
     const ok = v => Number.isInteger(v) && v >= 0 && v < n;
     if (item.t === 'mc') return ok(stored) ? [stored] : null;
-    if (!Array.isArray(stored)) return null;
-    const picked = [...new Set(stored.filter(ok))].sort((a, b) => a - b);
-    return picked.length ? picked : null;
+    if (item.t === 'ms') {
+      if (!Array.isArray(stored)) return null;
+      const picked = [...new Set(stored.filter(ok))].sort((a, b) => a - b);
+      return picked.length ? picked : null;
+    }
+    if (!stored || typeof stored !== 'object') return null;
+    const a = stored;
+    let out = null;
+    if (item.t === 'dd' && Array.isArray(item.b)) out = item.b.map((bl, u) => optIdx(a[u], (bl[0] || []).length));
+    else if (item.t === 'gd' && Array.isArray(item.r)) {
+      out = [];
+      item.r.forEach((row, r) => row.forEach((c, ci) => { if (typeof c !== 'string') out.push(optIdx(a[r + ',' + ci], (c[0] || []).length)); }));
+    } else if (item.t === 'mt' && Array.isArray(item.r) && Array.isArray(item.h)) out = item.r.map((row, r) => optIdx(a[r], item.h.length - 1));
+    else if (item.t === 'tk' && Array.isArray(item.r) && Array.isArray(item.h)) {
+      const sel = Array.isArray(stored) ? stored.map(String) : [];
+      out = item.r.map((row, r) => item.h.slice(1).map((_, ci) => ci).filter(ci => sel.includes(r + ',' + ci)));
+    } else if (item.t === 'od' && Array.isArray(item.lines) && Array.isArray(item.pool)) {
+      let si = 0;
+      out = [];
+      item.lines.forEach(l => { if (l.k === 'slot') out.push(optIdx(a[si++], item.pool.length)); });
+    } else if (item.t === 'dm' && Array.isArray(item.r) && Array.isArray(item.tok)) out = item.r.map((r, s) => optIdx(a[s], item.tok.length));
+    if (!out) return null;
+    return out.some(v => Array.isArray(v) ? v.length : v >= 0) ? out : null;
   }
 
   function firstSentence(t) {
@@ -121,7 +145,7 @@ function createHandler(deps) {
     // Practice answers are shared as they are saved and exam answers once submitted. An exam that is still being sat stays private.
     const submitted = rows.filter(r => r.paper && sharedPaper(r.paper));
     bank.qs.forEach((q, qi) => q.it.forEach((item, pi) => {
-      if (item.t === 'mc' || item.t === 'ms') {
+      if (CLOSED[item.t]) {
         const key = (qi + 1) + '.' + pi, picks = [];
         submitted.forEach(r => {
           const choice = choiceOf(item, r.paper.ans && r.paper.ans[key]);

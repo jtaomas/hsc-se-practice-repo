@@ -190,12 +190,12 @@ function codeBox(it,k,a,ro,label,tog){
   var ph=it.t==='py'?'# Input code':it.t==='sq'?'-- Input query':'// Input pseudocode';
   var val=a!=null?a:(it.start||'');
   return '<div class="cbox" data-k="'+k+'"><div class="cbar"><div class="hoa-q cbl">'+label+'</div><div class="btns">'+
-    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='sq'&&!ro?'<button class="nb" data-act="rdb" data-k="'+k+'">Reset DB</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(tog||'')+'</div></div>'+
+    '<button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(hasRun&&!ro?'<button class="nb" data-act="run" data-k="'+k+'">Run</button>':'')+(it.t==='sq'&&!ro?'<button class="nb" data-act="rdb" data-k="'+k+'">Reset DB</button>':'')+(it.t==='py'&&!ro?'<button class="nb ol" data-act="stop">Stop</button>':'')+(typeof rtOrigBtn==='function'?rtOrigBtn(k):'')+(tog||'')+'</div></div>'+
     (it.t==='sq'?'<div class="split sqs"><div class="qtab"><span>Query</span></div>':'<div class="split'+(hasRun?'':' one')+'">')+'<div class="cedit"><div class="gut" id="g'+k+'">'+gutNums(val)+'</div><textarea data-k="'+k+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+ph+'" aria-label="'+kind+' editor"'+(ro?' readonly':'')+'>'+esc(val)+'</textarea></div>'+
     (hasRun?'<div class="out ph'+(it.t==='sq'?' sqres':'')+'" id="o'+k+'">'+(it.t==='sq'?'Run the query to see the results.':'# Output')+'</div>':'')+'</div></div>';
 }
 function drawBox(it,k,ro,label,tog){
-  return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+(tog||'')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
+  return '<div class="cbox dbox" data-k="'+k+'"><div class="cbar"><span class="hoa-q" style="margin:0">'+label+'</span><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(ro?'':'<button class="nb" data-act="xreset" data-k="'+k+'">Reset</button>')+(typeof rtOrigBtn==='function'?rtOrigBtn(k):'')+(tog||'')+'</div></div><div class="xd'+(ro?' ro':'')+'" id="x'+k+'" data-k="'+k+'"><div class="xdl">Loading the drawing tool...</div></div></div>';
 }
 function itemHTML(b,n,i,rv){
   var q=b.qs[n-1],it=q.it[i],bs=BS(b.id),k=n+'.'+i,a=ANS(b)[k],ro=!!rv,h='<div class="part">';
@@ -233,7 +233,7 @@ function itemHTML(b,n,i,rv){
     }else if(it.t==='tx'){
       var tb=[['bold','B'],['underline','U'],['italic','I'],['insertUnorderedList','•≡'],['insertOrderedList','1≡'],['outdent','⇤'],['indent','⇥'],['subscript','x₂'],['superscript','x²'],['removeFormat','✕'],['undo','↩'],['redo','↪'],['sym:Ω','Ω'],['sym:Σ','Σ']];
       var wc=wcount(a||'');
-      h+='<div class="rte">'+(ro?'':'<div class="rtb" role="toolbar">'+tb.map(function(t){return '<button type="button" data-act="rt" data-c="'+t[0]+'" aria-label="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</div>')+
+      h+='<div class="rte">'+(ro?'':'<div class="rtb" role="toolbar">'+tb.map(function(t){return '<button type="button" data-act="rt" data-c="'+t[0]+'" aria-label="'+t[0]+'">'+t[1]+'</button>'}).join('')+(typeof rtOrigBtn==='function'?rtOrigBtn(k,'tb'):'')+'</div>')+
         '<div class="rta" data-k="'+k+'" contenteditable="'+(ro?'false':'true')+'" role="textbox" aria-multiline="true" aria-label="Your answer">'+(a||'')+'</div></div><div class="wc'+(wc>it.w?' over':'')+'" id="wc'+k+'">'+wc+' / '+it.w+' words</div>';
     }
   }

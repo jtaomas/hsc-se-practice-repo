@@ -116,6 +116,9 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - Marking feedback now leads with a red "What's wrong" box (each lost mark, why, and how to fix it, from `losses` or else `improve`), then the summary, then "What earned marks". The Details drawer keeps the evidence behind each lost mark. Closed questions show the same box in review and My mistakes.
 - Test: `tests/retry_ui_test.py` (added to `run_ui_test.py`).
 
+## Original answer on the retry page (25 October)
+- Inside the answer box of a retry there is a small "Original answer" button (in the editor toolbar for written parts, in the box header for code and diagram parts, and as a small link under the part for other typed answers; closed questions do not get one). It opens the submitted answer under the box with "Restore to the box" and "Close". Restore copies the submitted answer into `paper.rt.a[key]` and redraws the retry page; the submitted answer and mark never change. Code: `rtOrigBtn`, `rtOrigHTML`, `rtOrigToggle`, `rtRestore` in `public/retry.js`; the button is added by `itemHTML` renderers in `public/widgets.js` only when `CUR.rt` is set. Test: "Original answer" steps in `tests/retry_ui_test.py`.
+
 ## Account profile pictures
 
 Account page uploads JPEG/PNG/WebP (up to 10 MB), crops and re-encodes to a 128×128 JPEG in the browser. Authenticated `profile` requests store only the session owner’s picture at `profiles/<id>.json`; an empty picture removes it. The server caps the data URL at 44,000 characters and rejects external URLs, SVG and non-JPEG payloads. No credentials or progress are changed. Account load returns the picture; class membership reads attach it to overview and answer rows. Browser account epochs and the sync queue protect against stale uploads after sign-out or account changes. Tests cover authentication, validation, isolation, sharing, upload, reload and removal.

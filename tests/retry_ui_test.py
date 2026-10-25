@@ -115,6 +115,23 @@ with sync_playwright() as p:
     page.evaluate("location.hash='#/1/review/18'")
     page.locator('.guide .rtbtn').first.click()
     expect(page).to_have_url(__import__('re').compile(r'#/1/retry/18\.0/rv$'))
+    # The submitted answer is one small button inside the answer box. It opens below the box, and Restore puts it back as the retry answer.
+    expect(page.locator('.rta[data-k="18.0"]')).to_have_text('')
+    assert order(page, '.rtb .rto-btn', '.rta[data-k="18.0"]'), 'Original answer button is not in the answer box toolbar'
+    assert page.locator('#rto .rto').count() == 0
+    page.locator('.rtb .rto-btn').click()
+    expect(page.locator('#rto .rto')).to_contain_text('it is hashed')
+    expect(page.locator('.rtb .rto-btn')).to_have_attribute('aria-expanded', 'true')
+    page.locator('.rta[data-k="18.0"]').click()
+    page.keyboard.type('A half-written retry.')
+    page.click('[data-act=rtrestore]')
+    expect(page.locator('#rto .rto')).to_have_count(0)
+    expect(page.locator('.rta[data-k="18.0"]')).to_have_text('it is hashed')
+    state = page.evaluate("({a:BS('1').rt.a['18.0'],orig:BS('1').ans['18.0']})")
+    assert state == {'a': '<p>it is hashed</p>', 'orig': '<p>it is hashed</p>'}, state
+    page.locator('.rta[data-k="18.0"]').click()
+    page.keyboard.press('Control+A')
+    page.keyboard.press('Delete')
     page.locator('.rta[data-k="18.0"]').click()
     page.keyboard.type('Passwords are hashed.')
     page.click('[data-act=rtcheck]')

@@ -7,7 +7,7 @@
    Colours everywhere: red means marks were lost; yellow means the part was retried and earned full
    marks (rt.r[key].full stays set once reached). Retries are only for submitted papers and are
    switched off completely while any paper is being sat in exam mode. */
-var RTRUN={},RTERR={},RTSELF={};
+var RTRUN={},RTERR={},RTSELF={},RTORIG={};
 function rtAllowed(b){var u=b&&S.u[b.id];return !!(u&&u.done&&!b.hidden&&(typeof examSitting!=='function'||!examSitting()))}
 function rtData(b){var bs=BS(b.id);if(!bs.rt)bs.rt={};if(!bs.rt.a)bs.rt.a={};if(!bs.rt.r)bs.rt.r={};return bs.rt}
 function rtRes(b,n,i){var u=S.u[b.id];return u&&u.rt&&u.rt.r?u.rt.r[n+'.'+i]||null:null}
@@ -42,7 +42,8 @@ function retryPage(b,n,i,from){
   CUR={b:b,n:n,rv:false,rt:{i:i,from:from||'mk'}};rtData(b);
   var title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+') <span class="rt-tag">Retry</span></h2>';
   var st=(q.st||'')+(q.db?dbTables(q.db):'');
-  var items=itemHTML(b,n,i,false)+'<div id="rtp">'+rtPanelHTML(b,n,i)+'</div>';
+  var inBox=it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'||it.t==='dr';
+  var items=itemHTML(b,n,i,false)+(inBox||AUTO[it.t]?'':'<div class="rto-row">'+rtOrigBtn(n+'.'+i)+'</div>')+(AUTO[it.t]?'':'<div id="rto">'+rtOrigHTML(b,n,i)+'</div>')+'<div id="rtp">'+rtPanelHTML(b,n,i)+'</div>';
   var acts='<div class="acts"><a class="nb ol" href="'+back+'">'+IC.left+'<span>'+(from==='rv'?'Back to the paper':'Back to my mistakes')+'</span></a></div>';
   var main=q.two?'<div class="qwrap two"><div class="qleft">'+title+st+'</div><div><div class="item">'+items+'</div>'+acts+'</div></div>'
     :'<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
@@ -53,6 +54,40 @@ function rtAfter(){
   var b=CUR.b,n=CUR.n,i=CUR.rt.i,it=b.qs[n-1].it[i];
   if(it.t==='dr')xdMount(b,n+'.'+i,false);
   if(typeof aceMount==='function')aceMount();
+}
+/* The submitted answer, one click away inside the answer box. "Original answer" opens it below the box; "Restore to the box" puts it back in as the retry answer. */
+function rtOrigBtn(k,kind){
+  if(typeof CUR==='undefined'||!CUR.rt||!CUR.b)return '';
+  var p=k.split('.'),open=!!RTORIG[rtKey(CUR.b,+p[0],+p[1])];
+  return '<button type="button" class="'+(kind==='tb'?'rto-btn':'nb ol rto-btn')+'" data-act="rtorig" aria-expanded="'+open+'">Original answer</button>';
+}
+function rtOrigHTML(b,n,i){
+  if(!RTORIG[rtKey(b,n,i)])return '';
+  var it=b.qs[n-1].it[i],a=BS(b.id).ans[n+'.'+i],has=isAns(it,a),body;
+  if(!has)body='<p class="mut">You did not answer this part.</p>';
+  else if(QT[it.t]&&QT[it.t].preview)body=QT[it.t].preview(it,a);
+  else if(it.t==='tx')body='<div class="yans">'+a+'</div>';
+  else if(it.t==='dr')body='<pre class="yans">'+esc(xdText(a.e))+'</pre>';
+  else body='<pre class="yans">'+esc(String(a))+'</pre>';
+  return '<div class="rto"><div class="rto-h"><b>Your original answer</b>'+(has?'<button type="button" class="rto-l" data-act="rtrestore">Restore to the box</button>':'')+'<button type="button" class="rto-l" data-act="rtorig">Close</button></div>'+body+'</div>';
+}
+function rtOrigToggle(){
+  if(!CUR.b||!CUR.rt)return;
+  var b=CUR.b,n=CUR.n,i=CUR.rt.i,key=rtKey(b,n,i),on=RTORIG[key]=!RTORIG[key],p=$('#rto');
+  if(p)p.innerHTML=rtOrigHTML(b,n,i);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-act="rtorig"].rto-btn'),function(el){el.setAttribute('aria-expanded',on?'true':'false')});
+}
+/* Put the submitted answer back into the retry box. The page is drawn again so the editor, word count and any drawing pick it up. */
+function rtRestore(){
+  if(!CUR.b||!CUR.rt||!canEdit())return;
+  var b=CUR.b,n=CUR.n,i=CUR.rt.i,from=CUR.rt.from,k=n+'.'+i,key=rtKey(b,n,i),orig=BS(b.id).ans[k];
+  if(!isAns(b.qs[n-1].it[i],orig))return;
+  if(typeof xdFlush==='function'&&b.qs[n-1].it[i].t==='dr')xdFlush(k);
+  rtData(b).a[k]=JSON.parse(JSON.stringify(orig));
+  delete RTERR[key];RTORIG[key]=false;save(b.id);
+  var y=window.scrollY;xdCleanup();$('#app').innerHTML=retryPage(b,n,i,from);
+  if(typeof applyTheme==='function')applyTheme();
+  rtAfter();window.scrollTo(0,y);
 }
 function rtRefresh(){var p=$('#rtp');if(p&&CUR.b&&CUR.rt)p.innerHTML=rtPanelHTML(CUR.b,CUR.n,CUR.rt.i)}
 function rtSample(it){return QT[it.t]&&QT[it.t].sample?QT[it.t].sample(it):it.t==='py'||it.t==='ps'||it.t==='sq'?'<pre>'+esc(it.model)+'</pre>':'<div>'+it.model+'</div>'}
@@ -133,7 +168,9 @@ function rtMarkAI(b,n,i){
   });
 }
 document.addEventListener('click',function(e){
-  var el=e.target.closest&&e.target.closest('[data-act="rtcheck"],[data-act="rtsm"]');if(!el||!CUR.b||!CUR.rt)return;
+  var el=e.target.closest&&e.target.closest('[data-act="rtcheck"],[data-act="rtsm"],[data-act="rtorig"],[data-act="rtrestore"]');if(!el||!CUR.b||!CUR.rt)return;
   if(el.dataset.act==='rtcheck')rtCheck();
+  else if(el.dataset.act==='rtorig')rtOrigToggle();
+  else if(el.dataset.act==='rtrestore')rtRestore();
   else if(canEdit()){var b=CUR.b,n=CUR.n,i=CUR.rt.i,prev=rtCurrent(b,n,i);rtStore(b,n,i,{g:+el.dataset.v,self:1,ai:prev&&prev.ai});rtRefresh()}
 });

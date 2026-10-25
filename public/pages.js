@@ -461,6 +461,8 @@ function afterQ(){
 function afterQDraw(){var b=CUR.b,n=CUR.n;b.qs[n-1].it.forEach(function(it,i){if(it.t==='dr')xdMount(b,n+'.'+i,CUR.rv)});if(typeof aceMount==='function')aceMount();if(typeof classEnsure==='function')classEnsure(b)}
 var MARKINGDEFER=null;
 function refreshMarking(b,context){
+  // The Papers page shows a progress bar for any paper being marked; redraw it as each answer finishes.
+  if(aiRunCurrent(b,context)&&location.hash==='#/papers'&&$('#app')){var py=window.scrollY;$('#app').innerHTML=papersPage();window.scrollTo(0,py);return}
   if(!aiRunCurrent(b,context)||CUR.b!==b||!aiUnlocked())return;
   var h=location.hash.replace(/^#\//,'').split('/'),y=window.scrollY;
   if(h[0]!==String(b.id))return;
@@ -633,9 +635,11 @@ document.addEventListener('click',function(e){
     }
   }
   else if(a==='paperremark'){
-    var pb=CUR.b;if(pb&&S.tok&&!aiRunCurrent(pb,AIRUN[pb.id])){
+    // data-id comes from the Papers page; results and review use the open paper. data-only="missing" keeps finished marks and marks only what has none.
+    var pb=d.id?BANKS.filter(function(x){return x.id===d.id&&!x.hidden})[0]:CUR.b;if(pb&&S.tok&&BS(pb.id).done&&!aiRunCurrent(pb,AIRUN[pb.id])){
       var bs=BS(pb.id);
-      pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i;delete bs.ai[k];delete bs.aiErr[k]})});
+      if(d.only==='missing')bs.aiErr={};
+      else pb.qs.forEach(function(q,qi){q.it.forEach(function(it,i){var k=(qi+1)+'.'+i;delete bs.ai[k];delete bs.aiErr[k]})});
       delete AIRUN[pb.id];Object.keys(AIQ).forEach(function(k){if(k.indexOf(pb.id+'/')===0)delete AIQ[k]});
       save(pb.id);markAndShow(pb);
     }

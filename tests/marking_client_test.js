@@ -353,6 +353,29 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.equal(bs.ai['1.0'],undefined);assert.equal(bs.ai['1.1'],undefined);
     gate.resolve();
   }
+  // Papers page: a submitted paper that was never marked can be marked, or fully re-marked, without opening it.
+  {
+    const c=client(),{b,bs}=paper(c,[written(),written()]);bs.ans['1.0']='One';bs.ans['1.1']='Two';
+    const app={};c.$=selector=>selector==='#app'?app:null;c.window.scrollTo=()=>{};c.location.hash='#/papers';
+    const page=c.papersPage();
+    assert(page.includes('data-act="paperremark" data-id="1" data-only="missing"'),'an unmarked paper offers to mark its unmarked answers');
+    assert(page.includes('Mark 2 unmarked answers'));assert(page.includes('Re-mark entire paper'));
+    c.S.tok='';assert(c.papersPage().includes('Sign in to AI mark'));assert(!c.papersPage().includes('data-act="paperremark"'),'signed-out students get a sign-in link, not a dead button');c.S.tok='test-session';
+    const requests=[];let gate=defer();c.fetch=async(_,r)=>{requests.push(JSON.parse(r.body));await gate.promise;return reply(result())};
+    const click=d=>c.listeners.click.forEach(fn=>fn({target:{closest:sel=>sel==='[data-act]'?{dataset:d}:null},preventDefault(){}}));
+    click({act:'paperremark',id:'1',only:'missing'});await until(()=>requests.length===2);
+    const running=c.papersPage();assert(running.includes('Marking: 0 of 2 answers'));assert(running.includes('aibar'));assert(running.includes('data-airun="1"'));assert(running.includes(' disabled'));
+    gate.resolve();await until(()=>!c.AIRUN[b.id]);await until(()=>(app.innerHTML||'').includes('AI marking finished'));
+    assert.equal(c.aiTodo(b).length,0);assert(!app.innerHTML.includes('Marking: 0 of 2'),'the page redrew once marking finished');
+    // "Mark unmarked answers" leaves finished marks alone and marks only what has none.
+    const before=requests.length;delete bs.ai['1.1'];assert(c.papersPage().includes('Mark 1 unmarked answer<'));
+    click({act:'paperremark',id:'1',only:'missing'});await until(()=>requests.length===before+1);await until(()=>!c.AIRUN[b.id]);
+    assert.equal(requests.length,before+1);assert.equal(requests.at(-1).partIndex,1);assert.notEqual(bs.ai['1.0'],undefined);assert.notEqual(bs.ai['1.1'],undefined);
+    // "Re-mark entire paper" discards every mark and marks every answer again.
+    click({act:'paperremark',id:'1'});assert.equal(bs.ai['1.0'],undefined);await until(()=>requests.length===before+3);await until(()=>!c.AIRUN[b.id]);
+    // A paper that was never submitted, or an unknown id, is never touched.
+    bs.done=false;const kept=bs.ai['1.0'];click({act:'paperremark',id:'1'});click({act:'paperremark',id:'nope'});assert.equal(bs.ai['1.0'],kept);assert.equal(requests.length,before+3);
+  }
   {
     const c=client(),{b,bs}=practice(c,[written()]);bs.ans['1.0']='Answer';let replacements=0;const panel={};
     c.$=selector=>selector==='#qarea'?{set innerHTML(_){replacements++}}:selector==='#pq'?panel:null;c.document.activeElement={tagName:'DIV',isContentEditable:true};

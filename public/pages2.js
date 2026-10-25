@@ -6,14 +6,23 @@ function aiState(b){
   var todo=aiTodo(b).length,errs=Object.keys(bs.aiErr||{}).filter(function(k){return bs.aiErr[k]}).length;
   return errs?'AI marking incomplete':todo?(S.tok?'Not AI marked yet':'Sign in for AI marking'):aiReviews(b)?'Needs review':aiProvisionals(b)?'Provisional marks need review':'AI marking finished';
 }
+/* Whole-paper marking from the Papers page: a paper submitted while signed out, or whose marking never finished, can be marked here without opening it. */
+function paperRunBox(b,run){return '<div class="aib" data-airun="'+esc(b.id)+'" role="status"><b>Marking: '+(run.done||0)+' of '+(run.total||0)+' answers</b>'+aiRunBarHTML(run)+'</div>'}
+function paperMarkBtns(b,run){
+  if(!S.tok)return '<a class="nb sm ol" href="#/account">Sign in to AI mark</a>';
+  var todo=aiTodo(b).length,dis=run?' disabled':'',h='';
+  if(todo)h+='<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'" data-only="missing"'+dis+'>Mark '+todo+' unmarked answer'+(todo>1?'s':'')+'</button>';
+  return h+'<button type="button" class="nb sm ol" data-act="paperremark" data-id="'+esc(b.id)+'"'+dis+'>'+(run?'Marking...':'Re-mark entire paper')+'</button>';
+}
 function papersPage(){
   CUR={b:null,n:0};
   var visible=BANKS.filter(function(b){return !b.hidden});
   var rows=visible.map(function(b){
-    var u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started',sc='',acts='<a class="nb sm" href="#/'+b.id+'">'+(u&&u.start&&!u.done?'Continue':'Open')+'</a>';
+    var run=null,u=S.u[b.id],st=u?(u.done?'Submitted':(u.start?'In progress':'Not started')):'Not started',sc='',acts='<a class="nb sm" href="#/'+b.id+'">'+(u&&u.start&&!u.done?'Continue':'Open')+'</a>';
     if(u&&u.done){var t=totals(b);sc='<b>'+t.T+' / '+t.markedM+'</b> <span class="mut">'+(t.markedM?'('+Math.round(100*t.T/t.markedM)+'% of assessed marks)':'No marks assessed')+(t.P?' · '+t.P+' marks unscored':'')+'</span>'+(t.provisionalParts?'<br><span class="note">'+provisionalMarksText(t)+'</span>':'');
-      acts='<a class="nb sm" href="#/'+b.id+'/review/1">View paper and marking</a><a class="nb sm ol" href="#/'+b.id+'/results">Results</a><a class="nb sm ol" href="#/mistakes/'+b.id+'">Mistakes</a>'}
-    return '<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub)+'</div></td><td>'+st+(u&&u.done?'<div class="mut">'+fmtD(u.doneAt)+'</div>':'')+'</td><td>'+sc+(u&&u.done?'<div class="mut">'+aiState(b)+'</div>':'')+'</td><td class="ra">'+acts+'</td></tr>';
+      run=aiRunCurrent(b,AIRUN[b.id])?AIRUN[b.id]:null;
+      acts='<a class="nb sm" href="#/'+b.id+'/review/1">View paper and marking</a><a class="nb sm ol" href="#/'+b.id+'/results">Results</a><a class="nb sm ol" href="#/mistakes/'+b.id+'">Mistakes</a>'+paperMarkBtns(b,run)}
+    return '<tr><td><b>'+esc(b.name)+'</b><div class="mut">'+esc(b.sub)+'</div></td><td>'+st+(u&&u.done?'<div class="mut">'+fmtD(u.doneAt)+'</div>':'')+'</td><td>'+sc+(u&&u.done?(run?paperRunBox(b,run):'<div class="mut">'+aiState(b)+'</div>'):'')+'</td><td class="ra">'+acts+'</td></tr>';
   }).join('');
   var hist=S.hist.filter(function(h){return !BANKS.some(function(b){return b.id===h.id&&b.hidden})}).sort(function(a,b){return b.at-a.at});
   var done=visible.filter(function(b){return S.u[b.id]&&S.u[b.id].done}).length;

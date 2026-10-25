@@ -73,6 +73,12 @@ Replaces the old opt-in file comparison for day-to-day use. There is no consent 
 - `public/pages.js.rej` is a stray file from an earlier contributor commit. It is not ours and has been left alone.
 - Run the whole set before pushing: `node tests/check_banks.js`, `sh tests/run_auth_test.sh`, `sh tests/run_marking_store_test.sh`, `node tests/d1_adapter_test.js`, `node tests/archive_test.js`, `node tests/sync_test.js`, `npm run test:comparison`, the marking and improvement tests listed in `.github/workflows/check.yml`, and `ACE_DIR=<path to ace-builds> python3 tests/run_ui_test.py`.
 
+## Mark a whole paper from the Papers page (25 October)
+- Each submitted paper on `#/papers` now has "Mark N unmarked answers" (only when some answers have no mark; keeps finished marks) and "Re-mark entire paper" (clears every AI mark and marks again). Signed-out students see "Sign in to AI mark" instead. Both use `data-act="paperremark"` with `data-id` (bank id) and, for the first, `data-only="missing"`; the handler in `public/pages.js` falls back to the open paper when there is no `data-id`, and ignores papers that are not submitted.
+- While a paper is being marked, its row shows "Marking: n of m answers" with the progress bar and timer (`paperRunBox`, `paperMarkBtns` in `public/pages2.js`). `refreshMarking` redraws the Papers page as each answer finishes.
+- Why this was needed: marking only starts when a student opens a paper's results or a review page. A paper submitted while signed out, or one where the tab was closed before marking ran, stayed unmarked until it was opened. The Papers page now offers the same action without opening it.
+- Test: the "Papers page" block in `tests/marking_client_test.js`.
+
 ## Built features and rollback steps
 
 1. **Automatic sharing of classmates' answers via class code:**

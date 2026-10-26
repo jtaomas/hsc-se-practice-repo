@@ -654,7 +654,9 @@ table.ctbl td{font-weight:600}
 .tbb .tic{display:inline-flex;align-items:center;font-size:1.3em}
 .tbb .tic .ic{width:1em;height:1em}
 .tbb .tic.flagc{color:#146cfd}
-.tbb[data-m="flag"],.tbb[data-m="hl"],.tbb[data-m="fs"],.tbb[data-m="col"]{border-color:#2e2867}
+.tbb[data-m="flag"],.tbb[data-m="hl"],.tbb[data-m="fs"],.tbb[data-m="col"],.tbb[data-m="pqmark"]{border-color:#2e2867}
+.tbb.pq-tool .tic{color:#16a34a}
+.tbb.pq-tool:hover{background:#cbcbcb;color:#000}
 .tbb .drop{position:absolute;top:0;right:0;bottom:0;width:30px;display:flex;align-items:center;justify-content:center;background:none;color:#000;margin:0;padding:0}
 .tbb .drop .c-down{display:flex;align-items:center;justify-content:center}
 .tbb .drop .c-up{display:none}
@@ -663,6 +665,8 @@ table.ctbl td{font-weight:600}
 /* question and answer buttons */
 .acts .nb{border-radius:4px;padding:14px 30px;gap:12px;font-size:1em}
 .acts .nb.ol{background:#fff}
+.acts #pq.nb{font-weight:600}
+.pq-acts-slot{display:inline-flex;align-items:center;flex-wrap:wrap;gap:10px}
 .acts .nb .ic.chev{width:.5em;height:.8em;stroke-width:2.6}
 .cbar .nb{min-width:0;padding:8px 12px;border-radius:4px;font-size:.95em}
 .cbar .btns{align-items:flex-start}

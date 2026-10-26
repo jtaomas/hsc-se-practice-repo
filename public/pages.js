@@ -61,7 +61,13 @@ function toolsHTML(full){
       (menu?'<span class="drop'+(open?' open':'')+'"><span class="c-down">'+IC.down+'</span><span class="c-up">'+IC.up+'</span></span>':'')+
     '</button>'+(menu?menuHTML(id):'')+'</div>';
   }
-  return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'REMOVE FLAG':'FLAG',false,fl?' flagged':'')+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
+  var pqTb='';
+  if(full&&bs&&!CUR.rv&&bs.mode==='practice'&&aiUnlocked()&&!bs.done){
+    var run=aiQuestionRun(CUR.b,CUR.n),shown=pqShown(CUR.b,CUR.n);
+    var pqLab=run?'MARKING...':(shown?'MARK AGAIN':'MARK QUESTION');
+    pqTb=tb('pqmark','<span class="tic">'+IC.tick+'</span>',pqLab,false,' pq-tool'+(run?' disabled':''));
+  }
+  return (full?tb('flag','<span class="tic flagc">'+IC.flag+'</span>',fl?'REMOVE FLAG':'FLAG',false,fl?' flagged':'')+tb('hl','<span class="tic">'+IC.pen+'</span>','HIGHLIGHT',true):'')+tb('fs','<span class="tic">'+IC.font+'</span>','FONT SIZE',true)+tb('col','<span class="tic">'+IC.contrast+'</span>','COLOUR',true)+pqTb+(full?tb('info','<span class="tic">'+IC.key+'</span>','INFO',false,' info'):'');
 }
 function cpkPopHTML(w){
   var h=CPK_VAL.h,s=CPK_VAL.s,v=CPK_VAL.v,pureHex=hsvToHex(h,1,1);
@@ -319,10 +325,10 @@ function qHTML(b,n,rv){
   var q=b.qs[n-1];
   var title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
   var st=(q.st||'')+(q.db?dbTables(q.db):'');
-  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('')+(rv?rqPanelHTML(b,n):pqPanelHTML(b,n));
+  var items=q.it.map(function(it,i){return itemHTML(b,n,i,rv)}).join('')+(rv?rqPanelHTML(b,n):'');
   var last=n===b.qs.length;
   var acts='<div class="acts">'+(rv?'<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Back to results':'Next question')+(last?'':IC.right)+'</button>':
-    '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button><button class="nb" data-act="next">'+(last?'Finish exam':'Next question')+(last?'':IC.right)+'</button>')+'</div>';
+    '<button class="nb ol" data-act="prev"'+(n===1?' disabled':'')+'>'+IC.left+'<span>Previous question</span></button>'+pqPanelHTML(b,n)+'<button class="nb" data-act="next">'+(last?'Finish exam':'Next question')+(last?'':IC.right)+'</button>')+'</div>';
   if(q.two)return '<div class="qwrap two"><div class="qleft">'+title+st+'</div><div><div class="item">'+items+'</div>'+acts+'</div></div>';
   return '<div class="qwrap">'+title+'<div class="item">'+(st?'<div class="hoa-q st">'+st+'</div>':'')+items+'</div>'+acts+'</div>';
 }
@@ -441,19 +447,23 @@ function reviewHubPage(){
 function pqShown(b,n){var bs=BS(b.id);return aiUnlocked()&&!bs.done&&bs.mode==='practice'&&!!(bs.pq&&bs.pq[n])}
 function pqPanelHTML(b,n){
   var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||!aiUnlocked())return '';
-  var shown=pqShown(b,n),run=aiQuestionRun(b,n),open=b.qs[n-1].it.some(function(it){return !AUTO[it.t]});
-  var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answer'+(run.total===1?'':'s')+' processed.</b>'+aiRunBarHTML(run)+aiActHTML(b,run,aiqKey(b,n))+'Feedback appears under each part as it finishes. You can keep working while you wait.'
-    :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
-    :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
-  if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can compare with the marking guide.';
-  return '<div class="aib" id="pq"'+(run?' data-airun="'+esc(aiqKey(b,n))+'"':'')+'>'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button>'+(shown?' <button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(run?' disabled':'')+'>Re-mark this question</button>':'')+'</div></div>';
+  var shown=pqShown(b,n),run=aiQuestionRun(b,n);
+  if(run){
+    return '<span class="pq-acts-slot" id="pq" data-airun="'+esc(aiqKey(b,n))+'" style="display:inline-flex;align-items:center;gap:10px">'+
+      '<button type="button" class="nb ol" data-act="pqmark" disabled>Marking ('+run.done+'/'+run.total+')...</button>'+
+      '<span class="pq-run-inline" style="display:inline-flex;align-items:center;gap:6px">'+aiRunBarHTML(run)+aiActHTML(b,run,aiqKey(b,n))+'</span>'+
+    '</span>';
+  }
+  return '<button type="button" class="nb ol" id="pq" data-act="pqmark">'+
+    (shown?'Mark this question again':'Mark this question')+
+  '</button>';
 }
 function pqMark(){
   var b=CUR.b,n=CUR.n;if(!b||CUR.rv||!aiUnlocked())return;
   var bs=BS(b.id);if(bs.done||bs.mode!=='practice'||aiQuestionRun(b,n))return;
   if(!bs.pq)bs.pq={};bs.pq[n]=1;Object.keys(bs.aiErr).forEach(function(k){if(k.indexOf(n+'.')===0)delete bs.aiErr[k]});save(b.id);
   var context=aiContext(b,n),task=runAIQuestion(b,n);
-  ensureLocalChecks(b,context);refreshMarking(b,context);
+  ensureLocalChecks(b,context);refreshMarking(b,context);redrawTools();
   return task;
 }
 function afterQ(){
@@ -530,7 +540,7 @@ function markAndShow(b){
   return ensureMarked(b);
 }
 function go(n){location.hash='#/'+CUR.b.id+'/'+(CUR.rv?'review':'q')+'/'+n}
-function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc;navArrows(false)}
+function refreshNav(){var nv=$('#nums');if(!nv)return;var sc=nv.scrollLeft;var t=document.createElement('div');t.innerHTML=navHTML(CUR.b,CUR.rv);nv.innerHTML=$('#nums',t).innerHTML;nv.scrollLeft=sc;navArrows(false);redrawTools()}
 function applyHL(c){
   var sel=getSelection();
   if(c==='none'){$$('#qarea .hl').forEach(function(s){var p=s.parentNode;while(s.firstChild)p.insertBefore(s.firstChild,s);p.removeChild(s)});return}

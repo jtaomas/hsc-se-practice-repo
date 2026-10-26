@@ -557,7 +557,7 @@ function cvRmList(b,mode,only){
   return out;
 }
 function cvRmBtn(id,isSystem,bid,mode,k,label,primary,off){
-  return '';
+  return '<button class="nb sm'+(primary?'':' ol')+'" data-cv="remark" data-mode="'+mode+'" data-id="'+esc(id)+'" data-sys="'+(isSystem?'1':'0')+'" data-b="'+esc(bid)+'"'+(k?' data-k="'+esc(k)+'"':'')+' type="button"'+(off?' disabled':'')+'>'+label+'</button>';
 }
 function cvRmSummary(run,name){
   var t=[];
@@ -639,7 +639,7 @@ function cvProgHTML(id,isSystem){
             var pillCls=!s.set||s.src==='provisional'?'pend':s.g===s.m?'ok':'bad';
             var pillTxt=s.set?(s.src==='provisional'?'Unconfirmed '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
             var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
-            var rmOne='';
+            var rmOne=p.done&&ans&&!AUTO[it.t]&&S.tok?'<div class="cv-rm">'+cvRmBtn(id,isSystem,b.id,'one',k,'Remark',false,rmNow&&rmNow.running)+'</div>':'';
             partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+
               '<td>'+cvFormatAns(it,a)+aiSum+'</td>'+
               '<td><span class="pill '+pillCls+'">'+pillTxt+'</span>'+rmOne+'</td>'+

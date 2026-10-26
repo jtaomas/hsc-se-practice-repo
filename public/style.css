@@ -1516,21 +1516,28 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 @media(max-width:560px){.pm-list{min-width:12rem}.pf-chip.pf-hid{margin-left:0}}
 .pcard.pk-new{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .pcard.pk-new .pc-chip{display:none}.pcard.pk-new .pc-acts{margin-top:0}
-/* Live presence, drawn like Discord: 32px avatars, a real circular cutout at the bottom-right (radius 25% at 84.375%),
-   a 16px status box in the cutout (10px shape), offline people at 30% opacity, and a dark #2b2d31 member-list popover. */
+/* Live presence, drawn like Discord: 32px avatars, solid circular occlusion in stacks,
+   and a dark #2b2d31 member-list popover. */
 .notion-avatars{--dc-ring:#002664}
+.bk-card .notion-avatars{--dc-ring:#fff}
 .gi-header-row .notion-avatars{--dc-ring:#fff}
 .notion-avatar,.notion-pop-av{--s:32px}
 .notion-avatar{
-  width:var(--s);height:var(--s);margin-left:-6px;border:0;background:none;
-  box-shadow:0 0 0 2px var(--dc-ring);overflow:visible;
+  width:var(--s);height:var(--s);margin-left:-6px;border:0;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 2px var(--dc-ring);overflow:visible;
+  display:inline-flex;align-items:center;justify-content:center;position:relative;
 }
 .notion-avatar:first-child{margin-left:0}
 .notion-avatar:hover{transform:none}
 .dc-face{
   display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;
+}
+.notion-pop-av .dc-face{
   -webkit-mask:radial-gradient(circle calc(var(--s)*.25) at calc(var(--s)*.84375) calc(var(--s)*.84375),transparent calc(var(--s)*.25 - .5px),#000 calc(var(--s)*.25 + .5px));
   mask:radial-gradient(circle calc(var(--s)*.25) at calc(var(--s)*.84375) calc(var(--s)*.84375),transparent calc(var(--s)*.25 - .5px),#000 calc(var(--s)*.25 + .5px));
+}
+.notion-avatar .dc-face{
+  -webkit-mask:none;mask:none;
 }
 .notion-avatar .dc-face img,.notion-avatar .dc-face svg.notion-av,
 .notion-pop-av .dc-face img,.notion-pop-av .dc-face svg.notion-av{
@@ -1542,22 +1549,30 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
   background:none;box-shadow:none;border-radius:0;display:block;line-height:0;z-index:4;pointer-events:none;
 }
 .pr-badge-discord svg{display:block;width:100%;height:100%}
+.notion-avatar .pr-badge-discord{
+  right:-2px;bottom:-2px;width:12px;height:12px;
+  border-radius:50%;background:var(--dc-ring);
+  box-shadow:0 0 0 2px var(--dc-ring);
+}
+.notion-avatar .pr-badge-discord.pr-b-off{
+  display:none;
+}
 .notion-avatar-more{
-  width:32px;height:32px;margin-left:-6px;border:0;box-sizing:border-box;
+  width:32px;height:32px;margin-left:-6px;border:0;border-radius:50%;box-sizing:border-box;
   box-shadow:0 0 0 2px var(--dc-ring);background:#4e5058;color:#f2f3f5;
   font-size:12px;font-weight:600;letter-spacing:-.2px;z-index:0;
+  display:inline-flex;align-items:center;justify-content:center;position:relative;
 }
 /* First avatar on top so each badge stays visible and later avatars tuck underneath */
 .notion-avatar:nth-child(1){z-index:4}
 .notion-avatar:nth-child(2){z-index:3}
 .notion-avatar:nth-child(3){z-index:2}
 .notion-avatar-more{z-index:1}
-/* Offline: Discord fades the whole row to about 30% */
-.notion-avatar.pr-off .dc-face,.notion-avatar.pr-off .pr-badge-discord,
-.notion-pop-row.pr-off .notion-pop-av{opacity:.3}
-.notion-avatar.pr-off .dc-face{filter:grayscale(.5)}
+/* Offline avatars in stack: full opaque circle with grayscale, no transparency */
+.notion-avatar.pr-off .dc-face{filter:grayscale(.65);opacity:1}
 .notion-avatar.pr-off{box-shadow:0 0 0 2px var(--dc-ring)}
-.notion-pop-row.pr-off .notion-pop-av{filter:grayscale(.5)}
+/* Offline in member list popover: faded row */
+.notion-pop-row.pr-off .notion-pop-av{opacity:.35;filter:grayscale(.5)}
 /* Popover as a Discord member list */
 .notion-presence-pop{
   background:#2b2d31;color:#f2f3f5;border:0;border-radius:8px;width:300px;padding:8px 8px 10px;

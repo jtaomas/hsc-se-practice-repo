@@ -384,6 +384,7 @@ function render(){
   else if(h[0]==='account')html=accountPage();
   else if(h[0]==='class')html=classPage(h[1]||'',h[2]);
   else if(h[0]==='compare')html=comparisonPage();
+  else if(h[0]==='admin')html=adminPage();
   else if(!b)html=homePage();
   else if(!h[1])html=landingPage(b);
   else if(h[1]==='q')html=examPage(b,Math.min(b.qs.length,Math.max(1,+h[2]||1)),false);

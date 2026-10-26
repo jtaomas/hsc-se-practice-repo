@@ -38,6 +38,7 @@ public/            static site, served as-is (no build step)
   python-worker.js isolated Pyodide execution (loaded by python.js)
   widgets.js       renderers and marking for each question type
   qtypes.js        plug-in question types registered with regType(); drag-and-drop engine
+  xdlib.js         shape library for the drawing tool (the HSC exam library plus course specification symbols)
   xd.js            Excalidraw drawing question
   ace-editor.js    Ace code editor for the Python, pseudocode and SQL boxes (falls back to a textarea if Ace cannot load)
   marking-config.js shared marking-policy version for browser and server

@@ -502,6 +502,7 @@ table.cls th{text-align:center}
 .xd.ro{pointer-events:auto}
 .item.full .xd{height:calc(100vh - 150px);resize:none}
 .xd .main-menu-trigger,.xd .dropdown-menu-button.main-menu-trigger{display:none!important}
+.xd .library-menu-browse-button,.xd .library-menu-dropdown-container,.xd .layer-ui__library-message{display:none!important}
 .aib{border:1px solid #9bb7d6;border-left:6px solid #002664;background:#eef4fb;color:#000;padding:10px 14px;margin:12px 0}
 .aib.bad{border-color:#e0a1ae;border-left-color:#b81237;background:#fdeef1}
 .aib h5{margin:0 0 6px;font-size:1em}

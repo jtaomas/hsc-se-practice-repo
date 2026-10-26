@@ -30,8 +30,7 @@ function xdMount(b,k,ro){
     host.innerHTML='';
     var st=XD[k]={root:ReactDOM.createRoot(host),api:null,tmr:null,ro:ro};
     var wide=!ro&&host.clientWidth>=760,app={viewBackgroundColor:'#ffffff',currentItemRoughness:0,currentItemStrokeWidth:2,currentItemRoundness:'sharp',currentItemFontFamily:2};
-    // the shape library opens docked on the right, as in the exam; on narrow screens it waits for the Library button
-    if(wide){app.openSidebar={name:'default',tab:'library'};app.defaultSidebarDockedPreference=true}
+    // the shape library is a popup opened by the Library button, as in the exam; it closes when a shape is picked
     // Excalidraw keeps one library for every canvas on the page, so a read-only canvas passes no library rather than
     // an empty one (an empty list would wipe the shapes from an editable canvas open beside it)
     var init={elements:els,appState:app,scrollToContent:els.length>0};
@@ -39,6 +38,8 @@ function xdMount(b,k,ro){
     var props={
       initialData:init,
       excalidrawAPI:function(a){st.api=a},
+      // the library is fixed: undo anything Excalidraw tries to add to it (e.g. the selected shape after a pick)
+      onLibraryChange:ro?undefined:function(l){if(st.api&&typeof XDLIB!=='undefined'&&l.length!==XDLIB.length)st.api.updateLibrary({libraryItems:xdLibItems(),merge:false})},
       viewModeEnabled:!!ro,handleKeyboardGlobally:false,
       UIOptions:{canvasActions:{loadScene:false,export:false,saveToActiveFile:false,saveAsImage:false,clearCanvas:false,changeViewBackgroundColor:false,toggleTheme:false},tools:{image:false},dockedSidebarBreakpoint:0},
       onChange:ro?undefined:function(){clearTimeout(st.tmr);st.tmr=setTimeout(function(){xdFlush(k);refreshNav()},400)}
@@ -50,13 +51,13 @@ function xdMount(b,k,ro){
 /* the shape library (xdlib.js): the exam's 16 shapes first, under their own heading, then the other course specification symbols */
 function xdLibItems(){
   if(typeof XDLIB==='undefined')return [];
-  return JSON.parse(JSON.stringify(XDLIB)).map(function(it,i){it.status=i<XDLIB_EXAM?'unpublished':'published';return it});
+  return JSON.parse(JSON.stringify(XDLIB)).map(function(it,i){it.status='unpublished';return it});
 }
 function xdLibLabels(host){
   // Excalidraw heads the two groups "Personal library" and "Excalidraw library"; rename them for students
   function fix(){
     var hs=host.querySelectorAll('.library-menu-items-container__header');
-    for(var i=0;i<hs.length;i++){var t=i===0?'HSC exam library':'Course specification symbols';if(hs[i].textContent!==t)hs[i].textContent=t}
+    for(var i=0;i<hs.length;i++){var t='HSC exam library';if(hs[i].textContent!==t)hs[i].textContent=t}
   }
   try{new MutationObserver(fix).observe(host,{childList:true,subtree:true})}catch(e){}
 }

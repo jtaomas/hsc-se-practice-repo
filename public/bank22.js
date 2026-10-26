@@ -498,31 +498,26 @@ function drf(q,m,model,crit,tools,fig){var it=dr(q,m,model,crit,tools);it.fig=fi
 var FLOW='uses the flowchart symbols from the course specifications with arrowheads (terminators, process rectangles, decision diamonds, input/output parallelograms and the subprogram symbol)';
 
 /* Question 1: Level 0 DFD */
-qs.push(Q(SEP,'Greenline Community Gardens is developing a system for booking garden plots.'+bl([
- 'A gardener sends a booking request and payment details to the system, and receives a booking confirmation.',
- 'The system sends a payment request to a payment provider, which returns a payment result.',
- 'At the end of each month the system sends a usage report to the local council.']),[
+qs.push(Q(SEP,'<p>Greenline Community Gardens rents garden plots to local residents. It is replacing its paper forms with an online system so gardeners can book and pay for a plot without visiting the office. Card payments are processed by an outside payment company. The local council owns the land and expects a summary of how the plots have been used each month.</p>',[
  drf('Draw a Level 0 data flow diagram for the plot booking system.',3,
   'One process (a circle) labelled Plot booking system. Three external entities (squares): Gardener, Payment provider and Council. Labelled, curved data flows: Gardener to the system (Booking request and payment details); the system to Gardener (Booking confirmation); the system to Payment provider (Payment request); Payment provider to the system (Payment result); the system to Council (Monthly usage report). No data stores or internal processes are shown.',
   ['1 mark: a single process for the whole system and the three external entities, using the correct symbols.',
-   '1 mark: all five data flows labelled and pointing in the correct direction.',
+   '1 mark: appropriate, labelled data flows in the correct direction between the system and each entity (booking and payment details, confirmation, payment request and result, monthly usage report or equivalent).',
    '1 mark: follows Level 0 conventions: no data stores and no internal processes, and every flow joins an external entity to the process.'],'dfd',figQ1())],{two:true}));
 
 /* Question 2: full DFD */
-qs.push(Q(SEP,'Rolling Spoon, a food truck, is developing an app so customers can order before they arrive.'+bl([
- 'Process 1, Take order, receives order details from the customer. It reads menu items and prices from the Menu data store, writes an order record to the Orders data store and sends the order total to the customer.',
- 'Process 2, Prepare order, reads each order record from the Orders data store and sends a preparation list to the kitchen staff. The kitchen staff send back an order ready message, and Prepare order writes the new order status to the Orders data store.',
- 'Process 3, Notify collection, reads ready orders from the Orders data store and sends a collection message to the customer.']),[
+qs.push(Q(SEP,'<p>Rolling Spoon, a food truck, is developing an app so customers can order before they arrive instead of waiting in the queue.</p>'+
+ '<p>When a customer places an order, the app checks the current menu and prices, keeps a record of the order and tells the customer how much it will cost. The kitchen staff are given a list of the orders still to be made. When an order is finished, a staff member marks it as ready in the app, and the customer is then sent a message saying the order can be collected.</p>',[
  drf('Draw a data flow diagram for the pre-order system.',4,
-  'Processes drawn as circles: 1 Take order, 2 Prepare order, 3 Notify collection. Data stores drawn as open-ended boxes: Menu, Orders. External entities drawn as squares: Customer, Kitchen staff. Labelled, curved data flows: Customer to Take order (Order details); Take order to Customer (Order total); Menu to Take order (Menu items and prices); Take order to Orders (Order record); Orders to Prepare order (Order record); Prepare order to Kitchen staff (Preparation list); Kitchen staff to Prepare order (Order ready); Prepare order to Orders (Order status); Orders to Notify collection (Ready order); Notify collection to Customer (Collection message).',
+  'For example: processes drawn as circles: 1 Take order, 2 Prepare order, 3 Notify collection. Data stores drawn as open-ended boxes: Menu, Orders. External entities drawn as squares: Customer, Kitchen staff. Labelled, curved data flows: Customer to Take order (Order details); Take order to Customer (Order total); Menu to Take order (Menu items and prices); Take order to Orders (Order record); Orders to Prepare order (Order record); Prepare order to Kitchen staff (Preparation list); Kitchen staff to Prepare order (Order ready); Prepare order to Orders (Order status); Orders to Notify collection (Ready order); Notify collection to Customer (Collection message).',
   ['1 mark: the three processes drawn as circles, numbered and named.',
    '1 mark: the two data stores and two external entities drawn with the correct symbols.',
-   '1 mark: all ten data flows present, labelled and pointing in the correct direction.',
+   '1 mark: all required data flows present (about ten), sensibly labelled and pointing in the correct direction.',
    '1 mark: every data flow starts or ends at a process (no flow between two data stores, between two external entities, or between an external entity and a data store).'],'dfd',figQ2())],{two:true}));
 
 /* Question 3: correcting a DFD */
 qs.push(Q(SEP,'A council library lends e-books. A student drew this data flow diagram for the loan system. It contains three errors.'+fig('Data flow diagram for the e-book loan system',figQ3Bad())+
- '<p>Process 1 records each loan in the Loans data store. Process 2 uses the Loans data store to find overdue loans.</p>',[
+ '<p>Members borrow e-books for three weeks. Each night the system emails a reminder to every member whose e-book is overdue.</p>',[
  drf('Redraw the data flow diagram so that it is correct.',3,
   'The corrected diagram keeps Member, Check out e-book, Members, Loans and Send reminder, and the flows Loan request, E-book link, Member status and Reminder email. The Member details flow from the Members data store straight to the Loans data store is removed (data cannot move between two data stores without a process). The Loan details flow from Member straight to the Loans data store is removed (an external entity cannot write to a data store); instead Check out e-book sends a Loan record to Loans. Send reminder had an output but no input, so a flow Overdue loans is added from Loans to Send reminder.',
   ['1 mark: removes the flow between the two data stores.',
@@ -572,17 +567,13 @@ qs.push(Q(SEP,'A hire company rents out cars, vans, electric scooters and bikes.
    '1 mark: each of the four original classes keeps only its unique attributes, with inheritance arrows pointing to the correct superclass.'],'class',figQ6())],{two:true}));
 
 /* Question 7: class diagram with relationships */
-qs.push(Q(SEP,'A music school is modelling its system with these classes and rules.'+bl([
- 'Every person has a name and phone number, and can update their phone number.',
- 'A teacher is a person with a teacher ID and an instrument. A teacher can book a lesson.',
- 'A student is a person with a student ID and a grade. A student can pay a fee.',
- 'A lesson has a date, time and room, and can be rescheduled.',
- 'Each lesson is taught by exactly one teacher. A teacher teaches zero or more lessons.',
- 'Each lesson has between one and four students. A student attends zero or more lessons.']),[
+qs.push(Q(SEP,'<p>A music school is designing an object-oriented system to manage lessons.</p>'+
+ '<p>The school records a name and phone number for every teacher and student, and anyone can update their own phone number. Teachers also have a teacher ID and the instrument they teach, and it is teachers who book lessons. Students have a student ID and their current grade, and pay their fees through the system. Each lesson takes place on a date and time in a particular room, and can be rescheduled.</p>'+
+ '<p>Lessons are run by a single teacher in small groups of no more than four students, and a lesson is only held if at least one student is enrolled. Newly hired teachers may not have any lessons yet, and new students may not have attended one.</p>',[
  drf('Draw a class diagram for the music school, including multiplicity.',3,
   'Classes in three compartments (name, attributes, methods): Person (name, phone; updatePhone()), Teacher (teacherID, instrument; bookLesson()), Student (studentID, grade; payFee()), Lesson (date, time, room; reschedule()). Inheritance arrows from Teacher and Student to Person. A relationship arrow between Teacher and Lesson labelled teaches, with 1..1 at the Teacher end and 0..* at the Lesson end. A relationship arrow between Student and Lesson labelled attends, with 1..4 at the Student end and 0..* at the Lesson end.',
-  ['1 mark: the four classes with their attributes and methods in the correct compartments, and name and phone only in Person.',
-   '1 mark: Teacher and Student inherit from Person.',
+  ['1 mark: the four classes with their attributes and methods in the correct compartments, and name and phone stored only once, in a superclass such as Person.',
+   '1 mark: Teacher and Student inherit from that superclass.',
    '1 mark: relationships between Teacher and Lesson and between Student and Lesson with the correct multiplicities (1..1 and 0..*, 1..4 and 0..*).'],'class',figQ7())],{two:true}));
 
 /* Question 8: class diagram from code */
@@ -673,13 +664,10 @@ class Loan(Model):
    '1 mark: one-to-many relationships Author to Book and Book to Loan, with the many end at the table holding the foreign key.'],'database',figQ11())],{two:true}));
 
 /* Question 12: storyboard */
-qs.push(Q(PW,'A bushwalking club is building a mobile app.'+bl([
- 'The Home screen has two buttons: Start walk and My walks.',
- 'Start walk opens the Track walk screen, which shows a live map, the time and distance, and a Stop button.',
- 'Stop opens the Walk summary screen, which shows the distance and time with Save and Home buttons. Save opens the Walk details screen for the saved walk.',
- 'My walks opens a list of saved walks with a Home button. Selecting a walk opens its Walk details screen, which has a Back button that returns to My walks.']),[
+qs.push(Q(PW,'<p>A bushwalking club is building a mobile app.</p>'+
+ '<p>From the opening screen, a walker can either start recording a new walk or look through the walks they have saved. While a walk is being recorded, the app shows a live map with the time and distance so far, until the walker stops. They then see a summary of the walk and can either save it, which shows the full details of that walk, or go straight back to the opening screen. The list of saved walks lets the walker open the details of any walk and return to the list, and also return to the opening screen.</p>',[
  drf('Draw a storyboard for the app.',3,
-  'Five screens drawn as frames with a title and their main elements: Home (title, Start walk and My walks buttons), Track walk (live map, time and distance, Stop button), Walk summary (distance, time, Save and Home buttons), My walks (list of walks, Home button) and Walk details (route map, distance and time, Back button). Arrows from the triggering button to the screen it opens: Start walk to Track walk; Stop to Walk summary; Save to Walk details; Home (from Walk summary and from My walks) to Home; My walks to My walks; a walk in the list to Walk details; Back to My walks.',
+  'For example, five screens drawn as frames with a title and their main elements: Home (title, Start walk and My walks buttons), Track walk (live map, time and distance, Stop button), Walk summary (distance, time, Save and Home buttons), My walks (list of walks, Home button) and Walk details (route map, distance and time, Back button). Arrows from the triggering button to the screen it opens: Start walk to Track walk; Stop to Walk summary; Save to Walk details; Home (from Walk summary and from My walks) to Home; My walks to My walks; a walk in the list to Walk details; Back to My walks.',
   ['1 mark: all five screens with a title and the elements described.',
    '1 mark: navigation arrows start at the button or item that triggers them and point to the correct screen.',
    '1 mark: every link described is shown, including the Home, Save and Back links.'],'storyboard',figQ12())],{two:true}));

@@ -314,17 +314,30 @@ function presenceLabel(s){
   if(s.online === true) return s.here ? 'Viewing now' : 'Online';
   return s.status;
 }
-/* Discord status badge: a 16-unit box whose centre is the 10-unit status shape, sitting in a real cutout of the avatar (see .dc-face in style.css).
-   online #23a55a full circle; offline/invisible #80848e hollow ring. Nobody here is idle or on Do Not Disturb, so those shapes are not drawn. */
+/* Status of one person on a paper, one rule for every place it is shown:
+   submitted    green circle with a tick (works even when live presence is unknown)
+   online       Discord green dot: on the site right now
+   idle         Discord amber crescent moon: started the paper but is not on the site now
+   unknown      nothing drawn when live presence cannot be trusted and the paper is not submitted */
+function presenceKind(s){
+  if(s.status === 'Submitted' || s.state === 'done') return 'sub';
+  if(s.online === true) return 'online';
+  if(s.online === false) return 'idle';
+  return '';
+}
+/* Discord status badge: a 16-unit box whose centre is the 10-unit status shape, sitting in a real cutout of the avatar (see .dc-face in style.css). */
 function discordStatusBadge(s){
-  if(s.online == null) return '';
-  var shape, cls, title;
-  if(s.online === true){
+  var k = presenceKind(s), shape, cls, title;
+  if(!k) return '';
+  if(k === 'sub'){
+    cls = 'pr-b-sub'; title = 'Submitted';
+    shape = '<circle cx="8" cy="8" r="5" fill="#3fae6a"/><path d="M5.7 8.2l1.6 1.6 3-3.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  } else if(k === 'online'){
     cls = 'pr-dot pr-b-online'; title = s.here ? 'Doing it now' : 'Online';
     shape = '<circle cx="8" cy="8" r="5" fill="#23a55a"/>';
   } else {
-    cls = 'pr-b-off'; title = (s.status === 'Submitted' || s.state === 'done') ? 'Offline (submitted)' : 'Offline' + (s.status ? ' (' + s.status + ')' : '');
-    shape = '<circle cx="8" cy="8" r="3.75" fill="none" stroke="#80848e" stroke-width="2.5"/>';
+    cls = 'pr-b-idle'; title = 'Idle: started, not online now';
+    shape = '<path transform="translate(3 3)" fill="#f0b232" fill-rule="evenodd" clip-rule="evenodd" d="M7.833 6.667a3.333 3.333 0 0 1-4.5-4.5A4.167 4.167 0 1 0 7.833 6.667z"/>';
   }
   return '<span class="pr-badge-discord ' + cls + '" title="' + esc(title) + '"><svg viewBox="0 0 16 16" aria-hidden="true">' + shape + '</svg></span>';
 }
@@ -350,7 +363,8 @@ function trialAvatarsHTML(b, isInline){
       }
     }
     var cls = presenceClass(s);
-    var badge = s.online === true ? 'live' : (s.online === false ? 'off' : (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')));
+    var pk = presenceKind(s);
+    var badge = pk === 'sub' ? 'ok' : (pk === 'online' ? 'live' : (pk === 'idle' ? 'idle' : (s.state === 'live' ? 'live' : 'working')));
     var sub = s.email ? s.email : (s.online === true && s.status !== 'Viewing' ? s.status : '');
     return grp + '<div class="notion-pop-row' + cls + '">' +
       '<span class="notion-pop-av' + cls + '"><span class="dc-face">' + profileAvatarHTML(s.photo, s.seed, 32, s.name) + '</span>' + discordStatusBadge(s) + '</span>' +

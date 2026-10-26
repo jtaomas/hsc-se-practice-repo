@@ -1511,42 +1511,73 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 @media(max-width:560px){.pm-list{min-width:12rem}.pf-chip.pf-hid{margin-left:0}}
 .pcard.pk-new{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .pcard.pk-new .pc-chip{display:none}.pcard.pk-new .pc-acts{margin-top:0}
-/* Live presence: Discord status badges (Online green, Idle yellow moon, Submitted gray ring) */
+/* Live presence, drawn like Discord: 32px avatars, a real circular cutout at the bottom-right (radius 25% at 84.375%),
+   a 16px status box in the cutout (10px shape), offline people at 30% opacity, and a dark #2b2d31 member-list popover. */
+.notion-avatars{--dc-ring:#002664}
+.gi-header-row .notion-avatars{--dc-ring:#fff}
+.notion-avatar,.notion-pop-av{--s:32px}
+.notion-avatar{
+  width:var(--s);height:var(--s);margin-left:-6px;border:0;background:none;
+  box-shadow:0 0 0 2px var(--dc-ring);overflow:visible;
+}
+.notion-avatar:first-child{margin-left:0}
+.notion-avatar:hover{transform:none}
+.dc-face{
+  display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;
+  -webkit-mask:radial-gradient(circle calc(var(--s)*.25) at calc(var(--s)*.84375) calc(var(--s)*.84375),transparent calc(var(--s)*.25 - .5px),#000 calc(var(--s)*.25 + .5px));
+  mask:radial-gradient(circle calc(var(--s)*.25) at calc(var(--s)*.84375) calc(var(--s)*.84375),transparent calc(var(--s)*.25 - .5px),#000 calc(var(--s)*.25 + .5px));
+}
+.notion-avatar .dc-face img,.notion-avatar .dc-face svg.notion-av,
+.notion-pop-av .dc-face img,.notion-pop-av .dc-face svg.notion-av{
+  width:100%;height:100%;border:0;border-radius:0;box-shadow:none;display:block;object-fit:cover;
+}
 .pr-badge-discord{
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 0 0 1.5px #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-  z-index: 4;
-  pointer-events: none;
+  position:absolute;right:calc(var(--s)*-.09375);bottom:calc(var(--s)*-.09375);
+  width:calc(var(--s)*.5);height:calc(var(--s)*.5);
+  background:none;box-shadow:none;border-radius:0;display:block;line-height:0;z-index:4;pointer-events:none;
 }
-.pr-badge-discord svg{
-  display: block;
-  width: 100%;
-  height: 100%;
+.pr-badge-discord svg{display:block;width:100%;height:100%}
+.notion-avatar-more{
+  width:32px;height:32px;margin-left:-6px;border:0;box-sizing:border-box;
+  box-shadow:0 0 0 2px var(--dc-ring);background:#4e5058;color:#f2f3f5;
+  font-size:12px;font-weight:600;letter-spacing:-.2px;z-index:0;
 }
-.notion-pop-av .pr-badge-discord{
-  width: 11px;
-  height: 11px;
-  right: -2px;
-  bottom: -2px;
-  box-shadow: 0 0 0 1.5px #ffffff;
+/* First avatar on top so each badge stays visible and later avatars tuck underneath */
+.notion-avatar:nth-child(1){z-index:4}
+.notion-avatar:nth-child(2){z-index:3}
+.notion-avatar:nth-child(3){z-index:2}
+.notion-avatar-more{z-index:1}
+/* Offline: Discord fades the whole row to about 30% */
+.notion-avatar.pr-off .dc-face,.notion-avatar.pr-off .pr-badge-discord,
+.notion-pop-row.pr-off .notion-pop-av{opacity:.3}
+.notion-avatar.pr-off .dc-face{filter:grayscale(.5)}
+.notion-avatar.pr-off{box-shadow:0 0 0 2px var(--dc-ring)}
+.notion-pop-row.pr-off .notion-pop-av{filter:grayscale(.5)}
+/* Popover as a Discord member list */
+.notion-presence-pop{
+  background:#2b2d31;color:#f2f3f5;border:0;border-radius:8px;width:300px;padding:8px 8px 10px;
+  box-shadow:0 8px 16px rgba(0,0,0,.24),0 0 0 1px rgba(0,0,0,.2);
+  font-family:"gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
 }
-.notion-avatar.pr-on{z-index:3}
-.notion-avatar.pr-off{filter:grayscale(0.65);opacity:1;z-index:1}
-.notion-pop-row.pr-off .notion-pop-av{filter:grayscale(0.65)}
-.notion-pop-row.pr-off .notion-pop-name{color:#475569}
-.notion-pop-row.pr-off .notion-pop-email{color:#94a3b8}
-.notion-pop-badge.off{background:#f1f5f9;color:#64748b}
-.notion-pop-on{font-weight:400;color:#166534;margin-left:6px}
+.notion-presence-pop::before{background:#2b2d31;border:0}
+.notion-pop-hd{border-bottom:1px solid #3f4147;padding:4px 8px 8px;margin-bottom:0}
+.notion-pop-hd-title{color:#b5bac1;font-size:12px;font-weight:700;letter-spacing:.02em}
+.notion-pop-on{color:#23a55a;font-weight:600;margin-left:6px;text-transform:none}
+.notion-pop-list{gap:0;max-height:320px;overflow:auto}
+.notion-pop-grp{padding:16px 8px 4px;font-size:12px;line-height:16px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;color:#949ba4}
+.notion-pop-row{padding:1px 8px;height:42px;box-sizing:border-box;border-radius:4px;gap:12px}
+.notion-pop-row:hover{background:#35373c}
+.notion-pop-name{color:#f2f3f5;font-size:16px;font-weight:500;line-height:20px}
+.notion-pop-email{color:#949ba4;font-size:12px;line-height:16px}
+.notion-pop-row.pr-off .notion-pop-name,.notion-pop-row.pr-off .notion-pop-email{color:#80848e;opacity:.6}
+.notion-pill-me{background:#5865f2;color:#fff;border-radius:3px;font-size:10px;padding:0 4px;line-height:15px}
+.notion-pop-badge{background:#1e1f22;color:#b5bac1;font-weight:600;font-size:11px;padding:2px 6px;border-radius:3px}
+.notion-pop-badge.live{background:rgba(35,165,90,.18);color:#4cc77b}
+.notion-pop-badge.working{background:#1e1f22;color:#b5bac1}
+.notion-pop-badge.ok,.notion-pop-badge.done,.notion-pop-badge.off{background:#1e1f22;color:#80848e}
+.notion-pop-row.pr-off .notion-pop-badge{opacity:.6}
+.notion-pop-av{width:32px;height:32px}
+.notion-pop-av .dc-face{width:32px;height:32px}
 /* Account page: daily backup rows keep the label and the button apart and stack on narrow screens */
 .bklist{display:flex;flex-direction:column;gap:10px;margin:14px 0 16px}
 .bklist .aib{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0;padding:12px 16px}

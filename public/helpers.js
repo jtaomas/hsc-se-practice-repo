@@ -314,16 +314,19 @@ function presenceLabel(s){
   if(s.online === true) return s.here ? 'Viewing now' : 'Online';
   return s.status;
 }
-function discordStatusBadge(s, size){
+/* Discord status badge: a 16-unit box whose centre is the 10-unit status shape, sitting in a real cutout of the avatar (see .dc-face in style.css).
+   online #23a55a full circle; offline/invisible #80848e hollow ring. Nobody here is idle or on Do Not Disturb, so those shapes are not drawn. */
+function discordStatusBadge(s){
   if(s.online == null) return '';
-  var sz = size || 10;
+  var shape, cls, title;
   if(s.online === true){
-    return '<span class="pr-badge-discord pr-dot pr-b-online" title="' + esc(s.here ? 'Doing it now' : 'Online') + '"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4.25" fill="#23a55a"/></svg></span>';
+    cls = 'pr-dot pr-b-online'; title = s.here ? 'Doing it now' : 'Online';
+    shape = '<circle cx="8" cy="8" r="5" fill="#23a55a"/>';
+  } else {
+    cls = 'pr-b-off'; title = (s.status === 'Submitted' || s.state === 'done') ? 'Offline (submitted)' : 'Offline' + (s.status ? ' (' + s.status + ')' : '');
+    shape = '<circle cx="8" cy="8" r="3.75" fill="none" stroke="#80848e" stroke-width="2.5"/>';
   }
-  if(s.status === 'Submitted' || s.state === 'done'){
-    return '<span class="pr-badge-discord pr-b-sub" title="Submitted"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.75" fill="none" stroke="#80848e" stroke-width="2.3"/></svg></span>';
-  }
-  return '<span class="pr-badge-discord pr-b-idle" title="' + esc(s.status ? 'Started (' + s.status + ')' : 'Started') + '"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><path fill="#f0b232" fill-rule="evenodd" clip-rule="evenodd" d="M7.833 6.667a3.333 3.333 0 0 1-4.5-4.5A4.167 4.167 0 1 0 7.833 6.667z"/></svg></span>';
+  return '<span class="pr-badge-discord ' + cls + '" title="' + esc(title) + '"><svg viewBox="0 0 16 16" aria-hidden="true">' + shape + '</svg></span>';
 }
 function trialAvatarsHTML(b, isInline){
   var students = getPaperStudents(b);
@@ -333,15 +336,24 @@ function trialAvatarsHTML(b, isInline){
   var display = students.slice(0, 3);
   var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
   var stack = display.map(function(s){
-    return '<span class="notion-avatar' + presenceClass(s) + '" title="' + esc(s.name) + ' (' + esc(presenceLabel(s)) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + discordStatusBadge(s, 10) + '</span>';
+    return '<span class="notion-avatar' + presenceClass(s) + '" title="' + esc(s.name) + ' (' + esc(presenceLabel(s)) + ')"><span class="dc-face">' + profileAvatarHTML(s.photo, s.seed, 32, s.name) + '</span>' + discordStatusBadge(s) + '</span>';
   }).join('') + more;
 
+  var lastGrp = null;
   var popList = students.map(function(s){
+    var grp = '';
+    if(known){
+      var g = s.online === true ? 'on' : 'off';
+      if(g !== lastGrp){
+        lastGrp = g;
+        grp = '<div class="notion-pop-grp">' + (g === 'on' ? 'Online' : 'Offline') + ' \u2014 ' + students.filter(function(x){return (x.online === true) === (g === 'on')}).length + '</div>';
+      }
+    }
     var cls = presenceClass(s);
     var badge = s.online === true ? 'live' : (s.online === false ? 'off' : (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')));
     var sub = s.email ? s.email : (s.online === true && s.status !== 'Viewing' ? s.status : '');
-    return '<div class="notion-pop-row' + cls + '">' +
-      '<span class="notion-pop-av' + cls + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + discordStatusBadge(s, 11) + '</span>' +
+    return grp + '<div class="notion-pop-row' + cls + '">' +
+      '<span class="notion-pop-av' + cls + '"><span class="dc-face">' + profileAvatarHTML(s.photo, s.seed, 32, s.name) + '</span>' + discordStatusBadge(s) + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
         (sub ? '<div class="notion-pop-email">' + esc(sub) + '</div>' : '') +

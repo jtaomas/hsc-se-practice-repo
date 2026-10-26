@@ -512,6 +512,7 @@ function cvFormatAns(it,a){
     return '<div class="yans">'+esc(txt)+'</div><span class="mut">'+wc+' word'+(wc===1?'':'s')+'</span>';
   }
   if(it.t==='py'||it.t==='ps'||it.t==='sq')return '<pre class="yans">'+esc(String(a))+'</pre>';
+  if(it.t==='wb'&&QT.wb)return QT.wb.preview(it,a);
   if(it.t==='dr'){
     var dt=typeof xdText==='function'&&a&&a.e?xdText(a.e):'';
     return dt?'<pre class="yans">'+esc(dt)+'</pre>':'<span class="mut">Diagram ('+(a&&a.e?a.e.length:0)+' elements)</span>';

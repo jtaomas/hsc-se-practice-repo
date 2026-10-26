@@ -74,5 +74,27 @@ qs.push(Q(SSA,'A school was hit by a phishing attack that exposed staff password
   slide('Least privilege','<p>Accounts only get the access a role needs.</p><p>Access is reviewed when staff change roles.</p>','<div style="font-size:52px" aria-hidden="true">🗝️</div>')]),[
  tx('Assess SecureNest\'s proposal for improving the school\'s security.',5,150,'Multi-factor authentication directly limits the damage of stolen passwords, because a password alone no longer gives access. Training targets the human cause of the breach and simulated emails measure whether it works, but it must be repeated and some staff may still be caught. Least privilege reduces what an attacker can reach through any one account, though reviews add administrative work. Together the measures address prevention, detection and impact; the proposal could be stronger with monitoring and an incident response plan.',['5 marks: assesses each measure against the breach, with strengths and limitations, and reaches a judgement.','3–4 marks: explains how most measures improve security.','1–2 marks: identifies some measures or benefits.'])],{two:true}));
 
+qs.push(Q(PW,'A café wants its menu heading to look like Image 1.'+webview('Image 1',`<h1>Daily specials</h1><p>Soup of the day: pumpkin</p>`,`h1 { color: #0a5c36; text-align: center; font-family: Georgia, serif; }
+p { color: #555; }`,{height:140}),[
+ wb('Complete style.css so that the page looks like Image 1: a centred, dark green heading in a serif font and grey paragraph text.',3,[['index.html',`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Café</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <h1>Daily specials</h1>
+    <p>Soup of the day: pumpkin</p>
+  </body>
+</html>`,false],['style.css','/* Write your CSS here */\n']],{'style.css':`h1 {
+  color: #0a5c36;
+  text-align: center;
+  font-family: Georgia, serif;
+}
+
+p {
+  color: #555;
+}`},['1 mark: an h1 rule that centres the heading and sets a dark green colour.','1 mark: sets a serif font for the heading.','1 mark: a p rule that sets grey text, with valid CSS syntax throughout.'],{height:180})],{two:true}));
+
 BANKS.push({id:'formats',name:'Question formats',sub:'Demo of every question format',hidden:true,qs:qs});
 })();

@@ -6,7 +6,7 @@ const markingInput = require('./marking-input');
 const marker = require('./marking-engine');
 const { LOSS_CATEGORIES, QUALITY_FACTORS, feedbackProblem } = require('./feedback-policy');
 const HASH = /^[a-f0-9]{64}$/;
-const OPEN = new Set(['tx', 'py', 'ps', 'sq', 'dr', 'ft']);
+const OPEN = new Set(['tx', 'py', 'ps', 'sq', 'dr', 'ft', 'wb']);
 const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
 const fail = message => Object.assign(new Error(message), { status: 400, code: 'invalid_improvement_input' });
 const partId = (n, i) => n + '.' + i;
@@ -152,7 +152,7 @@ async function prepare(body, options) {
       if (it.t === 'od') base.question += '\nCanonical ordering layout, including fixed lines and indentation levels:\n' + JSON.stringify(it.lines.map(line => ({ kind: line.k, level: line.lv, text: canonicalText(line.t) })));
       const evidence = closed(it, entry.answer); Object.assign(base, evidence, readableClosed(it, evidence), { status: 'marked', feedback: it.why ? markingInput.plain(it.why) : '', evidenceDigest: markingInput.digest({ question: q, answer: entry.answer }) });
     } else {
-      const answer = entry.answer === null ? it.t === 'dr' ? { elements: [] } : it.t === 'ft' ? {} : '' : entry.answer;
+      const answer = entry.answer === null ? it.t === 'dr' ? { elements: [] } : it.t === 'ft' || it.t === 'wb' ? {} : '' : entry.answer;
       const prepared = markingInput.prepare({ bankId: bank.id, questionNumber: qi + 1, partIndex: i, answer });
       const original = { input: prepared.input, questionVersion: prepared.questionVersion, rubricVersion: prepared.rubricVersion, model: markerEngine.MODEL, harness: markerEngine.HARNESS_VERSION };
       const answerDigest = markingInput.digest({ ...original, input: { ...prepared.input, diagramPng: null } });

@@ -78,3 +78,56 @@ function slides(list,label){
     list.map(function(s,i){return '<button type="button" class="dot'+(i?'':' on')+'" data-qa="cdot" data-i="'+i+'" aria-label="Go to slide '+(i+1)+'"></button>'}).join('')+'</div></div>';
 }
 function slide(title,html,art){return '<div class="sl"><div class="slt"><h4>'+title+'</h4>'+html+'</div>'+(art?'<div class="sla">'+art+'</div>':'')+'</div>'}
+
+/* ---------- HTML and CSS (web page) questions ----------
+   wb(q, m, files, model, crit, opt) builds a part where the student writes HTML and/or CSS
+   and sees the page rendered beside the editor.
+     files: [[name, starter, editable], ...] with exactly one .html file and at most one .css file.
+            editable defaults to true; a file with editable false is given in the question.
+     model: {name: sample file contents} for each editable file.
+     opt.height: preview height in pixels (default 260).
+   The saved answer is {name: text} for the editable files the student changed.
+   webview(label, html, css, opt) shows a rendered page in a stimulus, eg "Image 1".
+   Pages are rendered in a sandboxed frame with no scripts and no network access. */
+function wb(q,m,fl,model,crit,opt){
+  opt=opt||{};
+  return {t:'wb',q:q,m:m,f:fl.map(function(f){return {n:f[0],s:f[1]||'',e:f[2]!==false}}),model:model||{},crit:crit||[],ht:opt.height||260};
+}
+/* Each file's current text: the student's version of editable files, the starter otherwise. */
+function wbFiles(it,a){
+  var out={};a=a&&typeof a==='object'?a:{};
+  it.f.forEach(function(f){out[f.n]=f.e&&typeof a[f.n]==='string'?a[f.n]:f.s});
+  return out;
+}
+var WEB_HEAD='<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; media-src data:">';
+/* The document the browser renders. Like a real browser, the style sheet only applies when the
+   HTML links to it with <link rel="stylesheet" href="name.css">. */
+function webDoc(html,css,cssName){
+  html=String(html||'');
+  if(cssName){
+    var name=String(cssName).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    html=html.replace(/<link\b[^>]*>/gi,function(tag){
+      if(!/\brel\s*=\s*["']?stylesheet\b/i.test(tag)||!new RegExp('\\bhref\\s*=\\s*["\']?(?:\\./)?'+name+'["\'\\s>]','i').test(tag))return tag;
+      return '<style>'+String(css||'').replace(/<\/style/gi,'<\\/style')+'</style>';
+    });
+  }
+  // The security header goes first in <head>; keep any DOCTYPE first so the page stays in standards mode.
+  if(/<head\b[^>]*>/i.test(html))return html.replace(/<head\b[^>]*>/i,function(m){return m+WEB_HEAD});
+  if(/<html\b[^>]*>/i.test(html))return html.replace(/<html\b[^>]*>/i,function(m){return m+'<head>'+WEB_HEAD+'</head>'});
+  if(/^\s*<!doctype[^>]*>/i.test(html))return html.replace(/^\s*<!doctype[^>]*>/i,function(m){return m+WEB_HEAD});
+  return WEB_HEAD+html;
+}
+function wbDoc(it,files){
+  var h=null,c=null;
+  it.f.forEach(function(f){if(/\.html?$/i.test(f.n)&&h==null)h=f.n;if(/\.css$/i.test(f.n)&&c==null)c=f.n});
+  return webDoc(h?files[h]:'',c?files[c]:'',c);
+}
+function webFrame(doc,title,height,id){
+  return '<iframe class="webv"'+(id?' id="'+id+'"':'')+' sandbox="" referrerpolicy="no-referrer" title="'+esc(title)+'" style="height:'+(height||260)+'px" srcdoc="'+esc(doc)+'"></iframe>';
+}
+/* webview always applies the css it is given (no link needed), so a stimulus can show any page. */
+function webview(label,html,css,opt){
+  opt=opt||{};html=String(html||'');
+  if(css!=null){var st='<style>'+String(css).replace(/<\/style/gi,'<\\/style')+'</style>';html=/<\/head>/i.test(html)?html.replace(/<\/head>/i,st+'</head>'):st+html}
+  return fig(label,webFrame(webDoc(html),opt.title||label||'Rendered web page',opt.height||220),{wide:opt.wide});
+}

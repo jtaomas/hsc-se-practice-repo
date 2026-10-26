@@ -26,7 +26,7 @@ const normaliseCode = value => String(value == null ? '' : value).trim().toLower
 // The browser sends the same record the student's own browser would keep in paper.ai[<question>.<part>]. Nothing is trusted
 // beyond its shape: the part must be one the AI marks, the mark must fit the part, and only known fields are kept.
 const MARK_KEY = /^[1-9]\d?\.\d{1,2}$/;
-const AI_PART_TYPES = new Set(['tx', 'ft', 'py', 'ps', 'sq', 'dr']);
+const AI_PART_TYPES = new Set(['tx', 'ft', 'py', 'ps', 'sq', 'dr', 'wb']);
 const MARK_STATUS = new Set(['marked', 'provisional', 'needs_review']);
 const MAX_PROGRESS = 3500000;
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);

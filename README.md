@@ -7,7 +7,7 @@ Live site: https://hsc-se-practice-repo.vercel.app
 ## What it does
 
 - Exam mode (2 h 20 min countdown for full papers; 30 min for Mini Paper 1) and practice mode (no timer). Exit or submit at any question.
-- Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw).
+- Question types: multiple choice, multi-select, dropdown, match, tick-grid, written (word counts), Python (Pyodide), pseudocode, SQL (sql.js), diagram (Excalidraw), and HTML and CSS with a live browser preview.
 - Closed questions are auto-marked. Signed-in students can use DeepSeek Flash for written, code and diagram answers: two simultaneous blind assessments must agree, then a third call audits the evidence and feedback. Up to ten answers are marked concurrently in one browser page, shared across practice and whole-paper marking. Unconfirmed answers remain unscored for review. Students can set their own marks.
 - **Class page** (`#/class`): everyone who joins with the class code sees classmates' submitted written answers by name, and can run an AI analysis that pulls the best syllabus-aligned points into one combined answer. See `docs/HANDOFF.md`.
 - Papers page, My mistakes page, and the older file-based **Compare responses** (now unlinked). Students export signed evidence from a submitted paper; an organiser imports 2–8 individuals’ files to compare verified common questions, strengths, error types and specific next steps.
@@ -32,6 +32,7 @@ public/            static site, served as-is (no build step)
   marking/doe2026.js DoE trial marking entries (loaded before banks)
   bank1..10.js     papers 1 to 7 are archived (hidden in the app, content in archive/); 8 and 9 are the converted trials, 10 the mini paper (push into BANKS)
   bank14..18.js    Syllabus Mocks 1 to 5; docs/SYLLABUS_MOCKS.md maps every syllabus point to its questions
+  bank21.js        HTML and CSS Practice Paper (10 questions, 40 marks, 60 minutes) using the wb question type
   formats.js       hidden demo paper of every format, at #/formats
   python.js        worker queue, cancellation and execution timeout
   python-worker.js isolated Pyodide execution (loaded by python.js)

@@ -125,7 +125,7 @@ function feedbackProblem(value, input) {
     const evidence = evidenceProblem(item.evidence, input);
     if (evidence) return evidence;
     if (item.rating !== null && !item.evidence.length) return 'quality_missing_evidence';
-    if (item.id === 'code_quality' && !['Python program', 'pseudocode algorithm', 'SQL query'].includes(input.type) && item.rating !== null ||
+    if (item.id === 'code_quality' && !['Python program', 'pseudocode algorithm', 'SQL query', 'HTML and CSS code'].includes(input.type) && item.rating !== null ||
         item.id === 'diagram_quality' && input.type !== 'diagram' && item.rating !== null) return 'quality_inapplicable';
   }
   return null;

@@ -159,3 +159,57 @@ document.addEventListener('input',function(e){
   if(t.value.trim())a[t.dataset.c]=t.value;else delete a[t.dataset.c];
   A[k]=a;save();refreshNav();
 });
+
+/* ---------- wb: HTML and CSS files with a live browser preview, marked by AI ----------
+   One tab per file (given files are read-only). Edits save to {filename: text} and the
+   preview re-renders in a sandboxed frame (no scripts, no network) as the student types. */
+function wbEditor(it,k,f,i,val,ro){
+  var lock=ro||!f.e;
+  return '<div class="cedit wbe'+(i?' hid':'')+'" data-wbe="'+k+'" data-i="'+i+'"><div class="gut" id="g'+k+':'+esc(f.n)+'">'+gutNums(val)+'</div>'+
+    '<textarea data-k="'+k+'" data-f="'+esc(f.n)+'" data-code="1" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" placeholder="'+(/\.css$/i.test(f.n)?'/* Input CSS */':'<!-- Input HTML -->')+'" aria-label="'+esc(f.n)+' editor"'+(lock?' readonly':'')+'>'+esc(val)+'</textarea></div>';
+}
+function wbCode(it,files,only){
+  return it.f.filter(function(f){return !only||f.e}).map(function(f){return '<div class="file"><div class="fname">'+esc(f.n)+(f.e?'':' (given)')+'</div><pre class="pre">'+esc(files[f.n])+'</pre></div>'}).join('');
+}
+regType('wb',{
+  cls:'code',
+  render:function(it,k,a,ro){
+    var F=wbFiles(it,a);
+    var tabs=it.f.map(function(f,i){return '<button type="button" class="wbt'+(i?'':' on')+'" data-wbt="'+k+'" data-i="'+i+'" aria-pressed="'+(i?'false':'true')+'">'+esc(f.n)+(f.e?'':' <span class="wbg">given</span>')+'</button>'}).join('');
+    var eds=it.f.map(function(f,i){return wbEditor(it,k,f,i,F[f.n],ro)}).join('');
+    return '<div class="cbox wbox" data-k="'+k+'"><div class="cbar"><div class="wbtabs" role="group" aria-label="Files">'+tabs+'</div><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(typeof rtOrigBtn==='function'?rtOrigBtn(k):'')+'</div></div>'+
+      '<div class="split wbs"><div class="wbed">'+eds+'</div><div class="wbp"><div class="wbpl">Browser preview</div>'+webFrame(wbDoc(it,F),'Preview of your web page',it.ht,'wv'+k)+'</div></div></div>';
+  },
+  isAns:function(it,a){
+    if(!a||typeof a!=='object')return false;
+    return it.f.some(function(f){return f.e&&typeof a[f.n]==='string'&&a[f.n].trim()&&a[f.n].trim()!==String(f.s).trim()});
+  },
+  sample:function(it){
+    var F=wbFiles(it,it.model);
+    return wbCode(it,F,true)+'<p class="gh"><b>Sample answer rendered:</b></p>'+webFrame(wbDoc(it,F),'Sample answer rendered',it.ht);
+  },
+  preview:function(it,a){
+    var F=wbFiles(it,a);
+    return '<div class="yans">'+wbCode(it,F,true)+webFrame(wbDoc(it,F),'Your page rendered',it.ht)+'</div>';
+  }
+});
+var WB_T={};
+function wbRefresh(k){
+  clearTimeout(WB_T[k]);
+  WB_T[k]=setTimeout(function(){
+    var fr=document.getElementById('wv'+k);if(!fr||!CUR.b)return;
+    var it=itemOf(k);if(!it||it.t!=='wb')return;
+    fr.setAttribute('srcdoc',wbDoc(it,wbFiles(it,ANS(CUR.b)[k])));
+  },250);
+}
+document.addEventListener('input',function(e){
+  var t=e.target;if(!t.dataset||!t.dataset.f||!t.dataset.k)return;
+  wbRefresh(t.dataset.k);
+});
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('[data-wbt]');if(!b)return;
+  var k=b.dataset.wbt,i=b.dataset.i;
+  $$('[data-wbt="'+k+'"]').forEach(function(x){var on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on?'true':'false')});
+  $$('[data-wbe="'+k+'"]').forEach(function(x){x.classList.toggle('hid',x.dataset.i!==i)});
+  if(typeof aceResize==='function')aceResize();
+});

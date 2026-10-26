@@ -12,7 +12,7 @@ const ENDPOINT = PROVIDER.endpoint;
 const LIMITS = Object.freeze({ participants: 8, concurrency: 2, calls: 10, profileMs: 100000, stageMs: 100000,
   synthesisMs: 70000, auditorMs: 70000, overallMs: 240000, maxTokens: 32768,
   inputBytes: 350 * 1024, requestBytes: 768 * 1024, responseBytes: 1024 * 1024, profileBytes: 5000, synthesisBytes: 8000, resultBytes: 56000 });
-const TYPES = ['written response', 'Python program', 'pseudocode algorithm', 'SQL query', 'closed response'];
+const TYPES = ['written response', 'Python program', 'pseudocode algorithm', 'SQL query', 'HTML and CSS code', 'closed response'];
 const ASSESSMENTS = ['met', 'partial', 'not_met', 'context'];
 
 function failure(status, code, message) { const error = new Error(message); error.status = status; error.code = code; return error; }

@@ -86,6 +86,7 @@ Students can drag with a mouse or finger. They can also click (or Tab to and pre
 | `ps(q, m, model, criteria)` | Pseudocode editor |
 | `sq(q, m, model, ordered, criteria)` | SQL editor (needs `opt.db` on the question) |
 | `dr(q, m, model, criteria)` | Drawing tool (class diagrams, decision trees, structure charts) |
+| `wb(q, m, files, model, criteria, opt)` | **HTML and CSS editor with a live browser preview** (see below) |
 | `ft(q, m, columns, rows, model, criteria, opt)` | **Table to type into** (sample Q11) |
 
 #### `ft`: table to type into
@@ -115,6 +116,7 @@ Use these inside the stimulus string. They match the panels in the HSC online ex
 | `sbs([[label, html], ...])` | Side-by-side cells ("Image 1", "Image 2"). Usually inside `fig()`. |
 | `files([[filename, code], ...])` | Code files with filename headings in one zoomable panel (eg `index.html`, `main.css`) |
 | `slides([...], caption)` | Carousel with arrows and dots (sample Q25). Build each slide with `slide(title, html, art)`. |
+| `webview(label, html, css, opt)` | A rendered web page, eg "Image 1" for a design to match. `opt.height` sets its height. The marker is given the page's source. |
 
 Images: put the file in `public/` and use `<img src="name.png" alt="...">` inside `fig()`. Inline `<svg>` also works, and it stays sharp when zoomed.
 
@@ -145,3 +147,20 @@ Questions must be original. Do not copy HSC or NESA exam text.
 ## Papers with official marking criteria
 
 The converted trial papers keep their criteria and sample answers in `public/marking/` (see `marking/README.md`), and the bank reads them with `critOf(MARKING.paper.entries[key])` so the question and the marking material stay separate.
+
+## HTML and CSS questions (`wb`)
+
+```js
+wb('Write style.css so that the page matches Image 1.',4,
+   [['index.html', HTML, false],          // given file: read-only, shown in its own tab
+    ['style.css', '/* Write your CSS here */\n']],   // editable file with starter text
+   {'style.css': SAMPLE_CSS},             // sample answer for each editable file
+   ['1 mark: ...', ...],
+   {height: 300})                         // preview height in pixels
+```
+
+- Exactly one `.html` file and at most one `.css` file. Each file is a tab; the browser preview beside the editor re-renders as the student types.
+- Like a real browser, the style sheet only applies when the HTML links to it with `<link rel="stylesheet" href="style.css">`. Given HTML files should include that link.
+- The preview is a sandboxed frame: no scripts run and nothing is loaded from the network (images and fonts only from `data:` URLs).
+- The saved answer is `{filename: text}` for the editable files. A file the student has not changed keeps its starter text, and an unchanged answer counts as blank. Given files are sent to the marker as question context, never as the student's evidence.
+- `public/bank21.js` (HTML and CSS Practice Paper) and question 8 of `#/formats` are working examples.

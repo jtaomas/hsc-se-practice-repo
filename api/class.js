@@ -9,7 +9,7 @@ const { loadBanks } = require('../server/marking-input');
 // The key for whichever AI service is configured (OpenCode Go or DeepSeek). See server/ai-provider.js.
 const aiKey = env => require('../server/ai-provider').current(env).key();
 
-const BANK_ID = /^(?:[1-9]|1[0-9])$/;
+const BANK_ID = /^[1-9][0-9]?$/;
 function createHandler(deps) {
   deps = deps || {};
   const store = deps.store || classStore.createClassStore();

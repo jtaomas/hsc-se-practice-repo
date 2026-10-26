@@ -46,6 +46,19 @@ function check(where, it, q) {
       it.r.forEach((r, i) => { if (r.length !== it.h.length) bad(`row ${i + 1} has ${r.length} cells but there are ${it.h.length} columns`) });
       if (!it.r.some(r => r.includes(null))) bad('has no boxes to type in (use null for a box)');
       if (!it.model.length) warn.push(`${where}: no sample rows`); if (!it.crit.length) warn.push(`${where}: no marking criteria`); break;
+    case 'wb': {
+      const names = (it.f || []).map(f => f.n), html = names.filter(n => /\.html?$/i.test(n)), css = names.filter(n => /\.css$/i.test(n));
+      if (html.length !== 1) bad('needs exactly one .html file');
+      if (css.length > 1) bad('can have at most one .css file');
+      if (names.length !== html.length + css.length) bad('files must be .html or .css');
+      if (new Set(names).size !== names.length) bad('two files share a name');
+      const edit = (it.f || []).filter(f => f.e);
+      if (!edit.length) bad('needs at least one editable file');
+      edit.forEach(f => { if (typeof it.model[f.n] !== 'string' || !it.model[f.n].trim()) bad(`needs a sample answer for ${f.n}`) });
+      Object.keys(it.model || {}).forEach(n => { if (!edit.some(f => f.n === n)) bad(`sample answer for ${n}, which is not an editable file`) });
+      if (css.length && it.f.some(f => /\.html?$/i.test(f.n) && !f.e) && !new RegExp('<link\\b[^>]*href=["\']?' + css[0].replace('.', '\\.'), 'i').test(it.f.find(f => /\.html?$/i.test(f.n)).s)) warn.push(`${where}: the given HTML file does not link ${css[0]}`);
+      if (!it.crit.length) warn.push(`${where}: no marking criteria`); break;
+    }
     default: bad(`unknown question type "${it.t}"`);
   }
 }

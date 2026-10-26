@@ -11,7 +11,7 @@ const inputs = require('../server/improvement-input');
 const coach = require('../server/improvement-engine');
 const { readEvaluationKey, validateDataset, budgetedFetch } = require('./evaluate-marking');
 const CAPS = Object.freeze({ calls: 6, outputTokens: 98304, usd: 2, repeats: 3 });
-const OPEN = new Set(['tx', 'py', 'ps', 'sq', 'dr', 'ft']);
+const OPEN = new Set(['tx', 'py', 'ps', 'sq', 'dr', 'ft', 'wb']);
 const fail = message => { throw new Error(message); };
 const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
 const clone = value => JSON.parse(JSON.stringify(value));

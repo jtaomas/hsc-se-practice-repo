@@ -4,6 +4,7 @@
    If Ace cannot load (offline), the textarea stays usable. */
 var ACEBASE=window.ACEBASE||'https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict/',ACEP=null,ACE_ED={};
 var ACE_MODE={py:'ace/mode/python',sq:'ace/mode/sql',ps:'ace/mode/text'};
+function aceModeOf(it,ta){var f=ta.dataset.f;if(f)return /\.css$/i.test(f)?'ace/mode/css':'ace/mode/html';return ACE_MODE[it.t]||'ace/mode/text'}
 function loadAce(){
   if(!ACEP)ACEP=loadScript(ACEBASE+'ace.js').then(function(){var u=new URL(ACEBASE,location.href).href;ace.config.set('basePath',u);ace.config.set('modePath',u);ace.config.set('themePath',u)}).catch(function(e){ACEP=null;throw e});
   return ACEP;
@@ -12,7 +13,7 @@ function aceMount(){
   if(!CUR.b)return;
   var locked=typeof canEdit==='function'?!canEdit():(CUR.rv||BS(CUR.b.id).done);
   $$('.cedit textarea[data-code]').forEach(function(ta){
-    var host=ta.parentNode,k=ta.dataset.k;
+    var host=ta.parentNode,k=ta.dataset.k,ek=k+(ta.dataset.f?':'+ta.dataset.f:''),ro=locked||ta.readOnly;
     if(host.dataset.ace)return;
     host.dataset.ace='loading';
     loadAce().then(function(){
@@ -21,7 +22,7 @@ function aceMount(){
       if(!it)return;
       var box=document.createElement('div');
       box.className='cedit-ed';host.appendChild(box);
-      var ed=ace.edit(box,{theme:'ace/theme/textmate',mode:ACE_MODE[it.t]||'ace/mode/text',value:ta.value,fontSize:15,showPrintMargin:false,tabSize:4,useSoftTabs:true,useWorker:false,readOnly:locked,highlightActiveLine:!locked,wrap:false});
+      var ed=ace.edit(box,{theme:'ace/theme/textmate',mode:aceModeOf(it,ta),value:ta.value,fontSize:15,showPrintMargin:false,tabSize:4,useSoftTabs:true,useWorker:false,readOnly:ro,highlightActiveLine:!ro,wrap:false});
       ed.clearSelection();
       ed.textInput.getElement().setAttribute('aria-label',ta.getAttribute('aria-label')||'Code editor');
       var ph=ta.getAttribute('placeholder')||'';
@@ -32,20 +33,20 @@ function aceMount(){
       }
       ed.session.on('change',function(){
         holder();
-        if(locked)return;
+        if(ro)return;
         ta.value=ed.getValue();
         ta.dispatchEvent(new Event('input',{bubbles:true}));
       });
       holder();
       if(window.ResizeObserver){
         var ro=new ResizeObserver(function(){
-          if(ed._hscDestroyed||ACE_ED[k]!==ed||!ed.session||!document.body.contains(host)||!document.body.contains(box))return;
+          if(ed._hscDestroyed||ACE_ED[ek]!==ed||!ed.session||!document.body.contains(host)||!document.body.contains(box))return;
           ed.resize();
         });
         ed._hscResizeObserver=ro;ro.observe(host);
       }
       host.dataset.ace='1';host.classList.add('ace-on');
-      ACE_ED[k]=ed;
+      ACE_ED[ek]=ed;
     }).catch(function(){host.dataset.ace=''});
   });
 }

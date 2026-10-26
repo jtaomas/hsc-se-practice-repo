@@ -35,7 +35,7 @@ const AUDIT_CHECKS = Object.freeze({
   qualityGrounding: 'All selected quality ratings and actions use evidence specific to each factor and anchors, agree with their descriptions, and use null for inapplicable or insufficient evidence.'
 });
 const AUDIT_CHECK_IDS = Object.keys(AUDIT_CHECKS);
-const TYPES = ['written response', 'Python program', 'pseudocode algorithm', 'SQL query', 'diagram'];
+const TYPES = ['written response', 'Python program', 'pseudocode algorithm', 'SQL query', 'diagram', 'HTML and CSS code'];
 
 const POLICY = `You are a careful NSW HSC Software Engineering marker assessing one Year 12 response.
 canonicalAssessment.rubricGuidance contains the committed rubric's application guidance, separate from mark-bearing criteria. Apply that guidance with scoringModel; never invent criterion entries, credit, deductions or loss targets for guidance. Only canonicalAssessment.criteria supplies criterion IDs.

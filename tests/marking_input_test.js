@@ -150,6 +150,27 @@ assert.throws(() => prepare({ ...demo, answer: { '0,0': 'x'.repeat(6000), '0,1':
 const literal = '"quoted" <b>literal markup</b> &amp;\nsecond line\r\nthird line';
 assert(prepare({ ...demo, answer: { '0,0': literal } }).input.answer.includes(literal));
 
+// HTML and CSS (wb) answers: only editable files, given files are question context.
+const web = { bankId: 'formats', questionNumber: 8, partIndex: 0, answer: { 'style.css': 'h1 { color: green; }' } };
+const webPrepared = prepare(web);
+assert.equal(webPrepared.input.type, 'HTML and CSS code');
+assert.equal(webPrepared.input.answer, 'File style.css:\nh1 { color: green; }');
+assert.equal(webPrepared.blank, false);
+assert.equal(webPrepared.reviewReason, null);
+assert.match(webPrepared.input.question, /GIVEN FILES/);
+assert.match(webPrepared.input.question, /File index\.html:\n<!DOCTYPE html>/);
+assert.match(webPrepared.input.stimulus, /SOURCE WEB PAGE DATA/);
+assert.match(webPrepared.input.stimulus, /Daily specials/);
+assert(!webPrepared.input.stimulus.includes('Content-Security-Policy'));
+assert.match(webPrepared.input.sample, /^File style\.css:\nh1 \{/);
+assert.equal(prepare({ ...web, answer: {} }).blank, true);
+assert.equal(prepare({ ...web, answer: { 'style.css': '/* Write your CSS here */\n' } }).blank, true);
+for (const answer of [null, [], 'h1 {}', { 'index.html': '<p>edit a given file</p>' }, { 'style.css': 12 }, { 'other.css': 'p{}' }, JSON.parse('{"__proto__":"x"}')]) {
+  assert.throws(() => prepare({ ...web, answer }), error => error.status === 400);
+}
+assert.throws(() => prepare({ ...web, diagramPng: png }), /diagram preview/);
+assert.throws(() => prepare({ ...web, answer: { 'style.css': 'x'.repeat(12001) } }), /not been truncated/);
+
 // A trusted in-memory fixture exercises the fixed-cell shape supported by ft().
 // It is never written into a bank file or accepted from a client request.
 const fixture = { id: 'fixed-table-test', hidden: true, qs: [{ st: '', it: [{ t: 'ft', q: 'Fill the editable cells.', m: 1,

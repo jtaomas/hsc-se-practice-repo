@@ -26,7 +26,7 @@ function bankFor(id) {
 function normalized(it, answer) {
   if (it.t === 'tx') return marking.plain(String(answer || '').replace(/&nbsp;/gi, '&#160;')).replace(/\r\n/g, '\n');
   if (['py', 'ps', 'sq'].includes(it.t)) return String(answer || '').replace(/\r\n/g, '\n');
-  return answer == null ? (it.t === 'ft' ? {} : null) : answer;
+  return answer == null ? (it.t === 'ft' || it.t === 'wb' ? {} : null) : answer;
 }
 function closedEvidence(it, raw) {
   const choices = [], selected = [], expected = [];

@@ -740,10 +740,15 @@ document.addEventListener('input',function(e){
   var t=e.target;if(!canEdit())return;
   if(t.classList&&t.classList.contains('rta'))saveRte(t);
   else if(t.dataset&&t.dataset.code){
-    ANS(CUR.b)[t.dataset.k]=t.value;save();var g=document.getElementById('g'+t.dataset.k);if(g){g.textContent=gutNums(t.value);g.scrollTop=t.scrollTop}refreshNav();
+    if(t.readOnly)return;
+    var A=ANS(CUR.b),gid='g'+t.dataset.k;
+    // HTML and CSS questions keep one answer object with a text entry per file.
+    if(t.dataset.f){var o=A[t.dataset.k]&&typeof A[t.dataset.k]==='object'?A[t.dataset.k]:{};o[t.dataset.f]=t.value;A[t.dataset.k]=o;gid+=':'+t.dataset.f}
+    else A[t.dataset.k]=t.value;
+    save();var g=document.getElementById(gid);if(g){g.textContent=gutNums(t.value);g.scrollTop=t.scrollTop}refreshNav();
   }
 });
-document.addEventListener('scroll',function(e){var t=e.target;if(t&&t.dataset&&t.dataset.code){var g=document.getElementById('g'+t.dataset.k);if(g)g.scrollTop=t.scrollTop}},true);
+document.addEventListener('scroll',function(e){var t=e.target;if(t&&t.dataset&&t.dataset.code){var g=document.getElementById('g'+t.dataset.k+(t.dataset.f?':'+t.dataset.f:''));if(g)g.scrollTop=t.scrollTop}},true);
 document.addEventListener('keydown',function(e){
   var t=e.target;
   if(t.dataset&&t.dataset.code&&!t.readOnly&&e.key==='Tab'){e.preventDefault();var s=t.selectionStart;t.value=t.value.slice(0,s)+'    '+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;t.dispatchEvent(new Event('input',{bubbles:true}))}

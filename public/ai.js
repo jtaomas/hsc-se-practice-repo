@@ -5,10 +5,16 @@ function plain(html){
   return (d.textContent||'').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 function dbPlain(db){return Object.keys(db).map(function(n){var t=db[n];return 'Table '+n+'\n'+t.c.join(' | ')+'\n'+t.r.map(function(r){return r.join(' | ')}).join('\n')}).join('\n\n')}
-var KIND={tx:'written response',py:'Python program',ps:'pseudocode algorithm',sq:'SQL query',dr:'diagram'};
+var KIND={tx:'written response',py:'Python program',ps:'pseudocode algorithm',sq:'SQL query',dr:'diagram',wb:'HTML and CSS code'};
+/* HTML and CSS answers: only the editable files the student changed, with normalised line endings. */
+function wbPayload(it,a){
+  var out={};a=a&&typeof a==='object'?a:{};
+  it.f.forEach(function(f){if(f.e&&typeof a[f.n]==='string')out[f.n]=a[f.n].replace(/\r\n/g,'\n').replace(/\r/g,'\n')});
+  return out;
+}
 function aiPayload(b,n,i,ans){
   var it=b.qs[n-1].it[i],a=arguments.length>3?ans:BS(b.id).ans[n+'.'+i];
-  var val=it.t==='tx'?plain(a):it.t==='dr'?xdScene(a&&a.e):it.t==='ft'?JSON.parse(JSON.stringify(a||{})):String(a||'');
+  var val=it.t==='tx'?plain(a):it.t==='dr'?xdScene(a&&a.e):it.t==='ft'?JSON.parse(JSON.stringify(a||{})):it.t==='wb'?wbPayload(it,a):String(a||'');
   if(typeof val==='string')val=val.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
   return {bankId:b.id,questionNumber:n,partIndex:i,answer:val};
 }

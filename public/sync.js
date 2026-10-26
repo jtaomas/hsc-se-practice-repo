@@ -141,7 +141,7 @@ function queuedSync(load){
   }).then(function(){
     checkSession(epoch);
     if(Object.keys(SYNC.conflicts).length)throw new Error('Choose which paper version to keep on the Account page.');
-    var sent=Object.assign({},S.pending),changes=Object.keys(sent).filter(function(id){return /^(?:[1-9]|1[0-9])$/.test(id)});
+    var sent=Object.assign({},S.pending),changes=Object.keys(sent).filter(function(id){return /^[1-9][0-9]?$/.test(id)});
     if(!changes.length&&!load){
       SYNC.state='ok';SYNC.msg=new Date().toLocaleTimeString();refreshAcct();
       return changed;
@@ -230,7 +230,7 @@ function bkReadFile(f){
     if(epoch!==SYNC.epoch)return;
     var file;try{file=JSON.parse(rd.result)}catch(e){return bkSet('That file is not a backup file.')}
     if(!file||file.kind!=='sehsc-backup'||!file.data||typeof file.data.u!=='object'||file.data.u===null)return bkSet('That file is not a backup file.');
-    var ids=Object.keys(file.data.u).filter(function(id){return /^(?:[1-9]|1[0-9])$/.test(id)});
+    var ids=Object.keys(file.data.u).filter(function(id){return /^[1-9][0-9]?$/.test(id)});
     if(!ids.length)return bkSet('That backup has no papers in it.');
     if(!confirm('Restore '+ids.length+' paper'+(ids.length===1?'':'s')+' from this backup? Papers in the file replace the same papers here. Other papers are not touched.'))return;
     ids.forEach(function(id){S.u[id]=file.data.u[id];S.pending[id]=(S.pending[id]||0)+1;delete SYNC.conflicts[id]});

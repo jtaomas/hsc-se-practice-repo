@@ -131,7 +131,7 @@ function mkSelected(list){
   return hit||list[0]||null;
 }
 function mkHref(m){return '#/mistakes/'+(MF.bank||'all')+'/'+mkKey(m)}
-function mkTypeName(it){var c=itemClass(it);return c==='closed'?'Multiple choice':c==='written'?'Written':c==='code'?(it.t==='sq'?'SQL':it.t==='py'?'Python':'Pseudocode'):c==='diagram'?'Diagram':'Question'}
+function mkTypeName(it){var c=itemClass(it);return c==='closed'?'Multiple choice':c==='written'?'Written':c==='code'?(it.t==='sq'?'SQL':it.t==='py'?'Python':it.t==='wb'?'HTML and CSS':'Pseudocode'):c==='diagram'?'Diagram':'Question'}
 /* What a part asks, in one plain line for the list. */
 function mkAsk(it){var t=String(plain(it.q)).replace(/\s+/g,' ').trim();return t.length>140?t.slice(0,137).replace(/\s+\S*$/,'')+'...':t}
 function mistakesPage(){

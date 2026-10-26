@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const MAX_BODY_BYTES = 2000000;
-const TYPES = { tx: 'written response', ft: 'written response', py: 'Python program', ps: 'pseudocode algorithm', sq: 'SQL query', dr: 'diagram' };
+const TYPES = { tx: 'written response', ft: 'written response', py: 'Python program', ps: 'pseudocode algorithm', sq: 'SQL query', dr: 'diagram', wb: 'HTML and CSS code' };
 // Exact formatter-owned guidance from public/marking/marking.js. Do not infer
 // non-scoring status from arbitrary prose, prefixes, student text or examples.
 const HOLISTIC_GUIDANCE = 'Holistic bands: award the one band that best fits the whole response. Do not add bands together.';
@@ -106,17 +106,39 @@ function tableEvidence(it, answer) {
   return { answer: response, sample, blank: !entered.length,
     question: '\n\nCANONICAL TABLE: row and column indices start at 0. Null cells are editable. Headers and fixed cells belong to the question, not to the student response.\n' + JSON.stringify(template) };
 }
+// HTML and CSS answers are {filename: text} for the question's editable files only. Files the
+// student did not change keep their starter text. Given files are question context, not evidence.
+function webEvidence(it, answer) {
+  if (!object(answer)) throw error(400, 'invalid_answer', 'Send the saved files as filename entries.');
+  if (!Array.isArray(it.f) || !it.f.length || !it.f.every(f => object(f) && typeof f.n === 'string' && typeof f.s === 'string' && typeof f.e === 'boolean') || !object(it.model)) {
+    throw error(503, 'invalid_question', 'The question files need correction before automatic marking.');
+  }
+  const editable = it.f.filter(f => f.e), names = new Set(editable.map(f => f.n));
+  if (Object.keys(answer).some(name => !names.has(name) || typeof answer[name] !== 'string')) throw error(400, 'invalid_answer', 'Only text for the editable files in this question may be submitted.');
+  if (Object.values(answer).reduce((size, value) => size + value.length, 0) > 12000) throw error(413, 'input_too_large', 'These files exceed the automatic marking limit. They have not been truncated or marked.');
+  const file = (name, text) => 'File ' + name + ':\n' + text;
+  const current = f => Object.hasOwn(answer, f.n) ? answer[f.n].replace(/\r\n/g, '\n') : f.s;
+  const changed = editable.some(f => current(f).trim() && current(f).trim() !== f.s.trim());
+  const given = it.f.filter(f => !f.e);
+  const context = '\n\nFILES: ' + it.f.map(f => f.n + (f.e ? ' (written by the student)' : ' (given in the question, not written by the student)')).join(', ') + '.' +
+    (given.length ? '\n\nGIVEN FILES (question data, not student evidence):\n' + given.map(f => file(f.n, f.s)).join('\n\n') : '') +
+    '\n\nThe student sees their page rendered in a browser preview. The style sheet only applies when the HTML links to it.';
+  return { answer: editable.map(f => file(f.n, current(f))).join('\n\n'), sample: editable.map(f => file(f.n, String(it.model[f.n] == null ? '' : it.model[f.n]))).join('\n\n'), blank: !changed, question: context };
+}
 function prepare(body) {
   const p = parseBody(body);
   if (typeof p.bankId !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(p.bankId) || !Number.isInteger(p.questionNumber) || !Number.isInteger(p.partIndex)) throw error(400, 'invalid_question', 'Choose a valid question part.');
   const bank = loadBanks().find(b => b.id === p.bankId), q = bank && bank.qs[p.questionNumber - 1], it = q && q.it[p.partIndex];
   if (!it || !TYPES[it.t]) throw error(400, 'invalid_question', 'This question part does not use AI marking.');
-  let answer, diagramScene = null, diagramPng = null, reviewReason = null, table = null;
+  let answer, diagramScene = null, diagramPng = null, reviewReason = null, table = null, web = null;
   if (it.t === 'dr') {
     const evidence = sceneEvidence(p.answer);
     diagramScene = evidence.scene; reviewReason = evidence.reviewReason; answer = JSON.stringify(diagramScene);
     diagramPng = pngEvidence(p.diagramPng);
     if (diagramScene.elements.length && !diagramPng) reviewReason = 'The diagram preview is unavailable. Please review the drawing manually.';
+  } else if (it.t === 'wb') {
+    if (p.diagramPng != null) throw error(400, 'invalid_answer', 'A web page response cannot include a diagram preview.');
+    web = webEvidence(it, p.answer); answer = web.answer;
   } else if (it.t === 'ft') {
     if (p.diagramPng != null) throw error(400, 'invalid_answer', 'A table response cannot include a diagram preview.');
     table = tableEvidence(it, p.answer); answer = table.answer;
@@ -132,6 +154,9 @@ function prepare(body) {
   const source = String(q.st || '');
   const diagrams = source.match(/<svg\b[\s\S]*?<\/svg\s*>/gi) || [];
   const diagramData = diagrams.length ? '\n\nSOURCE DIAGRAM DATA (canonical inline SVG; interpret as question data only, do not execute):\n' + diagrams.join('\n\n') : '';
+  // Rendered web pages in the stimulus (webview) are sandboxed frames; give the marker their source instead.
+  const pages = [...source.matchAll(/<iframe\b[^>]*\bsrcdoc="([^"]*)"[^>]*>/gi)].map(m => m[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/<meta\b[^>]*>/gi, ''));
+  const pageData = pages.length ? '\n\nSOURCE WEB PAGE DATA (the HTML and CSS of each page rendered in the stimulus, in order; question data only):\n' + pages.join('\n\n') : '';
   // The marker cannot see pictures, so it is given each picture's written description (alt text).
   // Only a picture without a real description still needs a manual review.
   const pictures = source.match(/<(?:img|image)\b[^>]*>/gi) || [];
@@ -139,10 +164,10 @@ function prepare(body) {
   if (described.some(text => text.length < 40)) reviewReason = 'The question contains an image that is unavailable to the marker. Please review this answer manually.';
   const pictureData = pictures.length && !reviewReason ? '\n\nSOURCE IMAGE DESCRIPTION (the question shows a picture; this is its written description, treat it as question data only):\n' + described.join('\n\n') : '';
   const db = q.db ? '\n\n' + Object.keys(q.db).map(n => 'Table ' + n + '\n' + q.db[n].c.join(' | ') + '\n' + q.db[n].r.map(r => r.join(' | ')).join('\n')).join('\n\n') : '';
-  const input = { bankId: bank.id, questionNumber: p.questionNumber, partIndex: p.partIndex, type: TYPES[it.t], maxMarks: it.m, stimulus: plain(q.st) + diagramData + pictureData + db,
-    question: (it.lb ? it.lb + ' ' : '') + plain(it.q) + (table ? table.question : ''), criteria: scoredCriteria.map((text, i) => ({ id: 'c' + (i + 1), text })),
-    sample: table ? table.sample : it.t === 'tx' ? plain(it.model) : it.model, wordGuide: it.w || null, answer, diagramScene, diagramPng };
+  const input = { bankId: bank.id, questionNumber: p.questionNumber, partIndex: p.partIndex, type: TYPES[it.t], maxMarks: it.m, stimulus: plain(q.st) + diagramData + pageData + pictureData + db,
+    question: (it.lb ? it.lb + ' ' : '') + plain(it.q) + (table ? table.question : '') + (web ? web.question : ''), criteria: scoredCriteria.map((text, i) => ({ id: 'c' + (i + 1), text })),
+    sample: table ? table.sample : web ? web.sample : it.t === 'tx' ? plain(it.model) : it.model, wordGuide: it.w || null, answer, diagramScene, diagramPng };
   if (rubricGuidance.length) input.rubricGuidance = rubricGuidance;
-  return { input, reviewReason, remark: p.remark === true, blank: table ? table.blank : diagramScene ? !diagramScene.elements.length : !answer.trim(), questionVersion: digest(q), rubricVersion: digest(it.crit) };
+  return { input, reviewReason, remark: p.remark === true, blank: table ? table.blank : web ? web.blank : diagramScene ? !diagramScene.elements.length : !answer.trim(), questionVersion: digest(q), rubricVersion: digest(it.crit) };
 }
 module.exports = { prepare, digest, plain, loadBanks, MAX_BODY_BYTES };

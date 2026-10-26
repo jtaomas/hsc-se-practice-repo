@@ -132,12 +132,12 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
   assert(!picks.some(x => 'email' in x || 'text' in x));
   await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>' + text1 + '</p>') } });
   await m.put('progress/' + id(2) + '.json', { u: { 8: paper('<p>' + text2 + '</p>') } });
-  // Every answer carries its author's mark for the part: their own mark first, else a confirmed AI mark. Provisional, needs-review and out-of-range marks are not shown.
+  // Every answer carries its author's mark for the part: confirmed AI mark. Provisional, needs-review and out-of-range marks are not shown.
   const priya = async () => (await rest(h, { action: 'answers', bankId: '8' })).body.parts['17.0'].find(x => x.name === 'Priya');
   const putPriya = extra => m.put('progress/' + id(2) + '.json', { u: { 8: Object.assign(paper('<p>' + text2 + '</p>'), extra) } });
   assert.equal((await priya()).mark, null, 'an unmarked answer has no mark');
   assert.equal((await priya()).max, bank.qs[16].it[0].m);
-  await putPriya({ self: { '17.0': 2 }, ai: { '17.0': { status: 'marked', g: 1 } } }); assert.equal((await priya()).mark, 2, 'their own mark wins');
+  await putPriya({ self: { '17.0': 2 }, ai: { '17.0': { status: 'marked', g: 1 } } }); assert.equal((await priya()).mark, 1, 'confirmed AI mark is used, manual mark not used');
   await putPriya({ ai: { '17.0': { status: 'marked', g: 1 } } }); assert.equal((await priya()).mark, 1, 'a confirmed AI mark is used');
   await putPriya({ ai: { '17.0': { status: 'provisional', g: 1 } } }); assert.equal((await priya()).mark, null);
   await putPriya({ ai: { '17.0': { status: 'needs_review', g: null } } }); assert.equal((await priya()).mark, null);

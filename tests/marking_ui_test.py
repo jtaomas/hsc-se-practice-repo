@@ -216,13 +216,13 @@ with sync_playwright() as playwright:
     expect(page.locator('#aib')).to_contain_text('could not be marked')
     assert len(mark_requests) == 2
 
-    # Self-mark redraws destroy the old Ace instance and keep the submitted editor locked.
+    # Question redraws destroy the old Ace instance and keep the submitted editor locked.
     if os.environ.get('ACE_DIR'):
         page.goto(URL + '#/1/review/19')
         page.wait_for_selector('.cedit.ace-on', timeout=15000)
         assert page.evaluate("ACE_ED['19.0'].getReadOnly()")
         page.evaluate("() => { window.testAceDestroyed = 0; var oldEditor = ACE_ED['19.0'], oldDestroy = oldEditor.destroy; oldEditor.destroy = function(){ window.testAceDestroyed++; return oldDestroy.apply(this, arguments); }; }")
-        page.locator('[data-act=sm][data-k="19.0"][data-v="0"]').click()
+        page.evaluate("$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,CUR.rv);afterQDraw()")
         page.wait_for_selector('.cedit.ace-on', timeout=15000)
         assert page.evaluate('window.testAceDestroyed') == 1
         assert page.evaluate("ACE_ED['19.0'].getReadOnly()")
@@ -336,22 +336,21 @@ with sync_playwright() as playwright:
     expect(page.locator('.mk-item')).to_have_count(1)
     expect(page.locator('.mk-item .mk-q')).to_have_text('Q3')
     page.goto(URL + '#/10/review/1')
-    page.locator('[data-act=sm][data-k="1.0"][data-v="4"]').click()
-    expect(page.locator('.guide > h4 .sc')).to_have_text('4 / 5')
-    expect(page.locator('.guide .aib').first).to_contain_text('You changed this mark yourself')
+    assert page.locator('[data-act=sm]').count() == 0
+    expect(page.locator('.guide > h4 .sc')).to_have_text('Unconfirmed: 2 / 5')
     page.goto(URL + '#/10/results')
-    expect(page.locator('.big')).to_have_text('5 / 15')
-    expect(page.locator('.feature').first).to_contain_text('Assessed subtotal: 4 / 10.')
-    expect(page.locator('#aib')).to_contain_text('1 unconfirmed mark')
+    expect(page.locator('.big')).to_have_text('3 / 15')
+    expect(page.locator('.feature').first).to_contain_text('Includes unconfirmed marks. Assessed subtotal: 0 / 5.')
+    expect(page.locator('#aib')).to_contain_text('2 unconfirmed marks')
     page.goto(URL + '#/mistakes/10')
     headings = page.locator('.mk-item .mk-q').all_text_contents()
-    assert sorted(headings) == ['Q1', 'Q3'], headings
+    assert sorted(headings) == ['Q3'], headings
     page.goto(URL + '#/10')
     page.once('dialog', lambda dialog: dialog.accept())
     page.click('[data-act=restart]')
-    assert page.evaluate('({T:S.hist[1].T,M:S.hist[1].M,provisionalG:S.hist[1].provisionalG,provisionalM:S.hist[1].provisionalM,provisionalParts:S.hist[1].provisionalParts})') == {'T': 4, 'M': 10, 'provisionalG': 1, 'provisionalM': 5, 'provisionalParts': 1}
+    assert page.evaluate('({T:S.hist[1].T,M:S.hist[1].M,provisionalG:S.hist[1].provisionalG,provisionalM:S.hist[1].provisionalM,provisionalParts:S.hist[1].provisionalParts})') == {'T': 0, 'M': 5, 'provisionalG': 3, 'provisionalM': 10, 'provisionalParts': 2}
     page.goto(URL + '#/papers')
-    expect(page.locator('table.res').last).to_contain_text('Unconfirmed marks: 1 / 5 across 1 part')
+    expect(page.locator('table.res').last).to_contain_text('Unconfirmed marks: 3 / 10 across 2 parts')
     assert len(mark_requests) == 7
     assert not page_errors, page_errors
     assert not unexpected_requests, unexpected_requests

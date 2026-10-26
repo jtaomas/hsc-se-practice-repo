@@ -319,7 +319,6 @@ function guideHTML(b,n,i){
     else if(it.t==='sq'||(it.t==='py'&&it.tests.length))h+='<p><b>Automatic check:</b> '+(!isAns(it,a)?'no answer to check':c&&!bs.done?'your answer has changed since the last check. Mark the question again to re-check it.':'running...')+'</p>';
     if(fresh&&c.error)h+='<p class="er">'+esc(c.error)+'</p>';
     if(typeof classSlot==='function')h+=classSlot(b,n,i);
-    h+='<div class="smk"><span>'+(bs.ai[k]&&bs.ai[k].g!=null?'Change the mark:':'Your mark:')+'</span>';for(var j=0;j<=it.m;j++)h+='<button data-act="sm" data-k="'+k+'" data-v="'+j+'"'+(sc.set&&sc.g===j?' class="on"':'')+'>'+j+'</button>';h+='</div>';
   }
   if(it.why)h+='<p style="margin-top:8px">'+it.why+'</p>';
   return h+'</div>';

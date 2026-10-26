@@ -34,7 +34,7 @@ var AI_BUSY_WAITS=[12000,30000,60000];
 var AI_HELD_WAIT=15000,AI_HELD_MAX=24;
 function aiCall(payload,token,attempt,current,prog,held){
   attempt=attempt||0;held=held||0;
-  if(!token){var missing=new Error('Sign in to use AI marking. You can still mark this answer yourself.');missing.fatal=true;return Promise.reject(missing)}
+  if(!token){var missing=new Error('Sign in to use AI marking.');missing.fatal=true;return Promise.reject(missing)}
   var control=new AbortController(),timer=setTimeout(function(){control.abort()},250000);
   return fetch('/api/mark',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(payload),signal:control.signal}).then(function(r){
     return r.json().catch(function(){return {error:'The marking service sent an unreadable reply.'}}).then(function(j){
@@ -285,12 +285,12 @@ function aiSqlResultHTML(b,n,i,it,k,ai,opt){
   return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Unconfirmed mark':(opt.title||'AI marking'))+'</h5>'+
     (sum&&(!probHTML||probs.length)?'<p class="aisum">'+esc(sum)+'</p>':'')+
     probHTML+
-    (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
+    (review?'<p>The marking process could not establish a reliable mark. Review the criteria, or ask a teacher to review this answer.</p>':'')+
     (provisional?AI_PROVISIONAL_TEXT:'')+
     (opt.remark!==false?(S.tok?'<p style="margin-top:8px"><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>'+(review||provisional?'Mark this answer again':legacy?'Re-mark with current process':'Re-mark this answer')+'</button></p>':''):'')+
     (opt.after||'')+'</div>';
 }
-var AI_PROVISIONAL_TEXT='<p><b>What this means:</b> two AI markers marked your answer separately and gave different marks, and the checker could not decide which was right. This is the lower of their marks, so it may be too low. Mark it again, check it against the marking guide and set your own mark, or ask a teacher.</p>';
+var AI_PROVISIONAL_TEXT='<p><b>What this means:</b> two AI markers marked your answer separately and gave different marks, and the checker could not decide which was right. This is the lower of their marks, so it may be too low. Mark it again, check it against the marking guide, or ask a teacher.</p>';
 /* One AI marking result in the review style. opt.remark=false hides the re-mark button (retries). */
 function aiResultHTML(b,n,i,it,k,ai,opt){
   opt=opt||{};
@@ -306,7 +306,7 @@ function aiResultHTML(b,n,i,it,k,ai,opt){
   return '<div class="aib'+(review||provisional?' bad':'')+'"><h5>'+(review?'Needs review — no AI mark awarded':provisional?'Unconfirmed mark':(opt.title||'AI marking'))+'</h5>'+(legacy?'<p class="note">Earlier marking harness. This result has not been assessed by the current marking process.</p>':'')+
     (!review&&!provisional?aiWrongHTML(f,it.m,ai.g):'')+
     (f.summary?'<p class="aisum">'+esc(aiFirst(f.summary))+'</p>':'')+
-    (review?'<p>The marking process could not establish a reliable mark. Review the criteria and set a mark yourself, or ask a teacher to review this answer.</p>':'')+
+    (review?'<p>The marking process could not establish a reliable mark. Review the criteria, or ask a teacher to review this answer.</p>':'')+
     (provisional?AI_PROVISIONAL_TEXT+'<p class="note">An unconfirmed mark is left out of improvement plans and comparisons.</p>'+(opt.remark!==false&&S.tok?'<p><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>Mark this answer again</button></p>':''):'')+
     (review&&opt.remark!==false&&S.tok?'<p><button type="button" class="nb sm" data-act="airemark" data-k="'+esc(k)+'"'+(running?' disabled':'')+'>Mark this answer again</button></p>':'')+
     (!provisional?aiEarnedHTML(f):'')+
@@ -320,8 +320,8 @@ function aiResultHTML(b,n,i,it,k,ai,opt){
 }
 function aiBlock(b,n,i,it,bs,k,a,sc){
   var ai=aiRecord(b,n,i),live=bs.done||(typeof pqShown==='function'&&pqShown(b,n));
-  if(ai)return aiResultHTML(b,n,i,it,k,ai,{after:bs.self[k]!=null?'<p class="note">You changed this mark yourself, so your mark is used.</p>':''});
-  if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or use the marking guide to set your own mark.</p></div>';
+  if(ai)return aiResultHTML(b,n,i,it,k,ai);
+  if(live&&isAns(it,a)&&!S.tok)return '<div class="aib"><h5>AI marking</h5><p><a href="#/account">Sign in</a> to use AI marking, or review the marking guide.</p></div>';
   if(bs.aiErr[k])return '<div class="aib bad"><h5>AI marking did not finish</h5><p>'+esc(bs.aiErr[k])+'</p>'+(aiRunCurrent(b,AIRUN[b.id])||aiQuestionRun(b,n)?'<p>Other answers are still being marked. You can retry this answer when the batch finishes.</p>':'<button class="nb sm" data-act="airetry">Try again</button>')+'</div>';
   if(live&&isAns(it,a)&&(aiQuestionRun(b,n)||aiRunCurrent(b,AIRUN[b.id])))return '<div class="aib"><h5>AI marking</h5>'+aiProgHTML(b,k)+'</div>';
   if(live&&isAns(it,a))return '<div class="aib"><h5>AI marking</h5><p>This answer has not been marked yet. AI marking sends the question, marking guide and your answer, including any drawing, to DeepSeek.</p><button class="nb sm" data-act="airetry">Mark with AI</button></div>';

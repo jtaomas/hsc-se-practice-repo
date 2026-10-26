@@ -68,7 +68,7 @@ function proposal(input) {
       return new Response(JSON.stringify({ model: coach.MODEL, choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(value) } }], usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 } }));
     } });
     assert.equal(live.trials[0].status, 'ready'); assert.equal(count, 2); assert.equal(live.budgetUsage.calls, 2); assert.equal(live.budgetUsage.reservedOutputTokens, 40960); assert.equal(live.metrics.reportedTokens.completion_tokens, 400); assert(!JSON.stringify(live).includes('TEST_ONLY_NO_REAL_SECRET'));
-    assert.equal(fs.statSync(output).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(output).mode & 0o777, 0o600);
     const stopped = await evaluator.run(evaluator.parseArgs([...common, ...flags, '--max-calls', '1']), { apiKey: 'TEST_ONLY', fetch: () => { throw Error('must not start incomplete attempt'); } });
     assert.equal(stopped.stoppedAtBudget, true); assert.equal(stopped.budgetUsage.calls, 0);
     const insufficientTokens = await evaluator.run(evaluator.parseArgs([...common, ...flags, '--max-output-tokens', '32768']), { apiKey: 'TEST_ONLY', fetch: () => { throw Error('must reserve the distinct stage caps before starting'); } });

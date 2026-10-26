@@ -45,11 +45,11 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     c.AIMARKING_VERSION='new-harness';assert.equal(c.aiRecord(b,1,0),null);c.AIMARKING_VERSION='test-v2';assert(c.aiRecord(b,1,0));
     b.qs[0].it[0].crit=['A corrected rubric.'];assert.equal(c.aiRecord(b,1,0),null);assert.equal(c.aiTodo(b).length,1);assert.equal(c.score(b,1,0).set,false);
   }
-  // Guests can sit and self-mark; no automatic or explicit AI request is made without a session.
+  // Guests can sit; no automatic or explicit AI request is made without a session.
   {
     const c=client(),{b,bs}=paper(c,[written()]);c.S.tok='';bs.ans['1.0']='An answer';
     await c.ensureMarked(b);await c.runAI(b);assert.equal(c.score(b,1,0).set,false);
-    assert(c.aiStatusHTML(b).includes('Sign in'));bs.self['1.0']=2;assert.equal(c.score(b,1,0).g,2);
+    assert(c.aiStatusHTML(b).includes('Sign in'));assert.equal(c.score(b,1,0).g,0);
   }
   // Abstention is a completed result, not a zero, a retry candidate, or a mistake.
   {
@@ -60,10 +60,9 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert.equal(c.score(b,1,0).set,false);assert.equal(c.score(b,1,0).src,'needs_review');assert.equal(c.mistakeList().length,0);
     assert.equal(c.totals(b).P,3);assert.equal(c.totals(b).markedM,0);assert(c.resultsPage(b).includes('3 of 3 marks remain unscored'));
     assert(c.aiBlock(b,1,0,b.qs[0].it[0],bs,'1.0',bs.ans['1.0'],c.score(b,1,0)).includes('Needs review'));
-    bs.self['1.0']=1;assert.equal(c.score(b,1,0).set,true);assert.equal(c.mistakeList().length,1);
   }
   // A provisional score is terminal but never enters assessed totals, mistake
-  // deductions or verified feedback; an explicit self mark retains precedence.
+  // deductions or verified feedback.
   {
     const c=client(),{b,bs}=paper(c,[written(),written(),written()]);
     b.qs[0].it.forEach((_,i)=>bs.ans['1.'+i]='Answer '+i);let calls=0;
@@ -85,8 +84,7 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
     assert(c.aiStatusHTML(b).includes('1 unconfirmed mark'));assert(c.aiStatusHTML(b).includes('1 answer could not be marked'));assert(c.aiStatusHTML(b).includes('data-only="unconfirmed"'));
     assert(c.papersPage().includes('Unconfirmed marks: 1 / 3'));assert(c.reviewStatus(b).includes('Unconfirmed marks: 1 / 3'));
     const serialized=clone(bs);c.S.u[b.id]=serialized;await c.runAI(b);assert.equal(calls,4);assert.equal(c.score(b,1,0).src,'provisional','reload must preserve the provisional discriminator');
-    serialized.self['1.0']=2;assert.equal(c.score(b,1,0).src,'self');assert.equal(c.aiProvisionals(b),0);assert.equal(c.totals(b).T,4);assert.equal(c.totals(b).markedM,6);assert.equal(c.mistakeList().length,2);
-    delete serialized.self['1.0'];c.S.hist.push({id:b.id,name:'Provisional history',at:1,T:t.T,M:t.markedM,pending:t.P,provisionalG:t.provisionalG,provisionalM:t.provisionalM,provisionalParts:t.provisionalParts});
+    c.S.hist.push({id:b.id,name:'Provisional history',at:1,T:t.T,M:t.markedM,pending:t.P,provisionalG:t.provisionalG,provisionalM:t.provisionalM,provisionalParts:t.provisionalParts});
     assert(c.papersPage().includes('Provisional history'));assert(c.papersPage().includes('Unconfirmed marks: 1 / 3 across 1 part'));
   }
   // Zero remains a numeric provisional mark, while malformed and out-of-range
@@ -481,9 +479,9 @@ async function until(check){for(let i=0;i<100&&!check();i++)await Promise.resolv
   }
   // Hidden authoring demos stay available by route but never enter paper counts, history or mistakes.
   {
-    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Visible answer';bs.self['1.0']=1;
+    const c=client(),{b,bs}=paper(c,[written()]);bs.ans['1.0']='Visible answer';bs.ai['1.0']={status:'marked',g:1,stamp:c.aiStamp(b,1,0)};
     vm.runInContext(fs.readFileSync(path.join(__dirname,'../public/formats.js'),'utf8'),c,{filename:'formats.js'});
-    const hidden=c.BANKS.find(x=>x.id==='formats');assert(hidden&&hidden.hidden);c.BS('formats').done=true;c.BS('formats').ans['3.0']={'0,0':'500'};c.BS('formats').self['3.0']=0;
+    const hidden=c.BANKS.find(x=>x.id==='formats');assert(hidden&&hidden.hidden);c.BS('formats').done=true;c.BS('formats').ans['3.0']=0;
     c.S.hist.push({id:'formats',name:'Hidden attempt',at:1,T:0,M:17});
     assert(!c.homePage().includes('href="#/formats"'));const html=c.papersPage();assert(html.includes('1 of 1 papers finished'));assert(!html.includes('Question formats'));assert(!html.includes('Hidden attempt'));
     assert(c.mistakeList().every(m=>m.b.id!==hidden.id));assert(c.mistakeList().some(m=>m.b.id===b.id));

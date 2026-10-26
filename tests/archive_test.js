@@ -8,7 +8,7 @@ const before = fs.readFileSync(file, 'utf8');
 require('child_process').execFileSync(process.execPath, [path.join(root, 'scripts', 'export-archive.js')], { stdio: 'ignore' });
 const after = fs.readFileSync(file, 'utf8');
 fs.writeFileSync(file, before);
-assert.equal(after, before, 'archive/banks-1-7.json is out of date: run node scripts/export-archive.js');
+assert.equal(after.replace(/\r\n/g, '\n'), before.replace(/\r\n/g, '\n'), 'archive/banks-1-7.json is out of date: run node scripts/export-archive.js');
 const ids = JSON.parse(before).papers.map(p => p.id);
 assert.deepEqual(ids, ['1', '2', '3', '4', '5', '6', '7']);
 const boot = fs.readFileSync(path.join(root, 'public', 'boot.js'), 'utf8');

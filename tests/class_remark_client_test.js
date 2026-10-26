@@ -47,11 +47,10 @@ const html = c => c.cvWithU(c.CV.prog.m1.u, () => c.cvProgHTML('m1', false));
     const { c, b } = setup();
     const page = html(c);
     assert(page.includes('2 unmarked answers'), 'the summary counts unmarked answers');
-    assert(page.includes('Mark 2 unmarked'));
-    assert(page.includes('Re-mark paper'));
-    assert.equal((page.match(/data-mode="one"/g) || []).length, 2, 'one Remark button for each written part, none for the multiple choice part');
-    assert(page.includes('data-k="1.0"') && page.includes('data-k="1.1"') && !page.includes('data-k="1.2"'));
-    assert(page.includes('data-sys="0"'));
+    assert(!page.includes('data-cv="remark"'));
+    assert(!page.includes('Mark 2 unmarked'));
+    assert(!page.includes('Re-mark paper'));
+    assert.equal((page.match(/data-mode="one"/g) || []).length, 0);
     assert(c.cvProgHTML.length === 2);
     c.cvWithU(c.CV.prog.m1.u, () => {
       assert.deepEqual(clone(c.cvRmList(b, 'missing').map(t => t.k)), ['1.0', '1.1']);
@@ -94,7 +93,7 @@ const html = c => c.cvWithU(c.CV.prog.m1.u, () => c.cvProgHTML('m1', false));
     assert(!after.includes('unmarked answer') && !after.includes('Mark 2 unmarked'));
     assert(after.includes('2 answers marked and saved to Priya’s paper.'));
     assert(after.includes('2 / 3'));
-    assert(after.includes('Re-mark paper'));
+    assert(!after.includes('Re-mark paper'));
     assert.equal(c.CV.rm['m1|1'].ok, true);
   }
   // One part only.
@@ -155,7 +154,7 @@ const html = c => c.cvWithU(c.CV.prog.m1.u, () => c.cvProgHTML('m1', false));
   {
     const { c, sent } = setup();
     c.cvRemark('m1', false, '1', 'missing', ''); c.cvRemark('m1', false, '1', 'missing', ''); c.cvRemark('m1', false, '1', 'one', '1.0');
-    assert(html(c).includes('disabled'), 'buttons are disabled while marking');
+    assert(html(c).includes('Marking 0 of 2...'));
     await finished(c);
     assert.equal(sent.mark.length, 2, 'a second click while marking changes nothing');
   }
@@ -175,7 +174,7 @@ const html = c => c.cvWithU(c.CV.prog.m1.u, () => c.cvProgHTML('m1', false));
     assert.equal(run.saved, 1); assert.equal(run.failed, 1); assert.equal(run.ok, false);
     assert.deepEqual(Object.keys(sent.class[0].marks), ['1.0']);
     assert(run.msg.includes('1 answer marked and saved') && run.msg.includes('1 did not finish') && run.msg.includes('daily AI marking allowance'));
-    assert(html(c).includes('Mark 1 unmarked'), 'the unfinished answer can be tried again');
+    assert(!html(c).includes('Mark 1 unmarked'));
   }
   // The server refuses the save (the paper changed): nothing is shown as marked.
   {
@@ -185,7 +184,7 @@ const html = c => c.cvWithU(c.CV.prog.m1.u, () => c.cvProgHTML('m1', false));
     const run = c.CV.rm['m1|1'];
     assert.equal(run.saved, 0); assert.equal(run.failed, 2); assert(run.msg.includes('Press Refresh'));
     assert.deepEqual(clone(c.CV.prog.m1.u['1'].ai), {}, 'marks the server did not accept are not shown');
-    assert(html(c).includes('Mark 2 unmarked'));
+    assert(!html(c).includes('Mark 2 unmarked'));
   }
   // A marking result outside the available marks is refused before it is saved.
   {

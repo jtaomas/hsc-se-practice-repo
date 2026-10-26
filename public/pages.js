@@ -185,7 +185,7 @@ function infoHTML(){
     '<p><b>Pseudocode:</b> there is no Run button. Indent with the Tab key and follow the syllabus style.</p>'+
     '<p><b>SQL:</b> Run shows the rows your query returns. Reset DB clears the results. Only SELECT queries are accepted, and you may use the syllabus words such as GREATER THAN, EQUALS and CONTAINS.</p>'+
     '<h3>Zoom and slides</h3><p>The round + button on a panel opens a larger view. Close it with Close or Escape. Arrows and dots under a panel move between slides.</p>'+
-    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, closed questions are marked automatically. Sign in to request AI marking for written, code and drawing answers. Some answers may need review and remain unscored. You can always use the sample answers and criteria to set your own marks.</p>';
+    '<h3>Marking</h3><p>Nothing is marked while you sit the paper. After you submit, closed questions are marked automatically. Sign in to request AI marking for written, code and drawing answers. Some answers may need review and remain unscored. Compare your answers with the sample answers and marking criteria.</p>';
   return '<div class="modal im" data-act="closeinfo"><div class="box im" role="dialog" aria-label="Exam information"><button class="nb red sm x" data-act="closeinfo">Close this screen X</button><div class="imscroll"><div class="imc"><div class="imcol">'+left+'</div><div class="imcol">'+right+'</div></div></div></div></div>';
 }
 
@@ -337,7 +337,7 @@ function examPage(b,n,rv){
 function finishPage(b){
   CUR={b:b,n:0};var bs=BS(b.id),un=[],fl=[];
   b.qs.forEach(function(q,i){if(!qAnswered(b,i+1))un.push(i+1);if(bs.flags[i+1])fl.push(i+1)});
-  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">Finish exam</h1><div class="feature"><p><b>Unanswered:</b> '+(un.length?un.join(', '):'none')+'</p><p><b>Flagged:</b> '+(fl.length?fl.join(', '):'none')+'</p><p>You can submit now even if some questions are unanswered. Unanswered parts score zero. Your answers are saved either way, so you can also leave with Exit and come back later.</p><p>When signed in, submitting starts AI marking and sends each question, its marking guide and your answer, including any drawing, to DeepSeek. Guests can review and set their own marks.</p><div class="acts"><button class="nb ol" data-act="back">Back to the exam</button><button class="nb" data-act="submit">Submit and mark</button></div></div></div>');
+  return frame(b.name+' Software Engineering','<div class="pg"><h1 class="pt">Finish exam</h1><div class="feature"><p><b>Unanswered:</b> '+(un.length?un.join(', '):'none')+'</p><p><b>Flagged:</b> '+(fl.length?fl.join(', '):'none')+'</p><p>You can submit now even if some questions are unanswered. Unanswered parts score zero. Your answers are saved either way, so you can also leave with Exit and come back later.</p><p>When signed in, submitting starts AI marking and sends each question, its marking guide and your answer, including any drawing, to DeepSeek. Guests can review with the marking guide.</p><div class="acts"><button class="nb ol" data-act="back">Back to the exam</button><button class="nb" data-act="submit">Submit and mark</button></div></div></div>');
 }
 function totals(b){
   var rows=[],T=0,M=0,P=0,provisionalG=0,provisionalM=0,provisionalParts=0,tp={};
@@ -445,7 +445,7 @@ function pqPanelHTML(b,n){
   var msg=run?'<b>Marking this question: '+run.done+' of '+run.total+' answer'+(run.total===1?'':'s')+' processed.</b>'+aiRunBarHTML(run)+aiActHTML(b,run,aiqKey(b,n))+'Feedback appears under each part as it finishes. You can keep working while you wait.'
     :shown?'<b>Feedback is shown under each part.</b> If you change an answer, mark the question again.'
     :'<b>Practice mode.</b> Mark this question when you are ready and see the marking guide, sample answer and feedback straight away.';
-  if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can mark yourself with the guide.';
+  if(open&&!S.tok)msg+=' <a href="#/account">Sign in</a> for AI marking of written, code and diagram answers; without it you can compare with the marking guide.';
   return '<div class="aib" id="pq"'+(run?' data-airun="'+esc(aiqKey(b,n))+'"':'')+'>'+msg+'<div class="acts" style="margin-top:8px"><button class="nb sm" data-act="pqmark"'+(run?' disabled':'')+'>'+(shown?'Mark this question again':'Mark this question')+'</button>'+(shown?' <button type="button" class="nb sm ol" data-act="qremark" data-n="'+n+'"'+(run?' disabled':'')+'>Re-mark this question</button>':'')+'</div></div>';
 }
 function pqMark(){
@@ -519,12 +519,12 @@ function ensureMarked(b){
 }
 function aiStatusHTML(b){
   var bs=BS(b.id),errs=Object.keys(bs.aiErr).filter(function(k){return bs.aiErr[k]}),reviews=aiReviews(b),provisionals=aiProvisionals(b),todo=aiTodo(b).length;
-  if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and set your own marks.</div>';
+  if(!S.tok&&todo)return '<div class="aib" id="aib"><b>Sign in for AI marking.</b> <a href="#/account">Open Account</a>, or review the sample answers and criteria.</div>';
   if(aiRunCurrent(b,AIRUN[b.id])){var rn=AIRUN[b.id];return '<div class="aib" id="aib" data-airun="'+esc(b.id)+'"><b role="status">AI marking is running: '+(rn.done||0)+' of '+(rn.total||0)+' answers processed.</b>'+aiRunBarHTML(rn)+aiActHTML(b,rn,b.id)+'<p class="note">Up to ten answers are marked at once; each takes one to four minutes. Results appear as soon as each one is done.</p></div>'}
   if(errs.length)return '<div class="aib bad" id="aib"><b>AI marking did not finish for '+errs.length+' answer'+(errs.length>1?'s':'')+'.</b> '+esc(bs.aiErr[errs[0]])+'<br><button class="nb sm" data-act="airetry" style="margin-top:8px">Try again</button></div>';
   if(todo)return '<div class="aib" id="aib"><b>'+todo+' answer'+(todo>1?'s':'')+' awaiting AI marking.</b> <button class="nb sm" data-act="airetry">Mark with AI</button></div>';
-  if(reviews||provisionals)return '<div class="aib bad" id="aib">'+(reviews?'<b>'+reviews+' answer'+(reviews>1?'s':'')+' could not be marked.</b> The AI could not reach a reliable mark, so none was given. ':'')+(provisionals?'<b>'+provisionals+' unconfirmed mark'+(provisionals===1?'':'s')+'.</b> The two AI markers disagreed and the checker could not settle it, so the lower mark is shown; it may be too low. ':'')+(S.tok?'<button class="nb sm" data-act="paperremark" data-only="unconfirmed" style="margin-top:8px">Mark '+(reviews+provisionals===1?'it':'these '+(reviews+provisionals))+' again</button> ':'')+'Or open the question, check the marking guide and set the mark yourself.</div>';
-  return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback. You can change a mark there.</div>';
+  if(reviews||provisionals)return '<div class="aib bad" id="aib">'+(reviews?'<b>'+reviews+' answer'+(reviews>1?'s':'')+' could not be marked.</b> The AI could not reach a reliable mark, so none was given. ':'')+(provisionals?'<b>'+provisionals+' unconfirmed mark'+(provisionals===1?'':'s')+'.</b> The two AI markers disagreed and the checker could not settle it, so the lower mark is shown; it may be too low. ':'')+(S.tok?'<button class="nb sm" data-act="paperremark" data-only="unconfirmed" style="margin-top:8px">Mark '+(reviews+provisionals===1?'it':'these '+(reviews+provisionals))+' again</button> ':'')+'Or open the question to check the sample answer and criteria.</div>';
+  return '<div class="aib" id="aib"><b>AI marking is complete.</b> Open any question in review to read the feedback.</div>';
 }
 function markAndShow(b){
   return ensureMarked(b);
@@ -673,7 +673,6 @@ document.addEventListener('click',function(e){
   else if(a==='bklist')bkLoadList();
   else if(a==='bkrestore')bkRestore(d.name);
   else if(a==='acresolve')resolveSync(d.id,d.v);
-  else if(a==='sm'){var bs2=BS(CUR.b.id);bs2.self[d.k]=+d.v;save();var y=window.scrollY;xdCleanup();$('#qarea').innerHTML=qHTML(CUR.b,CUR.n,CUR.rv);afterQDraw();window.scrollTo(0,y);refreshNav()}
   else if(a==='pqmark')pqMark();
 });
 function handleCpkSat(e,satEl){

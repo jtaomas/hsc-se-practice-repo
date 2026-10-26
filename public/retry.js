@@ -110,7 +110,7 @@ function rtPanelHTML(b,n,i){
   return h+rtResultHTML(b,n,i,r);
 }
 function rtVerdict(r){
-  if(r.g==null)return '<div class="rtv pend"><b>No mark yet.</b> The marking could not settle on a mark. Compare with the sample answer and set your own mark below.</div>';
+  if(r.g==null)return '<div class="rtv pend"><b>No mark yet.</b> The marking could not settle on a mark. Compare with the sample answer.</div>';
   return r.g>=r.m?'<div class="rtv rtok"><b>Full marks: '+r.g+' / '+r.m+'.</b> This mistake now shows yellow.</div>'
     :'<div class="rtv bad"><b>'+r.g+' / '+r.m+'.</b> Not full marks yet. Fix what&rsquo;s wrong and check again.</div>';
 }
@@ -125,11 +125,9 @@ function rtResultHTML(b,n,i,r){
 }
 /* Without an account (or when AI marking cannot settle a mark) the student marks the retry against the guide. */
 function rtSelfHTML(b,n,i,r){
-  var it=b.qs[n-1].it[i],h='<div class="guide rtg">'+(!S.tok&&!r?'<p class="note"><a href="#/account">Sign in</a> for AI marking. Without it, compare your retry with the sample answer and criteria, then set your mark.</p>':'')+
-    '<p class="gh"><b>Sample answer:</b></p>'+rtSample(it)+(it.crit&&it.crit.length?'<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit):'')+
-    '<div class="smk"><span>Your mark for this retry:</span>';
-  for(var j=0;j<=it.m;j++)h+='<button type="button" data-act="rtsm" data-v="'+j+'"'+(r&&r.self&&r.g===j?' class="on"':'')+'>'+j+'</button>';
-  return h+'</div></div>';
+  var it=b.qs[n-1].it[i],h='<div class="guide rtg">'+(!S.tok&&!r?'<p class="note"><a href="#/account">Sign in</a> for AI marking. Without it, compare your retry with the sample answer and criteria.</p>':'')+
+    '<p class="gh"><b>Sample answer:</b></p>'+rtSample(it)+(it.crit&&it.crit.length?'<p class="gh"><b>Marking criteria</b></p>'+critList(it.crit):'');
+  return h+'</div>';
 }
 
 /* ---------- checking a retry ---------- */
@@ -193,9 +191,8 @@ function rtMarkAI(b,n,i){
   });
 }
 document.addEventListener('click',function(e){
-  var el=e.target.closest&&e.target.closest('[data-act="rtcheck"],[data-act="rtsm"],[data-act="rtorig"],[data-act="rtrestore"]');if(!el||!CUR.b||!CUR.rt)return;
+  var el=e.target.closest&&e.target.closest('[data-act="rtcheck"],[data-act="rtorig"],[data-act="rtrestore"]');if(!el||!CUR.b||!CUR.rt)return;
   if(el.dataset.act==='rtcheck')rtCheck();
   else if(el.dataset.act==='rtorig')rtOrigToggle();
   else if(el.dataset.act==='rtrestore')rtRestore();
-  else if(canEdit()){var b=CUR.b,n=CUR.n,i=CUR.rt.i,prev=rtCurrent(b,n,i);rtStore(b,n,i,{g:+el.dataset.v,self:1,ai:prev&&prev.ai});rtRefresh()}
 });

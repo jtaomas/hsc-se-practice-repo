@@ -42,12 +42,10 @@ function createHandler(deps) {
     return Object.keys(papers).some(k => { const p = papers[k]; return p && p.mode === 'exam' && p.start && !p.done && clock() - p.start < 3 * 3600e3; });
   }
 
-  // The mark a student holds for one part: the mark they set themselves, else a confirmed AI mark. Null while it is unmarked.
+  // The mark a student holds for one part: confirmed AI mark. Null while it is unmarked.
   // Provisional and needs-review AI results carry no confirmed mark, so they are not shown.
   function partMark(paper, key, max) {
     const ok = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
-    const own = paper.self && paper.self[key];
-    if (ok(own)) return own;
     const ai = paper.ai && paper.ai[key];
     return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
   }

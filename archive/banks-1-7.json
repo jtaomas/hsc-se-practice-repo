@@ -7480,7 +7480,7 @@
        "t": "dr",
        "q": "The school wants students who live 2 km or less away to receive a free pass if they have a disability, and no pass otherwise. Redraw the decision tree to include this rule. (3 marks)",
        "m": 3,
-       "model": "Root \"Distance > 2 km?\". Yes branch unchanged: \"Age < 16?\" with Yes to Free pass and No to Concession. No branch now goes to a new decision \"Disability?\" with Yes to Free pass and No to No pass.",
+       "model": "Root \"Distance > 2 km?\". Yes branch unchanged: \"Age &lt; 16?\" with Yes to Free pass and No to Concession. No branch now goes to a new decision \"Disability?\" with Yes to Free pass and No to No pass.",
        "crit": [
         "1 mark: original Yes branch kept correct.",
         "1 mark: new \"Disability?\" decision on the No branch of the distance test.",

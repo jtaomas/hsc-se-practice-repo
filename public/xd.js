@@ -38,8 +38,6 @@ function xdMount(b,k,ro){
     var props={
       initialData:init,
       excalidrawAPI:function(a){st.api=a},
-      // the library is fixed: undo anything Excalidraw tries to add to it (e.g. the selected shape after a pick)
-      onLibraryChange:ro?undefined:function(l){if(st.api&&typeof XDLIB!=='undefined'&&l.length!==XDLIB.length)st.api.updateLibrary({libraryItems:xdLibItems(),merge:false})},
       viewModeEnabled:!!ro,handleKeyboardGlobally:false,
       UIOptions:{canvasActions:{loadScene:false,export:false,saveToActiveFile:false,saveAsImage:false,clearCanvas:false,changeViewBackgroundColor:false,toggleTheme:false},tools:{image:false},dockedSidebarBreakpoint:0},
       onChange:ro?undefined:function(){clearTimeout(st.tmr);st.tmr=setTimeout(function(){xdFlush(k);refreshNav()},400)}

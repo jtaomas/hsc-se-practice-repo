@@ -32,8 +32,17 @@ function xdMount(b,k,ro){
     var wide=!ro&&host.clientWidth>=760,app={viewBackgroundColor:'#ffffff',currentItemRoughness:0,currentItemStrokeWidth:2,currentItemRoundness:'sharp',currentItemFontFamily:2};
     // the shape library opens docked on the right, as in the exam; on narrow screens it waits for the Library button
     if(wide){app.openSidebar={name:'default',tab:'library'};app.defaultSidebarDockedPreference=true}
+<<<<<<< Updated upstream
     var props={
       initialData:{elements:els,appState:app,scrollToContent:els.length>0,libraryItems:ro?[]:xdLibItems()},
+=======
+    // Excalidraw keeps one library for every canvas on the page, so a read-only canvas passes no library rather than
+    // an empty one (an empty list would wipe the shapes from an editable canvas open beside it)
+    var init={elements:els,appState:app,scrollToContent:els.length>0};
+    if(!ro)init.libraryItems=xdLibItems();
+    var props={
+      initialData:init,
+>>>>>>> Stashed changes
       excalidrawAPI:function(a){st.api=a},
       viewModeEnabled:!!ro,handleKeyboardGlobally:false,
       UIOptions:{canvasActions:{loadScene:false,export:false,saveToActiveFile:false,saveAsImage:false,clearCanvas:false,changeViewBackgroundColor:false,toggleTheme:false},tools:{image:false},dockedSidebarBreakpoint:0},

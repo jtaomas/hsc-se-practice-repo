@@ -272,7 +272,7 @@ with sync_playwright() as playwright:
     page.click('.hxb[href="#/formats/finish"]')
     page.click('[data-act=submit]')
     page.wait_for_function("BS('formats').ai['3.0'] && !AIRUN.formats")
-    expect(page.locator('.big')).to_have_text('6 / 17')
+    expect(page.locator('.big')).to_have_text('6 / 20')
     assert len(mark_requests) == 3
     assert mark_requests[-1]['bankId'] == 'formats'
     page.goto(URL + '#/formats/review/3')

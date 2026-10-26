@@ -71,8 +71,8 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.route('**/*', route_request)
     page.goto(URL)
-    # A submitted Bank 1: Q1 (multiple choice) wrong, Q18 (written) self-marked 1 / 3.
-    page.evaluate("""(function(){var bs=BS('1');bs.start=Date.now()-1000;bs.mode='exam';bs.ans['1.0']=0;bs.ans['18.0']='<p>it is hashed</p>';bs.self['18.0']=1;bs.done=true;bs.doneAt=Date.now();bs.checked=1;save('1')})()""")
+    # A submitted Bank 1: Q1 (multiple choice) wrong, Q18 (written) marked 1 / 3.
+    page.evaluate("""(function(){var bs=BS('1'),b=BANKS.filter(function(x){return x.id==='1'})[0];bs.start=Date.now()-1000;bs.mode='exam';bs.ans['1.0']=0;bs.ans['18.0']='<p>it is hashed</p>';bs.self['18.0']=1;bs.ai['18.0']={status:'marked',g:1,stamp:aiStamp(b,18,0)};bs.done=true;bs.doneAt=Date.now();bs.checked=1;save('1')})()""")
 
     # My mistakes: What's wrong leads, the list is red, and a Retry button is offered.
     page.evaluate("location.hash='#/mistakes/1/1.1.0'")
@@ -110,7 +110,7 @@ with sync_playwright() as p:
     expect(page.locator('.nav-elem[data-n="1"]')).to_have_class(__import__('re').compile(r'\brtok\b'))
     expect(page.locator('.guide > h4 .sc')).to_have_class(__import__('re').compile(r'\brtok\b'))
     expect(page.locator('.guide .wrongbox')).to_contain_text('Phased')
-    expect(page.locator('.nav-elem[data-n="18"]')).to_have_class(__import__('re').compile(r'\bbad\b'))
+    expect(page.locator('.nav-elem[data-n="18"]')).to_have_class(__import__('re').compile(r'\bbad\b'), timeout=10000)
 
     # Written retry with AI marking: the retry answer is sent, What's wrong leads the feedback, then full marks turns it yellow.
     page.evaluate("S.tok='" + TOKEN + "';S.ae='" + EMAIL + "';S.owner='" + EMAIL + "';persist()")

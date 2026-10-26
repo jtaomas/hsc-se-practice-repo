@@ -7,7 +7,8 @@ SITE = os.environ.get('SITE', 'http://127.0.0.1:8767').rstrip('/')
 errors, calls = [], []
 state = {'member': False}
 ANSWERS = {'bankId': '8', 'members': 2, 'submitted': [{'name': 'Priya', 'mine': False}, {'name': 'You', 'mine': True}],
-           'parts': {'17.0': [{'id': 'a', 'name': 'Priya', 'mine': False, 'mark': 1, 'max': 2, 'text': 'Agile <b>sprints</b> allow quick feedback.'}, {'id': 'b', 'name': 'Sam', 'mine': True, 'mark': 2, 'max': 2, 'text': 'Waterfall is linear and suits fixed scope.'}]}}
+           'parts': {'1.0': [{'id': 'a', 'name': 'Priya', 'mine': False, 'choice': [0]}, {'id': 'b', 'name': 'Sam', 'mine': True, 'choice': [2]}],
+                     '17.0': [{'id': 'a', 'name': 'Priya', 'mine': False, 'mark': 1, 'max': 2, 'text': 'Agile <b>sprints</b> allow quick feedback.'}, {'id': 'b', 'name': 'Sam', 'mine': True, 'mark': 2, 'max': 2, 'text': 'Waterfall is linear and suits fixed scope.'}]}}
 RESULT = {'status': 'ready', 'names': {'A': 'Priya', 'B': 'You'}, 'count': 2, 'keyword': {'word': 'evaluate', 'meaning': 'Make a judgement based on criteria.'}, 'targetWords': 270,
           'result': {'directive': 'Evaluate means make a judgement using criteria.', 'missed': ['Cost of rework'], 'combined': 'Agile supports frequent feedback while waterfall suits fixed scope.',
                      'mainPoints': [{'point': 'Agile gives quick feedback', 'syllabus': 'Agile approach', 'answersQuestion': 'yes', 'why': 'Directly relevant.', 'madeBy': ['A'], 'quotes': [{'who': 'A', 'text': 'quick feedback'}]}]}}
@@ -81,6 +82,11 @@ with sync_playwright() as pw:
     expect(page.locator('#qarea .qt')).to_contain_text('Question 1 ')
     assert page.locator('.nav-bar .nav-elem').count() > 5, 'question navigator'
     assert page.locator('.tools').count() == 1 and page.locator('.band').count() == 0, 'one tools bar, not a second band above the navigator'
+    expect(page.locator('.cv-class-table')).to_be_visible()
+    expect(page.locator('.cv-class-table')).to_contain_text('Scenario / Question')
+    expect(page.locator('.cv-class-table')).to_contain_text('Priya')
+    expect(page.locator('.wrongbox table.cmp').first).to_be_visible()
+    expect(page.locator('.wrongbox table.cmp').first).to_contain_text('Correct answer')
     page.click('.nav-elem[data-n="17"]')
     expect(page.locator('#qarea .qt')).to_contain_text('Question 17 ')
     expect(page.locator('.cvans').first).to_contain_text('Priya')

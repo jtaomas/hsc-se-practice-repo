@@ -175,13 +175,13 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
   height: 26px;
   border-radius: 50%;
   border: 2px solid #ffffff;
-  margin-left: -8px;
+  margin-left: -4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
   background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.22);
   transition: transform .12s ease;
   position: relative;
 }
@@ -192,12 +192,18 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
   transform: scale(1.18);
   z-index: 5;
 }
+.notion-avatar img,
+.notion-avatar svg.notion-av{
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: block;
+  object-fit: cover;
+}
 .notion-avatar.av-live{
-  border: 2.5px solid #16a34a;
   z-index: 3;
 }
 .notion-avatar.av-working{
-  border: 2px solid #38bdf8;
   z-index: 2;
 }
 .notion-avatar.av-done{
@@ -207,7 +213,7 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 1.5px solid #ffffff;
+  border: 2px solid #ffffff;
   background: #334155;
   color: #ffffff;
   font-size: 10px;
@@ -215,7 +221,7 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: -7px;
+  margin-left: -4px;
   z-index: 3;
 }
 .presence-pulse-dot{
@@ -314,14 +320,15 @@ h2.pt{font-weight:700;font-size:1.3em;color:#002664;margin:.2em 0 .5em}
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
+  overflow: visible;
 }
-.notion-pop-av .notion-av{
+.notion-pop-av .notion-av,
+.notion-pop-av img{
   border-radius: 50%;
-  border: 1px solid #e2e8f0;
-}
-.notion-pop-av.av-live .notion-av,
-.notion-pop-av.av-live img{
-  border: 2px solid #16a34a;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  display: block;
+  object-fit: cover;
 }
 .notion-pop-av .presence-dot{
   position: absolute;
@@ -1073,19 +1080,33 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .cv-sql-prob .pill.bad{flex:none}
 .cvagg pre.cvcode{background:#1b1b1b;color:#f2f2f2;border:0;margin:6px 0 0}
 
-/* My mistakes list: wider, grouped by paper then by question type and topic, one line per part, score as a coloured pill */
+/* My mistakes list: grouped by paper then section (Multiple choice at top, Written & code underneath), topics inside cards */
 .mkpage{grid-template-columns:380px minmax(0,1fr)}
 @media (max-width:860px){.mkpage{grid-template-columns:1fr}}
-.mk-grp{display:flex;justify-content:space-between;align-items:baseline}
-.mk-grp .mk-n{font-weight:500;font-size:.85em;color:#555}
-.mk-sub{margin:8px 0 4px;font-size:.82em;color:#444;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.mk-sub b{color:#002664;text-transform:uppercase;letter-spacing:.04em;font-size:.95em}
-.mk-item{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:8px 10px}
-.mk-item .mk-meta{font-size:.85em;color:#333}
-.mk-item .mk-sc{font-size:.85em;padding:2px 9px;border-radius:10px;border:1px solid transparent}
+.mk-grp{display:flex;justify-content:space-between;align-items:center;margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #002664}
+.mk-grp:first-child{margin-top:4px}
+.mk-grp .mk-n{font-weight:700;font-size:.78em;color:#002664;background:#e2e8f0;padding:1px 7px;border-radius:10px}
+.mk-sub{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 4px;padding:4px 8px;background:#e9eff8;border:1px solid #c8d8ec;border-left:3px solid #002664;border-radius:3px;font-size:.82em}
+.mk-sub b{color:#002664;text-transform:uppercase;letter-spacing:.04em;font-size:.88em;font-weight:800}
+.mk-sec-n{background:#fff;color:#002664;font-size:.82em;font-weight:700;padding:1px 7px;border-radius:10px;border:1px solid #c8d8ec}
+.mk-item{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:7px 10px;position:relative;z-index:1;margin-top:-1px}
+.mk-item:hover{background:#e6edf8;z-index:2}
+.mk-item.cur{background:#002664;color:#fff;z-index:3;outline:1px solid #002664}
+.mk-item.cur:hover{background:#001f52}
+.mk-item.cur .mk-q{color:#fff}
+.mk-item.cur .mk-meta{color:#e2e8f0}
+.mk-item .mk-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mk-item .mk-meta{font-size:.84em;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.25}
+.mk-item .mk-tp{display:inline-block;align-self:flex-start;font-size:.72em;font-weight:600;color:#1e3a8a;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;padding:0 5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
+.mk-item.cur .mk-tp{background:rgba(255,255,255,0.18);color:#bfdbfe;border-color:rgba(255,255,255,0.3)}
+.mk-item .mk-sc{font-size:.85em;padding:2px 9px;border-radius:10px;border:1px solid transparent;flex-shrink:0}
 .mk-item.bad .mk-sc{background:#fdeef1;color:#8a0f2b;border-color:#e0a1ae}
+.mk-item.part .mk-sc{background:#fff5e6;color:#7a4200;border-color:#eed5b5}
 .mk-item.rtok .mk-sc{background:#fff6d1;color:#5c4400;border-color:#e6c34d}
 .mk-item.ok .mk-sc{background:#e6f4ea;color:#14532d;border-color:#9fd2ad}
+.mk-item.cur.bad .mk-sc{background:#fee2e2;color:#7f1d1d;border-color:#fca5a5}
+.mk-item.cur.part .mk-sc{background:#fef3c7;color:#78350f;border-color:#fde68a}
+.mk-item.cur.rtok .mk-sc{background:#fef9c3;color:#713f12;border-color:#fde047}
 
 /* ---------- Class View Base Layer Skeleton & Loading Animation ---------- */
 @keyframes cvShimmer {
@@ -1512,3 +1533,8 @@ h2.qt .rtbtn{margin-left:12px;vertical-align:middle;font-size:.55em;text-decorat
 .cvcl-ok{color:#1b6b2f}
 .cvcl-bad{color:#b81237}
 .cvch .cvch-who .cvch-n{background:#e3e7ee;border-radius:9px;padding:0 6px;font-size:.85em}
+.cv-table-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+table.cv-class-table{min-width:100%;border-collapse:collapse;margin:8px 0}
+table.cv-class-table th{background:rgba(95,204,245,.25);color:#002664;padding:6px 10px;font-size:.9em;white-space:nowrap}
+table.cv-class-table td{padding:6px 10px;font-size:.92em;vertical-align:middle}
+table.cv-class-table th:first-child,table.cv-class-table td:first-child{white-space:normal;min-width:180px}

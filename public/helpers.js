@@ -307,12 +307,23 @@ function getPaperStudents(b){
 
 function presenceClass(s){
   if(s.online === true) return ' av-live pr-on';
-  if(s.online === false) return ' pr-off';
+  if(s.online === false) return (s.status === 'Submitted' || s.state === 'done') ? ' av-done pr-off' : ' av-working pr-off';
   return s.state === 'done' ? ' av-done' : (s.state === 'live' ? ' av-live' : ' av-working');
 }
 function presenceLabel(s){
   if(s.online === true) return s.here ? 'Viewing now' : 'Online';
   return s.status;
+}
+function discordStatusBadge(s, size){
+  if(s.online == null) return '';
+  var sz = size || 10;
+  if(s.online === true){
+    return '<span class="pr-badge-discord pr-dot pr-b-online" title="' + esc(s.here ? 'Doing it now' : 'Online') + '"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4.25" fill="#23a55a"/></svg></span>';
+  }
+  if(s.status === 'Submitted' || s.state === 'done'){
+    return '<span class="pr-badge-discord pr-b-sub" title="Submitted"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.75" fill="none" stroke="#80848e" stroke-width="2.3"/></svg></span>';
+  }
+  return '<span class="pr-badge-discord pr-b-idle" title="' + esc(s.status ? 'Started (' + s.status + ')' : 'Started') + '"><svg width="' + sz + '" height="' + sz + '" viewBox="0 0 10 10" aria-hidden="true"><path fill="#f0b232" fill-rule="evenodd" clip-rule="evenodd" d="M7.833 6.667a3.333 3.333 0 0 1-4.5-4.5A4.167 4.167 0 1 0 7.833 6.667z"/></svg></span>';
 }
 function trialAvatarsHTML(b, isInline){
   var students = getPaperStudents(b);
@@ -322,7 +333,7 @@ function trialAvatarsHTML(b, isInline){
   var display = students.slice(0, 3);
   var more = students.length > 3 ? '<span class="notion-avatar-more">+' + (students.length - 3) + '</span>' : '';
   var stack = display.map(function(s){
-    return '<span class="notion-avatar' + presenceClass(s) + '" title="' + esc(s.name) + ' (' + esc(presenceLabel(s)) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + (s.online === true ? '<i class="pr-dot" aria-hidden="true"></i>' : '') + '</span>';
+    return '<span class="notion-avatar' + presenceClass(s) + '" title="' + esc(s.name) + ' (' + esc(presenceLabel(s)) + ')">' + profileAvatarHTML(s.photo, s.seed, 26, s.name) + discordStatusBadge(s, 10) + '</span>';
   }).join('') + more;
 
   var popList = students.map(function(s){
@@ -330,7 +341,7 @@ function trialAvatarsHTML(b, isInline){
     var badge = s.online === true ? 'live' : (s.online === false ? 'off' : (s.status === 'Submitted' ? 'ok' : (s.state === 'live' ? 'live' : 'working')));
     var sub = s.email ? s.email : (s.online === true && s.status !== 'Viewing' ? s.status : '');
     return '<div class="notion-pop-row' + cls + '">' +
-      '<span class="notion-pop-av' + cls + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + (s.online === true ? '<i class="pr-dot" aria-hidden="true"></i>' : '') + '</span>' +
+      '<span class="notion-pop-av' + cls + '">' + profileAvatarHTML(s.photo, s.seed, 28, s.name) + discordStatusBadge(s, 11) + '</span>' +
       '<div class="notion-pop-meta">' +
         '<div class="notion-pop-name">' + esc(s.name) + (s.isMe ? ' <span class="notion-pill-me">You</span>' : '') + '</div>' +
         (sub ? '<div class="notion-pop-email">' + esc(sub) + '</div>' : '') +

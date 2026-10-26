@@ -202,32 +202,144 @@ function cvSlotInner(b,n,i){
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
 }
 /* Single and multiple choice parts: how many classmates picked each option, and who. */
-/* Parts with several slots (dropdowns, grids, matching, ticks, ordering, labels): for each slot, what classmates chose and who. */
+/* Closed parts (multiple choice, multi-select, dropdowns, grids, matching, ticks, ordering, labels):
+   Render a side-by-side comparison table of everyone's selections and marks, followed by individual
+   mistake tables matching the review/mistakes page "What's wrong" format. */
+function cvClosedSlots(it){
+  var pl=function(h){return typeof plain==='function'?plain(String(h)):String(h).replace(/<[^>]+>/g,'')};
+  if(it.t==='mc'){
+    return [{
+      label:'Selected option',
+      opts:(it.o||[]).map(function(o,j){return String.fromCharCode(65+j)+'. '+pl(o)}),
+      ok:it.a,
+      multi:false
+    }];
+  }
+  if(it.t==='ms'){
+    return [{
+      label:'Selected options',
+      opts:(it.o||[]).map(function(o,j){return String.fromCharCode(65+j)+'. '+pl(o)}),
+      ok:it.a||[],
+      multi:true
+    }];
+  }
+  return typeof closedRows==='function'?closedRows(it):[];
+}
+function cvClosedStudentMark(it,slots,choice){
+  var maxM=it.m||1;
+  if(it.t==='mc'){
+    var picked=Array.isArray(choice)?choice[0]:choice;
+    return {g:picked===it.a?maxM:0,m:maxM};
+  }
+  if(it.t==='ms'){
+    var s=Array.isArray(choice)?choice:[],w=0;
+    (s||[]).forEach(function(x){if((it.a||[]).indexOf(x)<0)w++});
+    (it.a||[]).forEach(function(x){if(s.indexOf(x)<0)w++});
+    var g=maxM===1?(w===0?1:0):Math.max(0,maxM-w);
+    return {g:g,m:maxM};
+  }
+  var c=0,t=slots.length;
+  slots.forEach(function(r,ri){
+    var v=choice?choice[ri]:undefined;
+    if(closedRight(r,v))c++;
+  });
+  var scored=c===t?maxM:Math.floor(maxM*c/t+1e-9);
+  return {g:scored,m:maxM,correct:c,total:t};
+}
+function cvStudentSlotAns(it,r,ri,choice){
+  var v;
+  if(it.t==='mc')v=Array.isArray(choice)?choice[0]:choice;
+  else if(it.t==='ms')v=choice;
+  else v=choice?choice[ri]:undefined;
+  var text=closedText(r,v);
+  var ok=closedRight(r,v);
+  var correctText=r.multi
+    ?(r.ok.map(function(c){return r.opts[c]}).join(', ')||'none')
+    :(r.want!=null?r.want:r.opts[r.ok]);
+  return {val:v,text:text,ok:ok,correctText:correctText,label:r.label};
+}
 function cvClosedBody(it,list){
   var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
   if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
-  return h+'<ul class="cvch">'+closedRows(it).map(function(row,ri){
-    var groups={},order=[];
-    list.forEach(function(a){
-      var v=a.choice&&a.choice[ri],t=closedText(row,v);
-      if(!groups[t]){groups[t]={t:t,ok:closedRight(row,v),who:[]};order.push(t)}
-      groups[t].who.push(a.mine?'You':a.name);
+  var slots=cvClosedSlots(it);
+  if(!slots.length)return h+'<p class="mut">No slots available for this part.</p>';
+
+  var students=list.map(function(a){
+    var author=a.mine?'You':a.name;
+    var sc=cvClosedStudentMark(it,slots,a.choice);
+    var answers=slots.map(function(r,ri){
+      return cvStudentSlotAns(it,r,ri,a.choice);
     });
-    order.sort(function(x,y){return groups[y].who.length-groups[x].who.length});
-    return '<li class="cvch-row"><div class="cvch-top"><span class="cvch-o"><b>'+esc(row.label)+'</b></span></div>'+order.map(function(t){var g=groups[t];
-      return '<div class="cvch-who"><b class="cvcl-'+(g.ok?'ok':'bad')+'">'+esc(g.t)+'</b> <span class="cvch-n">'+g.who.length+'</span>: '+g.who.map(esc).join(', ')+'</div>'}).join('')+'</li>';
-  }).join('')+'</ul>';
+    var wrong=answers.filter(function(ans){return !ans.ok});
+    return {
+      a:a,
+      author:author,
+      sc:sc,
+      answers:answers,
+      wrong:wrong
+    };
+  });
+
+  h+='<div class="cvhd" style="margin-top:8px"><b>Class answers &amp; mistakes comparison</b></div>';
+  h+='<div class="cv-table-wrap" style="overflow-x:auto;max-width:100%;margin:8px 0 16px">';
+  h+='<table class="cmp cv-class-table" style="min-width:100%;margin:0;font-size:.92em">';
+  h+='<thead><tr><th style="min-width:180px">Scenario / Question</th><th style="min-width:110px">Correct answer</th>';
+  students.forEach(function(st){
+    var isFull=st.sc.g>=st.sc.m;
+    h+='<th style="text-align:center;min-width:110px"><div style="display:inline-flex;align-items:center;gap:6px">'+
+      profileAvatarHTML(st.a.mine?S.photo:st.a.photo,st.a.id||st.a.name,20,st.author)+' '+
+      '<b>'+esc(st.author)+'</b></div><br>'+
+      '<span class="cv-mark '+(isFull?'ok':'bad')+'" style="margin-top:3px;display:inline-block">'+st.sc.g+' / '+st.sc.m+'</span></th>';
+  });
+  h+='</tr></thead><tbody>';
+
+  slots.forEach(function(slot,si){
+    var correctText=slot.multi
+      ?(slot.ok.map(function(c){return slot.opts[c]}).join(', ')||'none')
+      :(slot.want!=null?slot.want:slot.opts[slot.ok]);
+    h+='<tr><td><b>'+esc(slot.label)+'</b></td><td class="yes"><b>'+esc(correctText)+'</b></td>';
+    students.forEach(function(st){
+      var ans=st.answers[si];
+      h+='<td class="'+(ans.ok?'yes':'no')+'" style="text-align:center"><b>'+esc(ans.text)+'</b></td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+
+  h+='<div class="cvhd" style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:12px"><b>Individual responses &amp; what went wrong</b></div>';
+  students.forEach(function(st){
+    var isFull=st.sc.g>=st.sc.m;
+    var lost=st.sc.m-st.sc.g;
+    h+='<div class="cvans">';
+    h+='<div class="cvwho"><span class="cv-name">'+profileAvatarHTML(st.a.mine?S.photo:st.a.photo,st.a.id||st.a.name,24,st.author)+' '+esc(st.author)+'</span>'+
+      '<span class="cv-meta"><span class="cv-mark '+(isFull?'ok':'bad')+'">'+st.sc.g+' / '+st.sc.m+'</span></span></div>';
+
+    if(st.wrong.length){
+      h+='<div class="wrongbox" style="margin:8px 0">';
+      h+='<h5><span>What&rsquo;s wrong</span><span class="wl">&minus;'+lost+' mark'+(lost===1?'':'s')+'</span></h5>';
+      h+='<table class="cmp"><tr><th></th><th>'+esc(st.author)+'&rsquo;s answer</th><th>Correct answer</th></tr>';
+      st.wrong.forEach(function(w){
+        h+='<tr><td>'+esc(w.label)+'</td><td class="no">'+esc(w.text)+'</td><td class="yes">'+esc(w.correctText)+'</td></tr>';
+      });
+      h+='</table></div>';
+    }else{
+      h+='<div class="wrongbox rtok" style="margin:8px 0;background:#e6f4ea;border:1px solid #b7dfb9;border-left:4px solid #14532d;color:#14532d;padding:8px 12px;border-radius:4px">'+
+        '<b>All correct</b> &mdash; Full marks ('+st.sc.m+' / '+st.sc.m+')</div>';
+    }
+
+    h+='<details class="xdd" style="margin-top:6px"><summary style="font-size:.9em;color:#475569;cursor:pointer">All answers ('+esc(st.author)+')</summary>';
+    h+='<ul class="cvcl" style="margin:6px 0 0;padding-left:16px">';
+    st.answers.forEach(function(ans){
+      h+='<li><span class="cvcl-l">'+esc(ans.label)+'</span> <b class="cvcl-'+(ans.ok?'ok':'bad')+'">'+esc(ans.text)+'</b></li>';
+    });
+    h+='</ul></details>';
+    h+='</div>';
+  });
+
+  return h;
 }
 function cvChoiceBody(it,list){
-  if(it.t!=='mc'&&it.t!=='ms')return cvClosedBody(it,list);
-  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
-  if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
-  return h+'<ul class="cvch">'+it.o.map(function(o,j){
-    var who=list.filter(function(a){return a.choice.indexOf(j)>=0}),pct=Math.round(100*who.length/list.length);
-    return '<li class="cvch-row"><div class="cvch-top"><span class="cvch-l">'+String.fromCharCode(65+j)+'</span><span class="cvch-o">'+o+'</span><span class="cvch-n">'+who.length+'</span></div>'+
-      '<div class="cvch-bar"><i style="width:'+pct+'%"></i></div>'+
-      (who.length?'<div class="cvch-who">'+who.map(function(a){return esc(a.mine?'You':a.name)}).join(', ')+'</div>':'')+'</li>';
-  }).join('')+'</ul>';
+  return cvClosedBody(it,list);
 }
 /* Shared by the class page and the review panel. */
 /* A classmate's mark for the part, coloured like marks everywhere else: green full marks, red anything less. */
@@ -290,20 +402,7 @@ function cvPartBody(bankId,key,qn,pi,list){
     if(run&&run.err)g+='<p class="acmsg" role="alert">'+esc(run.err)+'</p>';
     g+='<div class="acts">'+(list.length>=2?'<button class="nb sm" data-cv="analyse" data-b="'+esc(bankId)+'" data-k="'+esc(k)+'" data-q="'+qn+'" data-p="'+pi+'" type="button"'+(busy?' disabled':'')+'>'+(busy?'Building...':(r?'Rebuild model answer':'Build class model answer'))+'</button>':'')+'</div></div>';
   }
-  var qKey=bankId+'|'+key,qRun=CV.rmQRun&&CV.rmQRun[qKey];
-  var adminActs='';
-  if(cvIsAdmin()&&list.length&&S.tok){
-    var unmk=list.filter(function(x){return x.id&&x.mark==null&&x.done!==false}).length;
-    if(qRun&&qRun.running){
-      adminActs='<span class="mut" style="font-size:12px;margin-left:8px">Remarking question ('+qRun.done+'/'+qRun.total+')...</span>';
-    }else{
-      adminActs='<span class="cv-q-rm-acts" style="display:inline-flex;gap:6px;margin-left:8px;flex-wrap:wrap">'+
-        (unmk?'<button class="nb sm ol" data-cv="remark-q-unmarked" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'" type="button" style="padding:2px 8px;font-size:12px">Remark unmarked ('+unmk+')</button>':'')+
-        '<button class="nb sm ol" data-cv="remark-q-all" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'" type="button" style="padding:2px 8px;font-size:12px">Remark all</button>'+
-        '</span>';
-    }
-  }
-  var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+adminActs+
+  var h=g+'<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span>'+
     (list.length?'<button class="nb sm ol" data-cv="toggle" data-k="'+esc(k)+'" type="button" style="margin-left:auto">'+(isOpen?'Hide':'Show')+' answers</button>':'')+'</div>';
   if(!list.length)h+='<p class="mut">No one has shared an answer to this part yet.</p>';
   else if(isOpen)h+=list.map(function(a){
@@ -326,17 +425,6 @@ function cvPartBody(bankId,key,qn,pi,list){
     }
     var editBtn=a.mine?'<button type="button" class="nb sm ol" data-cv="ansedit" data-k="'+esc(key)+'" style="margin-left:8px;padding:2px 8px;font-size:12px">'+(isEditing?'Cancel':'Edit')+'</button>':'';
     var rkId=a.id||'';
-    var rKey=rkId+'|'+bankId+'|'+key;
-    var rmRun=CV.rm[cvRmKey(rkId,bankId)];
-    var isRmBusy=(CV.rmPart&&CV.rmPart[rKey])||(rmRun&&rmRun.running);
-    var rmBtn='';
-    if(cvIsAdmin()&&rkId&&S.tok){
-      if(a.done===false){
-        rmBtn='<span class="mut" style="font-size:11px;margin-left:8px" title="Student has not submitted this paper yet">Not submitted</span>';
-      }else{
-        rmBtn='<button type="button" class="nb sm ol cv-rm-btn" data-cv="remark-one" data-id="'+esc(rkId)+'" data-b="'+esc(bankId)+'" data-k="'+esc(key)+'"'+(isRmBusy?' disabled':'')+' style="margin-left:8px;padding:2px 8px;font-size:12px">'+(isRmBusy?'Remarking...':'Remark')+'</button>';
-      }
-    }
     var progBtn=cvIsAdmin()&&rkId?'<button type="button" class="nb sm ol" data-cv="prog" data-id="'+esc(rkId)+'" style="margin-left:6px;padding:1px 6px;font-size:11px" title="Review student progress and answers">Review</button>':'';
     var bodyHTML='';
     if(isEditing){
@@ -350,7 +438,7 @@ function cvPartBody(bankId,key,qn,pi,list){
     }else{
       bodyHTML=code?'<pre class="cvcode">'+esc(a.text)+'</pre>':'<div class="cvtxt">'+esc(a.text).replace(/\n/g,'<br>')+'</div>';
     }
-    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+editBtn+progBtn+'</span><span class="cv-meta">'+cvMarkHTML(a)+rmBtn+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
+    return '<div class="cvans"><div class="cvwho"><span class="cv-name">'+profileAvatarHTML(a.mine?S.photo:a.photo,a.id||a.name,24,author)+' '+esc(author)+editBtn+progBtn+'</span><span class="cv-meta">'+cvMarkHTML(a)+'<span class="cv-wc">'+wc+' word'+(wc===1?'':'s')+'</span></span></div>'+
       bodyHTML+
       ptsHTML+'</div>';
   }).join('');
@@ -469,7 +557,7 @@ function cvRmList(b,mode,only){
   return out;
 }
 function cvRmBtn(id,isSystem,bid,mode,k,label,primary,off){
-  return '<button class="nb sm'+(primary?'':' ol')+'" data-cv="remark" data-mode="'+mode+'" data-id="'+esc(id)+'" data-sys="'+(isSystem?'1':'0')+'" data-b="'+esc(bid)+'"'+(k?' data-k="'+esc(k)+'"':'')+' type="button"'+(off?' disabled':'')+'>'+label+'</button>';
+  return '';
 }
 function cvRmSummary(run,name){
   var t=[];
@@ -479,8 +567,8 @@ function cvRmSummary(run,name){
 }
 function cvRemark(id,isSystem,bid,mode,only){
   var d=CV.prog[id],b=BANKS.filter(function(x){return x.id===bid})[0],key=cvRmKey(id,bid),old=CV.rm[key];
-  if(!d||!b||!d.u||!d.u[bid]||!d.u[bid].done||!S.tok||(old&&old.running)||typeof aiDispatch!=='function')return Promise.reject(new Error('Cannot remark'));
-  if(mode==='all'&&!confirm('Mark every written, code and diagram answer in this paper again with AI? This uses your daily AI marking allowance and replaces the AI marks saved for this student.'))return Promise.resolve();
+  if(!d||!b||!d.u||!d.u[bid]||!d.u[bid].done||!S.tok||(old&&old.running)||typeof aiDispatch!=='function')return;
+  if(mode==='all'&&!confirm('Mark every written, code and diagram answer in this paper again with AI? This uses your daily AI marking allowance and replaces the AI marks saved for this student.'))return;
   var doneAt=d.u[bid].doneAt||0,name=d.name||'the student',tasks=cvWithU(d.u,function(){return cvRmList(b,mode,only)});
   var run={running:true,total:tasks.length,done:0,saved:0,failed:0,err:'',msg:'',ok:false,saving:Promise.resolve()};
   CV.rm[key]=run;
@@ -521,100 +609,6 @@ function cvRemark(id,isSystem,bid,mode,only){
   });
 }
 
-function cvRemarkOne(id,bid,key){
-  if(!id||!bid||!key)return;
-  var isSystem=cvIsSysAdmin();
-  var rKey=id+'|'+bid+'|'+key;
-  if(CV.rmPart[rKey])return;
-  CV.rmPart[rKey]=1;cvDraw();
-  function execute(){
-    var d=CV.prog[id];
-    if(!d||!d.u||!d.u[bid]){
-      delete CV.rmPart[rKey];cvDraw();
-      alert('Could not find student answers for this paper.');
-      return;
-    }
-    if(!d.u[bid].done){
-      delete CV.rmPart[rKey];cvDraw();
-      alert('This student has not submitted this paper yet.');
-      return;
-    }
-    cvRemark(id,isSystem,bid,'one',key).then(function(){
-      delete CV.rmPart[rKey];
-      if(CV.ansBank===bid)cvLoadAnswers(bid,true);
-      cvDraw();
-    }).catch(function(e){
-      delete CV.rmPart[rKey];
-      cvDraw();
-    });
-  }
-  if(CV.prog[id]&&CV.prog[id].u&&CV.prog[id].u[bid]){
-    execute();
-  }else{
-    cvApi({action:isSystem?'admin_progress':'progress',memberId:id}).then(function(r){
-      CV.prog[id]=r;
-      execute();
-    }).catch(function(e){
-      delete CV.rmPart[rKey];
-      alert('Could not load student progress: '+e.message);
-      cvDraw();
-    });
-  }
-}
-
-function cvRemarkOneSilent(id,bid,key){
-  var isSystem=cvIsSysAdmin();
-  function runNow(){
-    var d=CV.prog[id];
-    if(!d||!d.u||!d.u[bid]||!d.u[bid].done)return Promise.resolve();
-    return cvRemark(id,isSystem,bid,'one',key);
-  }
-  if(CV.prog[id]&&CV.prog[id].u&&CV.prog[id].u[bid])return runNow();
-  return cvApi({action:isSystem?'admin_progress':'progress',memberId:id}).then(function(r){
-    CV.prog[id]=r;
-    return runNow();
-  }).catch(function(){return Promise.resolve()});
-}
-
-function cvRemarkQuestion(bankId,key,onlyUnmarked){
-  if(!CV.ans||!CV.ans.parts||!CV.ans.parts[key])return;
-  var list=CV.ans.parts[key].filter(function(a){return a.id&&a.done!==false});
-  if(onlyUnmarked){
-    list=list.filter(function(a){return a.mark==null});
-  }
-  if(!list.length){
-    alert(onlyUnmarked?'All submitted student answers for this question are already marked.':'No submitted student answers found to remark.');
-    return;
-  }
-  var promptMsg=onlyUnmarked
-    ? 'Mark '+list.length+' unmarked student answer'+(list.length===1?'':'s')+' for this question using AI?'
-    : 'Remark '+list.length+' student answer'+(list.length===1?'':'s')+' for this question using AI?';
-  if(!confirm(promptMsg))return;
-  var qKey=bankId+'|'+key;
-  CV.rmQRun[qKey]={total:list.length,done:0,running:true};
-  cvDraw();
-
-  var idx=0;
-  function next(){
-    if(idx>=list.length){
-      delete CV.rmQRun[qKey];
-      if(CV.ansBank===bankId)cvLoadAnswers(bankId,true);
-      cvDraw();
-      return;
-    }
-    var student=list[idx++];
-    cvRemarkOneSilent(student.id,bankId,key).then(function(){
-      if(CV.rmQRun[qKey])CV.rmQRun[qKey].done++;
-      cvDraw();
-      next();
-    }).catch(function(){
-      if(CV.rmQRun[qKey])CV.rmQRun[qKey].done++;
-      cvDraw();
-      next();
-    });
-  }
-  next();
-}
 document.addEventListener('toggle',function(ev){var el=ev.target,k=el&&el.getAttribute&&el.getAttribute('data-cvd');if(k)CV.dopen[k]=!!el.open},true);
 function cvProgHTML(id,isSystem){
   var run=CV.progRun[id],d=CV.prog[id];
@@ -645,7 +639,7 @@ function cvProgHTML(id,isSystem){
             var pillCls=!s.set||s.src==='provisional'?'pend':s.g===s.m?'ok':'bad';
             var pillTxt=s.set?(s.src==='provisional'?'Unconfirmed '+s.g+'/'+s.m:(s.g+' / '+s.m)):'Unscored ('+s.m+'m)';
             var aiSum=p.ai&&p.ai[k]&&p.ai[k].fb&&p.ai[k].fb.summary?'<div class="mut">'+esc(p.ai[k].fb.summary)+'</div>':'';
-            var rmOne=p.done&&ans&&!AUTO[it.t]&&S.tok?'<div class="cv-rm">'+cvRmBtn(id,isSystem,b.id,'one',k,'Remark',false,rmNow&&rmNow.running)+'</div>':'';
+            var rmOne='';
             partRows.push('<tr><td><b><a href="#/class/'+esc(b.id)+'/'+qn+'">'+qLabel+'</a></b><div class="mut">'+esc(q.tp)+' &middot; '+esc(tName)+'</div></td>'+
               '<td>'+cvFormatAns(it,a)+aiSum+'</td>'+
               '<td><span class="pill '+pillCls+'">'+pillTxt+'</span>'+rmOne+'</td>'+
@@ -888,10 +882,6 @@ document.addEventListener('click',function(ev){
   var a=el.getAttribute('data-cv');
   if(a==='prog'){var pid=el.getAttribute('data-id');CV.pview=CV.pview===pid?'':pid;if(CV.pview&&!CV.prog[pid])cvLoadProg(pid,false);else cvDraw();return}
   if(a==='aprog'){var apid=el.getAttribute('data-id');CV.apview=CV.apview===apid?'':apid;CV.aedit='';CV.adel='';CV.amsg='';if(CV.apview&&!CV.prog[apid])cvLoadProg(apid,true);else cvDraw();return}
-  if(a==='remark'){cvRemark(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1',el.getAttribute('data-b'),el.getAttribute('data-mode')||'one',el.getAttribute('data-k')||'');return}
-  if(a==='remark-one'){cvRemarkOne(el.getAttribute('data-id'),el.getAttribute('data-b'),el.getAttribute('data-k'));return}
-  if(a==='remark-q-all'){cvRemarkQuestion(el.getAttribute('data-b'),el.getAttribute('data-k'),false);return}
-  if(a==='remark-q-unmarked'){cvRemarkQuestion(el.getAttribute('data-b'),el.getAttribute('data-k'),true);return}
   if(a==='progrefresh'){cvLoadProg(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1');return}
   if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.apview='';CV.adel='';CV.amsg='';cvDraw();return}
   if(a==='aname'){cvAdm({action:'admin_name',memberId:el.getAttribute('data-id'),name:(document.getElementById('cvanm')||{}).value||''});return}

@@ -369,5 +369,43 @@ const paper = text => ({ done: true, ans: { '17.0': text } });
     }
     await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>x</p>') } });
   }
+  // Typed tables and drawn diagrams are shared: cells as text, drawings fetched one at a time and whitelisted.
+  {
+    const { loadBanks } = require('../server/marking-input');
+    const f = {};
+    loadBanks().filter(b => !b.hidden && !b.archived).forEach(b => b.qs.forEach((q, qi) => q.it.forEach((it, pi) => { if ((it.t === 'ft' || it.t === 'dr') && !f[it.t]) f[it.t] = { bank: b.id, key: (qi + 1) + '.' + pi, it }; })));
+    assert(f.ft && f.dr, 'banks have a typed table and a drawing');
+    const cell = [];
+    f.ft.it.r.forEach((row, r) => row.forEach((c, ci) => { if (c == null) cell.push(r + ',' + ci); }));
+    const ftAns = { [cell[0]]: '  hello   world ', [cell[1]]: '   ', '99,99': 'not a cell' };
+    const els = [
+      { id: 'a', type: 'rectangle', x: 10.04, y: 20, width: 100, height: 50, strokeColor: '#1e1e1e', backgroundColor: 'javascript:alert(1)', link: 'http://evil', customData: { x: 1 } },
+      { id: 'b', type: 'image', x: 0, y: 0, width: 5, height: 5, fileId: 'zzz' },
+      { id: 'c', type: 'arrow', x: 0, y: 0, width: 10, height: 10, points: [[0, 0], [10, 10]], endArrowhead: null },
+      { id: 'd', type: 'text', x: 5, y: 5, width: 40, height: 20, text: 'Hi', fontSize: 20, isDeleted: true },
+      { id: 'e', type: 'text', x: 5, y: 5, width: 40, height: 20, text: 'Keep', fontSize: 20 }
+    ];
+    await m.put('progress/' + id(1) + '.json', { u: { [f.ft.bank]: { done: true, ans: { [f.ft.key]: ftAns } }, [f.dr.bank]: { done: true, ans: { [f.dr.key]: { e: els } } } } });
+    await m.put('progress/' + id(2) + '.json', { u: { [f.dr.bank]: { done: false, mode: 'exam', start: 1, ans: { [f.dr.key]: { e: els } } } } });
+    const ftOut = (await rest(h, { action: 'answers', bankId: f.ft.bank })).body.parts[f.ft.key];
+    assert.deepEqual(ftOut.map(e => e.cells), [{ [cell[0]]: 'hello world' }], 'blank cells only, whitespace tidied, no stray keys');
+    const drOut = (await rest(h, { action: 'answers', bankId: f.dr.bank })).body.parts[f.dr.key];
+    assert.equal(drOut.length, 1, 'an unsubmitted exam drawing stays private');
+    assert.equal(drOut[0].drawing, true);
+    assert(!('elements' in drOut[0]) && !('e' in drOut[0]), 'the list carries no drawing data');
+    const one = await rest(h, { action: 'drawing', bankId: f.dr.bank, key: f.dr.key, memberId: id(1) });
+    assert.equal(one.status, 200);
+    assert.deepEqual(one.body.elements.map(e => e.id), ['a', 'c', 'e'], 'images and deleted shapes are dropped');
+    assert.equal(one.body.elements[0].backgroundColor, undefined, 'a bad colour is dropped');
+    assert(!('link' in one.body.elements[0]) && !('customData' in one.body.elements[0]), 'unknown fields are dropped');
+    assert.equal(one.body.elements[0].x, 10);
+    assert.equal(one.body.elements[1].endArrowhead, 'none');
+    assert.equal((await rest(h, { action: 'drawing', bankId: f.dr.bank, key: f.dr.key, memberId: id(2) })).body.code, 'not_shared', 'an unsubmitted exam drawing cannot be fetched');
+    assert.equal((await rest(h, { action: 'drawing', bankId: f.dr.bank, key: f.dr.key, memberId: id(9) })).body.code, 'no_member');
+    assert.equal((await rest(h, { action: 'drawing', bankId: f.ft.bank, key: f.ft.key, memberId: id(1) })).body.code, 'bad_part', 'only drawing parts can be fetched as drawings');
+    assert.equal((await rest(h, { action: 'drawing', bankId: f.dr.bank, key: f.dr.key, memberId: id(1) }, 'other')).body.code, 'not_member', 'outsiders cannot fetch drawings');
+    await m.put('progress/' + id(1) + '.json', { u: { 8: paper('<p>x</p>') } });
+    await m.put('progress/' + id(2) + '.json', { u: { 8: paper('<p>x</p>') } });
+  }
   console.log('Class tests passed.');
 })().catch(e => { console.error(e); process.exit(1); });

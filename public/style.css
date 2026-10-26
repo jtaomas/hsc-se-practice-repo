@@ -1617,3 +1617,10 @@ table.cv-class-table th:first-child,table.cv-class-table td:first-child{white-sp
 .part.hid .wbs{display:none}
 .yans .webv,.guide .webv{margin-top:6px}
 @media (max-width:760px){.wbs{flex-direction:column;height:auto}.wbed{height:300px}.wbp{min-height:240px}}
+/* Class answers for typed tables and drawn diagrams */
+.cvtb{margin:8px 0;border:1px solid #c4cbd6;background:#fff}
+.cvtb>summary{cursor:pointer;padding:8px 12px;display:flex;gap:10px;align-items:center}
+.cvtb .tw{margin:0 12px 12px}
+.cvdw{margin:10px 0;padding:10px 12px;background:#fff;border:1px solid #c4cbd6}
+.cvdw-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cvdw-img{margin-top:10px;overflow:auto}

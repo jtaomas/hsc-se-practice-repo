@@ -50,6 +50,46 @@ function createHandler(deps) {
     return ai && ai.status === 'marked' && ok(ai.g) ? ai.g : null;
   }
 
+  // Typed tables (ft): only the cells the student had to fill in, as text. Fixed cells come from the question itself.
+  function tableCells(item, stored) {
+    if (!stored || typeof stored !== 'object' || !Array.isArray(item.r)) return null;
+    const cells = {};
+    item.r.forEach((row, r) => row.forEach((c, ci) => {
+      if (c != null) return;
+      const v = stored[r + ',' + ci];
+      const t = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 400) : '';
+      if (t) cells[r + ',' + ci] = t;
+    }));
+    return Object.keys(cells).length ? cells : null;
+  }
+
+  // Drawn diagrams (dr): a whitelisted copy of the drawing, never the stored scene as it is. Shapes, lines, arrows, text and pen strokes only.
+  const DRAW_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'text', 'freedraw']);
+  const COLOUR = /^(#[0-9a-fA-F]{3,8}|transparent|[a-z]{3,20})$/;
+  const num = v => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
+  function cleanDrawing(stored) {
+    const els = stored && Array.isArray(stored.e) ? stored.e : [];
+    const out = [];
+    for (const e of els) {
+      if (!e || e.isDeleted || !DRAW_TYPES.has(e.type) || out.length >= 500) continue;
+      const o = { id: String(e.id || '').slice(0, 40), type: e.type, x: num(e.x), y: num(e.y), width: num(e.width), height: num(e.height), angle: num(e.angle) };
+      ['strokeColor', 'backgroundColor'].forEach(k => { if (typeof e[k] === 'string' && COLOUR.test(e[k])) o[k] = e[k]; });
+      ['fillStyle', 'strokeStyle', 'textAlign', 'verticalAlign'].forEach(k => { if (typeof e[k] === 'string') o[k] = e[k].slice(0, 20); });
+      if (e.type === 'arrow') ['startArrowhead', 'endArrowhead'].forEach(k => { o[k] = typeof e[k] === 'string' ? e[k].slice(0, 20) : 'none'; });
+      if (typeof e.strokeWidth === 'number') o.strokeWidth = Math.min(10, Math.max(0.5, e.strokeWidth));
+      if (typeof e.opacity === 'number') o.opacity = Math.min(100, Math.max(0, e.opacity));
+      if (e.type === 'text') {
+        o.text = String(e.text || '').slice(0, 1000);
+        o.fontSize = Math.min(120, Math.max(6, num(e.fontSize) || 20));
+        if (typeof e.containerId === 'string') o.containerId = e.containerId.slice(0, 40);
+      }
+      if (Array.isArray(e.points)) o.points = e.points.slice(0, 600).filter(q => Array.isArray(q) && q.length >= 2).map(q => [num(q[0]), num(q[1])]);
+      out.push(o);
+    }
+    return out;
+  }
+  const MAX_DRAWING_BYTES = 150000;
+
   // What a classmate picked in a closed part, checked against the real options so nothing but option numbers is ever shared.
   // mc and ms: the list of option numbers. Dropdown, grid, match, tick, order and label parts: one entry per answer slot, in the
   // same order as closedRows() in public/widgets.js (an option number, -1 for blank, or a list of columns for tick grids).
@@ -150,6 +190,19 @@ function createHandler(deps) {
           if (choice) picks.push({ id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', choice });
         });
         parts[key] = picks;
+        return;
+      }
+      if (item.t === 'ft' || item.t === 'dr') {
+        const key = (qi + 1) + '.' + pi, list = [];
+        submitted.forEach(r => {
+          const stored = r.paper.ans && r.paper.ans[key];
+          const entry = { id: r.member.id, name: r.member.name, mine: r.member.id === me, photo: r.member.photo || '', mark: partMark(r.paper, key, item.m), max: item.m };
+          if (item.t === 'ft') { const cells = tableCells(item, stored); if (!cells) return; entry.cells = cells; }
+          else if (!cleanDrawing(stored).length) return;
+          else entry.drawing = true;
+          list.push(entry);
+        });
+        parts[key] = list;
         return;
       }
       if (!engine.isOpen(item)) return;
@@ -392,6 +445,20 @@ function createHandler(deps) {
 
       const bank = typeof p.bankId === 'string' && BANK_ID.test(p.bankId) ? bankFor(p.bankId) : null;
       if (!bank) return fail(400, 'invalid_bank', 'Choose an available practice paper.');
+      // One classmate's drawing for one part. Drawings are fetched one at a time because a whole class of them is too large to send with the answers.
+      if (p.action === 'drawing') {
+        const key = String(p.key || ''), mid = String(p.memberId || '');
+        const m = /^(\d{1,3})\.(\d{1,3})$/.exec(key);
+        const item = m && bank.qs[+m[1] - 1] && bank.qs[+m[1] - 1].it[+m[2]];
+        if (!item || item.t !== 'dr') return fail(400, 'bad_part', 'Choose a drawing question.');
+        if (!/^[a-f0-9]{64}$/.test(mid) || !(await store.getMember(mid))) return fail(404, 'no_member', 'That person is not in the class.');
+        const paper = await store.paperOf(mid, bank.id).catch(() => null);
+        if (!paper || !sharedPaper(paper)) return fail(404, 'not_shared', 'That drawing is not shared.');
+        const elements = cleanDrawing(paper.ans && paper.ans[key]);
+        if (!elements.length) return fail(404, 'not_shared', 'That drawing is not shared.');
+        if (JSON.stringify(elements).length > MAX_DRAWING_BYTES) return fail(413, 'too_big', 'That drawing is too large to show here.');
+        return res.status(200).json({ elements });
+      }
       if (p.action === 'answers') {
         const all = await classAnswers(bank, sess.id);
         const models = {}, digests = {};

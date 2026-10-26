@@ -42,7 +42,7 @@ function cvCleanText(str){
   return s.replace(/[\s,;]*\]=\-[A-Za-z0-9\-_[\]]{2,20}$/,'.').trim();
 }
 /* Class answers: the Class page and the class panel under each written part in review and practice. Server side: api/class.js. */
-var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{},ansEditing:'',rmPart:{},rmQRun:{}};
+var CV={n:1,st:null,msg:'',bank:'',over:null,overAt:0,ans:null,ansBank:'',ansAt:0,loadSt:false,loadAns:false,aok:true,roster:null,users:null,draft:{},aedit:'',adel:'',amsg:'',editing:'',photoMsg:'',photoFor:'',prog:{},progRun:{},pview:'',apview:'',run:{},res:{},auto:{},open:{},joining:false,rm:{},dopen:{},dwg:{},ansEditing:'',rmPart:{},rmQRun:{}};
 function cvIsAdmin(){return !!(S.admin||(CV.st&&(CV.st.admin||CV.st.classAdmin||(CV.st.roster&&CV.st.roster.admin))))}
 function cvIsSysAdmin(){return !!(S.admin||(CV.st&&CV.st.admin))}
 function cvApi(body){
@@ -56,6 +56,7 @@ function cvApi(body){
 function cvBanks(){return BANKS.filter(function(b){return !b.hidden&&!b.archived})}
 function cvOpenItem(it){return it.t==='tx'||it.t==='py'||it.t==='ps'||it.t==='sq'}
 function cvChoiceItem(it){return closedItem(it)}
+function cvShareItem(it){return cvOpenItem(it)||cvChoiceItem(it)||(!!it&&(it.t==='ft'||it.t==='dr'))}
 function cvPlain(h){var d=document.createElement('div');d.innerHTML=String(h||'');return (d.textContent||'').replace(/\s+/g,' ').trim()}
 var CV_CACHE_KEY = 'sehsc-cv-cache';
 function loadCVCache(){
@@ -187,7 +188,7 @@ function cvDraw(){
 }
 function classSlot(b,n,i){
   var it=b.qs[n-1].it[i];
-  if(!S.tok||!(cvOpenItem(it)||cvChoiceItem(it))||b.archived)return '';
+  if(!S.tok||!cvShareItem(it)||b.archived)return '';
   return '<div class="cvslot" data-b="'+esc(b.id)+'" data-n="'+n+'" data-i="'+i+'">'+cvSlotInner(b,n,i)+'</div>';
 }
 function cvSlotInner(b,n,i){
@@ -199,6 +200,8 @@ function cvSlotInner(b,n,i){
   if(CV.ansBank!==b.id||!CV.ans)return '<div class="cv-skel-slot cv-shimmer"><div class="cv-skel-line w40" style="height:14px"></div><div class="cv-skel-line w80" style="height:12px;margin-top:8px"></div></div>';
   var key=n+'.'+i,it0=b.qs[n-1].it[i];
   if(cvChoiceItem(it0))return '<div class="aib cvbox">'+cvChoiceBody(it0,CV.ans.parts[key]||[])+'</div>';
+  if(it0.t==='ft')return '<div class="aib cvbox">'+cvTableBody(it0,CV.ans.parts[key]||[])+'</div>';
+  if(it0.t==='dr')return '<div class="aib cvbox">'+cvDrawBody(b.id,key,CV.ans.parts[key]||[])+'</div>';
   return '<div class="aib cvbox">'+cvPartBody(b.id,key,n,i,CV.ans.parts[key]||[])+'</div>';
 }
 /* Single and multiple choice parts: how many classmates picked each option, and who. */
@@ -341,6 +344,63 @@ function cvClosedBody(it,list){
 function cvChoiceBody(it,list){
   return cvClosedBody(it,list);
 }
+/* Typed tables (ft): each classmate's table, filled with what they typed. */
+function cvTableBody(it,list){
+  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
+  if(!list.length)return h+'<p class="mut">No one has shared an answer to this question yet.</p>';
+  return h+list.map(function(a){
+    return '<details class="cvtb"><summary><b>'+esc(a.mine?'You':a.name)+'</b> '+cvMarkHTML(a)+'</summary>'+
+      ftTable(it,function(c,r,ci){return c!=null?c:esc((a.cells&&a.cells[r+','+ci])||'')})+'</details>';
+  }).join('');
+}
+/* Drawn diagrams (dr): drawn as plain SVG from the shared shapes, so the drawing tool does not have to load. */
+function cvDrawSVG(els){
+  if(!els||!els.length)return '<p class="mut">The drawing is empty.</p>';
+  var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  function grow(x,y){if(x<x0)x0=x;if(y<y0)y0=y;if(x>x1)x1=x;if(y>y1)y1=y}
+  els.forEach(function(e){
+    if(e.points&&e.points.length&&e.type!=='text')e.points.forEach(function(q){grow(e.x+q[0],e.y+q[1])});
+    else{grow(e.x,e.y);grow(e.x+e.width,e.y+e.height)}
+  });
+  var pad=18,w=Math.max(40,x1-x0+2*pad),h=Math.max(40,y1-y0+2*pad);
+  function dash(e){return e.strokeStyle==='dashed'?' stroke-dasharray="8 6"':e.strokeStyle==='dotted'?' stroke-dasharray="2 5"':''}
+  function look(e,fill){
+    var f=fill&&e.backgroundColor&&e.backgroundColor!=='transparent'?e.backgroundColor:'none';
+    return ' fill="'+esc(f)+'" stroke="'+esc(e.strokeColor||'#1e1e1e')+'" stroke-width="'+(e.strokeWidth||1)+'"'+dash(e)+(e.opacity!=null&&e.opacity<100?' opacity="'+e.opacity/100+'"':'');
+  }
+  function rot(e){return e.angle?' transform="rotate('+(e.angle*180/Math.PI).toFixed(2)+' '+(e.x+e.width/2)+' '+(e.y+e.height/2)+')"':''}
+  function head(e,pts,end){
+    var kind=end?e.endArrowhead:e.startArrowhead;if(!kind||kind==='none'||pts.length<2)return '';
+    var p=end?pts[pts.length-1]:pts[0],q=end?pts[pts.length-2]:pts[1],ang=Math.atan2(p[1]-q[1],p[0]-q[0]),L=14+(e.strokeWidth||1)*2,sp=0.45;
+    var a=[p[0]-L*Math.cos(ang-sp),p[1]-L*Math.sin(ang-sp)],b=[p[0]-L*Math.cos(ang+sp),p[1]-L*Math.sin(ang+sp)];
+    return '<path d="M'+a[0]+' '+a[1]+' L'+p[0]+' '+p[1]+' L'+b[0]+' '+b[1]+(kind==='triangle'?' Z':'')+'" fill="'+(kind==='triangle'?esc(e.strokeColor||'#1e1e1e'):'none')+'" stroke="'+esc(e.strokeColor||'#1e1e1e')+'" stroke-width="'+(e.strokeWidth||1)+'" stroke-linejoin="round"/>';
+  }
+  var body=els.map(function(e){
+    if(e.type==='rectangle')return '<rect x="'+e.x+'" y="'+e.y+'" width="'+e.width+'" height="'+e.height+'" rx="0"'+look(e,true)+rot(e)+'/>';
+    if(e.type==='ellipse')return '<ellipse cx="'+(e.x+e.width/2)+'" cy="'+(e.y+e.height/2)+'" rx="'+e.width/2+'" ry="'+e.height/2+'"'+look(e,true)+rot(e)+'/>';
+    if(e.type==='diamond'){var cx=e.x+e.width/2,cy=e.y+e.height/2;return '<polygon points="'+cx+','+e.y+' '+(e.x+e.width)+','+cy+' '+cx+','+(e.y+e.height)+' '+e.x+','+cy+'"'+look(e,true)+rot(e)+'/>'}
+    if(e.type==='line'||e.type==='arrow'||e.type==='freedraw'){
+      var pts=(e.points||[]).map(function(q){return [e.x+q[0],e.y+q[1]]});if(pts.length<2)return '';
+      return '<path d="M'+pts.map(function(q){return q[0]+' '+q[1]}).join(' L')+'"'+look(e,false)+' stroke-linecap="round" stroke-linejoin="round"/>'+(e.type==='arrow'?head(e,pts,true)+head(e,pts,false):'');
+    }
+    if(e.type==='text'){
+      var fs=e.fontSize||20,lines=String(e.text||'').split('\n'),al=e.textAlign||'left',ax=al==='center'?e.x+e.width/2:al==='right'?e.x+e.width:e.x,anc=al==='center'?'middle':al==='right'?'end':'start';
+      return '<text x="'+ax+'" y="'+(e.y+fs)+'" font-size="'+fs+'" font-family="Helvetica, Arial, sans-serif" text-anchor="'+anc+'" fill="'+esc(e.strokeColor||'#1e1e1e')+'"'+rot(e)+'>'+lines.map(function(l,i){return '<tspan x="'+ax+'" dy="'+(i?fs*1.25:0)+'">'+esc(l)+'</tspan>'}).join('')+'</text>';
+    }
+    return '';
+  }).join('');
+  return '<svg class="cvdw-svg" xmlns="http://www.w3.org/2000/svg" viewBox="'+(x0-pad)+' '+(y0-pad)+' '+w+' '+h+'" role="img" aria-label="Classmate drawing" style="max-width:100%;height:auto;background:#fff;border:1px solid #c4cbd6">'+body+'</svg>';
+}
+function cvDrawBody(bankId,key,list){
+  var h='<div class="cvhd"><b>Class answers</b> <span class="mut">('+list.length+' shared)</span></div>';
+  if(!list.length)return h+'<p class="mut">No one has shared a drawing for this question yet.</p>';
+  return h+list.map(function(a){
+    var ck=bankId+'|'+key+'|'+a.id,d=CV.dwg[ck];
+    return '<div class="cvdw"><div class="cvdw-top"><b>'+esc(a.mine?'You':a.name)+'</b> '+cvMarkHTML(a)+' '+
+      (d&&d.els?'<button type="button" class="nb sm ol" data-cv="dwghide" data-ck="'+esc(ck)+'">Hide drawing</button>':'<button type="button" class="nb sm ol" data-cv="dwgshow" data-bank="'+esc(bankId)+'" data-key="'+esc(key)+'" data-id="'+esc(a.id)+'"'+(d&&d.busy?' disabled':'')+'>'+(d&&d.busy?'Loading...':'Show drawing')+'</button>')+'</div>'+
+      (d&&d.err?'<p class="mut" role="alert">'+esc(d.err)+'</p>':'')+(d&&d.els?'<div class="cvdw-img">'+cvDrawSVG(d.els)+'</div>':'')+'</div>';
+  }).join('');
+}
 /* Shared by the class page and the review panel. */
 /* A classmate's mark for the part, coloured like marks everywhere else: green full marks, red anything less. */
 function cvMarkHTML(a){
@@ -464,11 +524,11 @@ function cvPartLabel(q,it){
 function cvPartView(b,n,i){
   var q=b.qs[n-1],it=q.it[i];
   if(cvOpenItem(it))return '<div class="part"><p class="hoa-q">'+cvPartLabel(q,it)+'</p>'+classSlot(b,n,i)+'</div>';
-  if(it.t==='dr')return '<div class="part"><p class="hoa-q">'+cvPartLabel(q,it)+'</p><div class="aib">Diagrams are not shared with the class.</div></div>';
+  if(it.t==='dr')return '<div class="part"><p class="hoa-q">'+cvPartLabel(q,it)+'</p>'+classSlot(b,n,i)+'</div>';
   var bs=BS(b.id),sv=bs.ans,h;
   bs.ans={};
   try{h=itemHTML(b,n,i,false)}finally{bs.ans=sv}
-  return '<div class="cvro">'+h+'</div>'+(cvChoiceItem(it)?classSlot(b,n,i):'');
+  return '<div class="cvro">'+h+'</div>'+(cvChoiceItem(it)||it.t==='ft'?classSlot(b,n,i):'');
 }
 function cvQuestionHTML(b,n){
   var q=b.qs[n-1],title='<h2 class="qt" id="hq">Question '+n+' ('+(q.m===1?'1 mark':q.m+' marks')+')</h2>';
@@ -836,7 +896,7 @@ function cvHTML(){
   if(!CV.st.member)return cvPg(cvJoinHTML()+cvAdminHTML());
   var b=cvBanks().filter(function(x){return x.id===CV.bank})[0];
   if(!b){
-    var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and the other closed questions (dropdowns, grids, matching, ticks, ordering, labels) show what each classmate picked. Drawn diagrams are not shared.</p>'+
+    var h='<div class="feature"><p>You are in the class as <b>'+esc(CV.st.name)+'</b> with '+CV.st.count+' member'+(CV.st.count===1?'':'s')+'. Everyone in the class can see each other\'s written answers by name, from practice mode as you save them and from exam mode once submitted. Multiple choice and the other closed questions (dropdowns, grids, matching, ticks, ordering, labels) show what each classmate picked. Drawn diagrams and typed tables are shared too, with the shapes and text each person drew or typed.</p>'+
       '<div class="acts"><button class="nb sm ol" data-cv="rename" type="button">Change my name</button></div></div>';
     h+=cvRosterHTML()+cvAdminHTML();
     h+='<h2 class="pt" style="margin-top:18px">Papers</h2><p class="mut">Open a paper to read every question as it appears in the exam, with what your class wrote under each written part.</p><div class="acts">'+cvBanks().map(function(x){
@@ -881,6 +941,13 @@ document.addEventListener('click',function(ev){
   var el=ev.target.closest&&ev.target.closest('[data-cv]');if(!el)return;
   var a=el.getAttribute('data-cv');
   if(a==='prog'){var pid=el.getAttribute('data-id');CV.pview=CV.pview===pid?'':pid;if(CV.pview&&!CV.prog[pid])cvLoadProg(pid,false);else cvDraw();return}
+  if(a==='dwgshow'){
+    var dk=el.getAttribute('data-bank')+'|'+el.getAttribute('data-key')+'|'+el.getAttribute('data-id');
+    CV.dwg[dk]={busy:true};cvDraw();
+    cvApi({action:'drawing',bankId:el.getAttribute('data-bank'),key:el.getAttribute('data-key'),memberId:el.getAttribute('data-id')}).then(function(r){CV.dwg[dk]={els:r.elements||[]}}).catch(function(e){CV.dwg[dk]={err:e.message||'The drawing could not be loaded.'}}).then(cvDraw);
+    return;
+  }
+  if(a==='dwghide'){delete CV.dwg[el.getAttribute('data-ck')];cvDraw();return}
   if(a==='aprog'){var apid=el.getAttribute('data-id');CV.apview=CV.apview===apid?'':apid;CV.aedit='';CV.adel='';CV.amsg='';if(CV.apview&&!CV.prog[apid])cvLoadProg(apid,true);else cvDraw();return}
   if(a==='progrefresh'){cvLoadProg(el.getAttribute('data-id'),el.getAttribute('data-sys')==='1');return}
   if(a==='aedit'){var ai=el.getAttribute('data-id');CV.aedit=CV.aedit===ai?'':ai;CV.apview='';CV.adel='';CV.amsg='';cvDraw();return}

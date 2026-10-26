@@ -178,7 +178,7 @@ regType('wb',{
     var tabs=it.f.map(function(f,i){return '<button type="button" class="wbt'+(i?'':' on')+'" data-wbt="'+k+'" data-i="'+i+'" aria-pressed="'+(i?'false':'true')+'">'+esc(f.n)+(f.e?'':' <span class="wbg">given</span>')+'</button>'}).join('');
     var eds=it.f.map(function(f,i){return wbEditor(it,k,f,i,F[f.n],ro)}).join('');
     return '<div class="cbox wbox" data-k="'+k+'"><div class="cbar"><div class="wbtabs" role="group" aria-label="Files">'+tabs+'</div><div class="btns"><button class="nb" data-act="full" data-k="'+k+'">Full screen</button>'+(typeof rtOrigBtn==='function'?rtOrigBtn(k):'')+'</div></div>'+
-      '<div class="split wbs"><div class="wbed">'+eds+'</div><div class="wbp"><div class="wbpl">Browser preview</div>'+webFrame(wbDoc(it,F),'Preview of your web page',it.ht,'wv'+k)+'</div></div></div>';
+      '<div class="split wbs"><div class="wbed">'+eds+'</div><div class="wbp"><div class="wbpl"><span>Browser preview</span><button type="button" class="nb wbrr" data-wbrr="'+k+'" title="Reload the preview from your current HTML and CSS">Re-render</button></div>'+webFrame(wbDoc(it,F),'Preview of your web page',it.ht,'wv'+k)+'</div></div></div>';
   },
   isAns:function(it,a){
     if(!a||typeof a!=='object')return false;
@@ -194,14 +194,22 @@ regType('wb',{
   }
 });
 var WB_T={};
-function wbRefresh(k){
+function wbRefresh(k,now){
   clearTimeout(WB_T[k]);
-  WB_T[k]=setTimeout(function(){
+  function go(){
     var fr=document.getElementById('wv'+k);if(!fr||!CUR.b)return;
     var it=itemOf(k);if(!it||it.t!=='wb')return;
-    fr.setAttribute('srcdoc',wbDoc(it,wbFiles(it,ANS(CUR.b)[k])));
-  },250);
+    var doc=wbDoc(it,wbFiles(it,ANS(CUR.b)[k]));
+    /* Clearing srcdoc first forces a real reload even when the text has not changed. */
+    if(now)fr.removeAttribute('srcdoc');
+    fr.setAttribute('srcdoc',doc);
+  }
+  if(now)go();else WB_T[k]=setTimeout(go,250);
 }
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('[data-wbrr]');if(!b)return;
+  wbRefresh(b.dataset.wbrr,true);
+});
 document.addEventListener('input',function(e){
   var t=e.target;if(!t.dataset||!t.dataset.f||!t.dataset.k)return;
   wbRefresh(t.dataset.k);

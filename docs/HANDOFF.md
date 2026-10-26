@@ -173,3 +173,10 @@ Roger reported that "Mark N unmarked answers" finished instantly without marking
 - Stimulus figures are inline SVG built with the helpers at the top of `bank19.js` (`sv`, `cls`, `screen`, `tnode`, `fT/fP/fIO/fD` and so on). Inline SVG reaches the marker as SOURCE DIAGRAM DATA.
 - Sample answers are drawn too: `drf()` sets `it.fig`, and `modelHTML(it)` in `helpers.js` puts the picture before the written model in the review page (`widgets.js`), retry (`retry.js`) and My mistakes (`pages2.js`).
 - Tested with the local Excalidraw build: all 15 questions mount the drawing tool; review pages show the drawn answers. `tests/check_banks.js` and the eight UI suites pass.
+
+## Pseudocode Practice Paper (bank 20)
+- `public/bank20.js`: 25 original questions, 80 marks, 160 minutes, mini paper. One scenario runs through it (Kookaburra Creek Kayak Hire). It covers every pseudocode structure in the course specifications: sequence, binary selection, CASEWHERE with OTHERWISE, nested IF with ELSEIF, WHILE, REPEAT / UNTIL, FOR / NEXT with STEP (including a negative step), AND / OR / NOT, arrays, nested loops, subroutines with one and several parameters, a value passed back through a parameter, functions with RETURN, and a mainline that refers to subroutines (including from a structure chart and a flowchart).
+- Question styles follow the HSC exam: write the algorithm (`ps`), drag the steps into order (`od`), dropdown output and Python to pseudocode (`dd`), trace tables, test data and error finding (`ft`), classify structures (`mt`), match terms (`dm`), and describe or explain (`tx`).
+- The two stimulus figures (a structure chart and a flowchart) are inline SVG built with the small kit at the top of the file.
+- Every sample algorithm was run through a small pseudocode interpreter against test cases, and every traced value was checked, before the paper was added. The interpreter is not in the repo.
+- `tests/check_banks.js` passes (25 questions, 80 marks) and the eight UI suites pass. `tests/archive_test.js` already failed on a clean `main` before this change (`archive/banks-1-7.json` out of date); it was left alone.
